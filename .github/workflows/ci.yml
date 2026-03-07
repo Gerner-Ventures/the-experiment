@@ -5,7 +5,7 @@ on:
     branches: [main]
 
 jobs:
-  check:
+  backend:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -34,23 +34,77 @@ jobs:
       - name: Test
         run: cd backend && poetry run pytest
 
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Install frontend deps
-        run: cd frontend && npm ci
+      - name: Install deps
+        run: cd frontend && npm install --legacy-peer-deps
 
-      - name: Lint frontend
+      - name: Lint
         run: cd frontend && npm run lint
 
-      - name: Type check frontend
+      - name: Type check
         run: cd frontend && npm run type-check
+
+      - name: Build
+        run: cd frontend && npm run build
+
+  frontend-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: cd frontend && npm install --legacy-peer-deps
+
+      - name: Unit tests
+        run: cd frontend && npm test
+
+  frontend-e2e-tests:
+    runs-on: ubuntu-latest
+    needs: [frontend-lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install deps
+        run: cd frontend && npm install --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        run: cd frontend && npx playwright install --with-deps chromium
 
       - name: Build frontend
         run: cd frontend && npm run build
+
+      - name: Run E2E tests
+        run: cd frontend && npm run test:e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
 
   helm-lint:
     runs-on: ubuntu-latest
