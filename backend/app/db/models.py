@@ -151,6 +151,7 @@ class Agent(TimestampMixin, Base):
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    character_id: Mapped[str | None] = mapped_column(String(255))
     personality: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     goal_archetype: Mapped[str | None] = mapped_column(String(100))
     secret_goal: Mapped[str] = mapped_column(Text, nullable=False)

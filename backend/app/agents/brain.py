@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.agents.models import (
+    ACTION_TYPES,
     AgentContext,
     AgentMemoryState,
     AgentTurnResult,
@@ -16,6 +17,7 @@ from app.schemas.agent_decision import AgentDecision
 def build_agent_prompt(context: AgentContext) -> str:
     return (
         f"You are {context.name}.\n"
+        f"Character ID: {context.character_id or 'unassigned'}\n"
         f"Location: {context.location or 'unknown'}\n"
         f"Status: {context.status.value}\n"
         f"Personality axes: {context.personality.axes.model_dump()}\n"
@@ -30,6 +32,7 @@ def build_agent_prompt(context: AgentContext) -> str:
         f"Recent events: {[event.summary for event in context.memory.recent_events]}\n"
         f"Key memories: {[memory.meaning for memory in context.memory.key_memories]}\n"
         f"Relationships: { {agent_id: relationship.model_dump() for agent_id, relationship in context.relationships.items()} }\n"
+        f"Available actions: {list(ACTION_TYPES)}\n"
         "Decide what you do next. Balance short-term social reality, your subjective memories, and your secret goal. "
         "You may misread motives, but you should remain basically competent."
     )

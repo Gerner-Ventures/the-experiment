@@ -119,6 +119,20 @@ async def test_one_repair_pass_is_used_for_invalid_json() -> None:
     assert fake_router.calls[1]["temperature"] == 0
 
 
+def test_agent_decision_rejects_invalid_cooperation_intent() -> None:
+    with pytest.raises(Exception):
+        AgentDecision.model_validate(
+            {
+                "inner_thought": "I am improvising.",
+                "suspicion": None,
+                "action": {"type": "observe"},
+                "dialogue": None,
+                "goal_progress": "None.",
+                "cooperation_intent": "maybe",
+            }
+        )
+
+
 @pytest.mark.asyncio
 async def test_usage_summary_groups_by_agent_and_round() -> None:
     service = LLMService()
