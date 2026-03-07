@@ -102,7 +102,7 @@ export const useExperimentStore = defineStore('experiment', () => {
         power: data.resources.power ?? worldStore.resources.power,
       })
     }
-    if (data.agents) agentStore.setAgents(data.agents)
+    if (data.agents?.length) agentStore.setAgents(data.agents)
     useUIStore().clearStepping()
     addEvent(msg)
   }
@@ -137,7 +137,8 @@ export const useExperimentStore = defineStore('experiment', () => {
   }
 
   function onEnd(msg: WSMessage) {
-    status.value = 'completed'
+    const data = msg.data as { status?: string }
+    status.value = (data.status as ExperimentStatus) ?? 'completed'
     useUIStore().clearStepping()
     addEvent(msg)
   }
