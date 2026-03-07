@@ -1,5 +1,5 @@
 # ── Stage 1: Build Vue app ─────────────────────────────
-FROM node:22-slim AS build
+FROM node:22.14-slim-bookworm AS build
 
 WORKDIR /app
 COPY package.json ./
