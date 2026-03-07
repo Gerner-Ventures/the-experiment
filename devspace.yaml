@@ -1,0 +1,116 @@
+version: v2beta1
+name: the-experiment
+
+vars:
+  NAMESPACE: the-experiment
+  HELM_VALUES: chart/the-experiment/values-local.yaml
+
+pipelines:
+  dev:
+    run: |-
+      run_dependencies --all
+      ensure_pull_secrets --all
+      build_images --all
+      create_deployments --all
+      start_dev --all
+  deploy:
+    run: |-
+      run_dependencies --all
+      ensure_pull_secrets --all
+      build_images --all
+      create_deployments --all
+  purge:
+    run: |-
+      stop_dev --all
+      purge_deployments --all
+
+images:
+  backend:
+    image: the-experiment-backend
+    dockerfile: ./backend/Dockerfile
+    context: ./backend
+    tags:
+      - dev
+    skipPush: true
+  frontend:
+    image: the-experiment-frontend
+    dockerfile: ./frontend/Dockerfile
+    context: ./frontend
+    tags:
+      - dev
+    skipPush: true
+
+deployments:
+  the-experiment:
+    namespace: ${NAMESPACE}
+    helm:
+      chart:
+        name: ./chart/the-experiment
+      values:
+        postgres:
+          enabled: true
+        backend:
+          image:
+            repository: the-experiment-backend
+            tag: dev
+            pullPolicy: Never
+        frontend:
+          image:
+            repository: the-experiment-frontend
+            tag: dev
+            pullPolicy: Never
+        podSecurityContext:
+          runAsNonRoot: false
+          runAsUser: 0
+          runAsGroup: 0
+          fsGroup: 0
+        securityContext:
+          readOnlyRootFilesystem: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+      valuesFiles:
+        - ${HELM_VALUES}
+
+dev:
+  backend:
+    imageSelector: the-experiment-backend
+    namespace: ${NAMESPACE}
+    sync:
+      - path: ./backend:/app
+        excludePaths:
+          - .venv/
+          - __pycache__/
+          - .mypy_cache/
+          - .ruff_cache/
+          - "*.pyc"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - port: "8000:8000"
+    env:
+      - name: DATABASE_URL
+        value: "postgresql+asyncpg://experiment:experiment@the-experiment-postgres:5432/experiment"
+  frontend:
+    imageSelector: the-experiment-frontend
+    namespace: ${NAMESPACE}
+    ports:
+      - port: "5173:80"
+  postgres:
+    imageSelector: postgres:16-alpine
+    namespace: ${NAMESPACE}
+    ports:
+      - port: "5432:5432"
+  redis:
+    imageSelector: redis:7-alpine
+    namespace: ${NAMESPACE}
+    ports:
+      - port: "6379:6379"
+
+hooks:
+  - name: migrate-db
+    events: ["after:deploy:the-experiment"]
+    command: |-
+      kubectl exec -n ${NAMESPACE} deploy/the-experiment-backend -- alembic upgrade head
+    wait:
+      running: true
