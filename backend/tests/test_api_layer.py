@@ -352,7 +352,7 @@ def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
     assert gm.json()["items"][0]["narration"]
 
 
-def test_goal_analytics_keeps_high_signal_action_when_agent_acts_multiple_times() -> None:
+def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents() -> None:
     runtime.engine.agent_service = _ScriptedAgentService(
         {
             "Mara": [

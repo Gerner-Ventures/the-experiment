@@ -244,7 +244,7 @@ class FactionTimelinePoint(APIRequestModel):
     round_number: int
     faction_id: str
     faction_name: str
-    kind: FactionKind
+    kind: FactionKind | None = None
     pressure: float = 0.0
     influence: float = 0.0
     member_ids: list[str] = Field(default_factory=list)

@@ -41,6 +41,7 @@ from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
 from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
+from app.engine.models import FactionKind
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
@@ -464,9 +465,7 @@ class ExperimentRuntime:
                     goal_text=agent.goal.text,
                     goal_archetype=agent.goal.archetype,
                     status=agent.status,
-                    outcome=self._goal_outcome(
-                        self._status_value(agent.status), latest_progress, history
-                    ),
+                    outcome=self._goal_outcome(self._status_value(agent.status), history),
                     latest_progress=latest_progress,
                     progress_history=history,
                 )
@@ -631,7 +630,7 @@ class ExperimentRuntime:
                         round_number=round_number,
                         faction_id=faction_id,
                         faction_name=faction_name,
-                        kind=self._string_or(entry.get("kind")),
+                        kind=self._faction_kind(entry.get("kind")),
                         pressure=self._float_value(entry.get("pressure")),
                         influence=self._float_value(entry.get("influence")),
                         member_ids=sorted(members),
@@ -1252,6 +1251,24 @@ class ExperimentRuntime:
             or action.resolved_action_type in SABOTAGE_ACTION_TYPES
         )
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
+        goal_progress: list[dict[str, Any]] = []
+        for action in round_result.action_resolutions:
+            agent = agents_by_id.get(action.agent_id)
+            goal_progress.append(
+                {
+                    "agent_id": action.agent_id,
+                    "agent_name": action.agent_name,
+                    "goal_text": agent.goal.text if agent is not None else "",
+                    "goal_archetype": agent.goal.archetype if agent is not None else "",
+                    "status": self._status_value(agent.status) if agent is not None else "",
+                    "goal_progress": action.goal_progress,
+                    "requested_action_type": action.requested_action_type,
+                    "resolved_action_type": action.resolved_action_type,
+                    "cooperation_intent": action.cooperation_intent,
+                    "phase": action.phase,
+                    "summary": action.summary,
+                }
+            )
         return {
             "summary": (
                 f"Round {round_result.round_number} closes with cooperation "
@@ -1282,22 +1299,7 @@ class ExperimentRuntime:
                 }
                 for agent in state.agents
             ],
-            "goal_progress": [
-                {
-                    "agent_id": action.agent_id,
-                    "agent_name": action.agent_name,
-                    "goal_text": agents_by_id[action.agent_id].goal.text,
-                    "goal_archetype": agents_by_id[action.agent_id].goal.archetype,
-                    "status": self._status_value(agents_by_id[action.agent_id].status),
-                    "goal_progress": action.goal_progress,
-                    "requested_action_type": action.requested_action_type,
-                    "resolved_action_type": action.resolved_action_type,
-                    "cooperation_intent": action.cooperation_intent,
-                    "phase": action.phase,
-                    "summary": action.summary,
-                }
-                for action in round_result.action_resolutions
-            ],
+            "goal_progress": goal_progress,
         }
 
     def _round_summary_data(self, logs: list[EventLogItem]) -> dict[int, dict[str, Any]]:
@@ -1406,12 +1408,9 @@ class ExperimentRuntime:
     def _goal_outcome(
         self,
         status: str,
-        latest_progress: str | None,
         history: list[AgentGoalProgress],
     ) -> GoalOutcome:
         progress_samples = [entry.progress.lower() for entry in history]
-        if latest_progress:
-            progress_samples.append(latest_progress.lower())
         if any(
             keyword in progress_text
             for progress_text in progress_samples
@@ -1436,6 +1435,11 @@ class ExperimentRuntime:
         if isinstance(value, str):
             return value
         return default
+
+    def _faction_kind(self, value: object) -> FactionKind | None:
+        if value in {"alliance", "cult"}:
+            return cast(FactionKind, value)
+        return None
 
     def _string_or(self, value: object, default: str = "") -> str:
         if isinstance(value, str):

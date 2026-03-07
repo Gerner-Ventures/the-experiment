@@ -569,7 +569,9 @@ class SimulationEngine:
             return "resolved"
         if prepared.action_type == "observe":
             return "blocked"
-        return "rerouted"
+        if prepared.action_type == "move":
+            return "rerouted"
+        return "resolved"
 
     def _apply_clean_action(
         self, state: SimulationState, agent: EngineAgentState, action_type: str, location: str
