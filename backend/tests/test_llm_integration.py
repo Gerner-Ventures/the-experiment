@@ -191,9 +191,13 @@ async def test_usage_summary_groups_by_agent_and_round() -> None:
 async def test_memory_classifier_raises_when_result_is_unparsed() -> None:
     service = LLMService(client=_FakeLLMClient(LLMResult(model="openai/gpt-4o-mini", content="{}")))
 
-    with pytest.raises(ValueError, match="memory classification returned no parsed structured payload"):
+    with pytest.raises(
+        ValueError, match="memory classification returned no parsed structured payload"
+    ):
         await service.classify_memory_event(
-            event=type("Event", (), {"model_dump": lambda self, mode="json": {}, "round_number": 1})(),
+            event=type(
+                "Event", (), {"model_dump": lambda self, mode="json": {}, "round_number": 1}
+            )(),
             goal=None,
             suspicion_level=0,
             recent_key_memories=[],
