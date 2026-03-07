@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Narrative Arc",
+  "description": "Player-defined narrative arc with acts",
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "acts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "start_round": { "type": "integer", "minimum": 1 },
+          "end_round": { "type": "integer", "minimum": 1 },
+          "tone": { "type": "string" },
+          "gm_instructions": { "type": "string" },
+          "resource_pressure": { "type": "string", "enum": ["low", "medium", "high", "critical"] },
+          "director_notes": { "type": "string" }
+        },
+        "required": ["name", "start_round", "end_round", "tone", "gm_instructions", "resource_pressure"]
+      },
+      "minItems": 1
+    }
+  },
+  "required": ["name", "acts"]
+}

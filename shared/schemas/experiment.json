@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Experiment",
+  "description": "Experiment configuration and state",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "status": { "type": "string", "enum": ["setup", "running", "paused", "completed", "collapsed"] },
+    "current_round": { "type": "integer", "minimum": 0 },
+    "total_rounds": { "type": "integer", "minimum": 1 },
+    "threat_level": { "type": "number", "minimum": 0, "maximum": 100 },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "food": { "type": "number" },
+        "water": { "type": "number" },
+        "materials": { "type": "number" },
+        "power": { "type": "number" }
+      }
+    },
+    "arc": { "$ref": "arc.json" },
+    "agents": {
+      "type": "array",
+      "items": { "$ref": "agent.json" },
+      "minItems": 6,
+      "maxItems": 12
+    }
+  },
+  "required": ["id", "name", "status", "current_round", "total_rounds", "threat_level", "resources", "arc", "agents"]
+}

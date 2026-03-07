@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GM Plan",
+  "description": "AI Game Master's plan for a round",
+  "type": "object",
+  "properties": {
+    "round": { "type": "integer" },
+    "round_theme": { "type": "string" },
+    "reasoning": { "type": "string" },
+    "crisis_event": {
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["resource", "structural", "social", "environmental", "discovery", "meta"] },
+        "description": { "type": "string" },
+        "affects": { "type": "array", "items": { "type": "string" } },
+        "severity": { "type": "string", "enum": ["low", "medium", "high", "critical"] }
+      },
+      "required": ["type", "description", "severity"]
+    },
+    "resource_modifiers": {
+      "type": "object",
+      "properties": {
+        "food": { "type": "number" },
+        "water": { "type": "number" },
+        "materials": { "type": "number" },
+        "power": { "type": "number" }
+      }
+    },
+    "environmental": { "type": "string" },
+    "narration": { "type": "string" },
+    "meta_hint": { "type": ["string", "null"] }
+  },
+  "required": ["round", "round_theme", "reasoning", "crisis_event", "resource_modifiers", "narration"]
+}

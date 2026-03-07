@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "WebSocket Message",
+  "description": "Real-time message format for WebSocket updates",
+  "type": "object",
+  "properties": {
+    "type": {
+      "type": "string",
+      "enum": [
+        "round_start", "round_end",
+        "phase_change",
+        "gm_plan", "gm_narration",
+        "agent_action", "agent_move", "agent_speak",
+        "crisis_event",
+        "meeting_start", "meeting_speech", "meeting_vote", "meeting_result",
+        "threat_update", "resource_update",
+        "observer_event",
+        "experiment_end"
+      ]
+    },
+    "round": { "type": "integer" },
+    "phase": { "type": "string" },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "data": { "type": "object" }
+  },
+  "required": ["type", "round", "timestamp", "data"]
+}

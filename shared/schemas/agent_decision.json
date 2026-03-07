@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent Decision",
+  "description": "Structured output from an agent's LLM decision",
+  "type": "object",
+  "properties": {
+    "inner_thought": { "type": "string" },
+    "suspicion": { "type": ["string", "null"] },
+    "action": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["move", "gather", "repair", "trade", "talk", "hoard", "sabotage", "explore", "accuse", "vote", "rest", "observe"]
+        },
+        "target": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["type"]
+    },
+    "dialogue": {
+      "type": ["object", "null"],
+      "properties": {
+        "target": { "type": "string" },
+        "message": { "type": "string" }
+      },
+      "required": ["target", "message"]
+    },
+    "goal_progress": { "type": "string" },
+    "cooperation_intent": { "type": "string", "enum": ["high", "medium", "low", "none"] }
+  },
+  "required": ["inner_thought", "action", "goal_progress", "cooperation_intent"]
+}

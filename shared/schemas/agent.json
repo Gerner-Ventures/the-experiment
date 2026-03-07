@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Agent",
+  "description": "An AI agent in the experiment",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string", "format": "uuid" },
+    "name": { "type": "string" },
+    "personality": {
+      "type": "object",
+      "properties": {
+        "traits": { "type": "array", "items": { "type": "string" } },
+        "description": { "type": "string" }
+      }
+    },
+    "secret_goal": { "type": "string" },
+    "llm_model": { "type": "string" },
+    "location": { "type": "string" },
+    "status": { "type": "string", "enum": ["idle", "thinking", "talking", "moving", "working", "sneaking", "exiled"] },
+    "suspicion_level": { "type": "number", "minimum": 0, "maximum": 100 },
+    "inventory": { "type": "array", "items": { "type": "string" } },
+    "relationships": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "trust": { "type": "number", "minimum": -100, "maximum": 100 },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  },
+  "required": ["id", "name", "personality", "secret_goal", "llm_model"]
+}
