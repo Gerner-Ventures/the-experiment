@@ -62,11 +62,13 @@ def test_build_agent_context_preserves_engine_contract_fields() -> None:
 
     context = build_agent_context(
         agent,
+        experiment_id="exp-typed",
         world_state=build_default_world_state(round_number=4),
         current_crisis={"type": "social", "description": "Rumors are spreading."},
         observations=[{"summary": "Someone left the bar through the back door.", "importance": 4}],
     )
 
+    assert context.experiment_id == "exp-typed"
     assert context.character_id == "undertaker_01"
     assert context.status == AgentStatus.THINKING
     assert context.relationships["agent-2"].trust == -12

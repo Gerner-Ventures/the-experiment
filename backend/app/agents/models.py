@@ -204,6 +204,7 @@ class SuspicionUpdate(AgentModel):
 
 
 class AgentContext(AgentModel):
+    experiment_id: str | None = None
     agent_id: str
     name: str
     character_id: str | None = None

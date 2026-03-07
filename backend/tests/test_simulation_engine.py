@@ -8,6 +8,7 @@ from app.agents.models import (
     AgentTurnResult,
     PersonalityAxes,
     PersonalityProfile,
+    RelationshipMemory,
     SecretGoal,
 )
 from app.agents.service import AgentService
@@ -186,3 +187,34 @@ async def test_engine_generates_social_events_and_relationship_updates() -> None
     assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
     assert state.agents[0].relationships
     assert state.agents[1].relationships
+
+
+@pytest.mark.asyncio
+async def test_engine_forms_cults_and_applies_exile_results() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("talk", "town_hall"), ("pray", "town_hall"), ("observe", "town_hall")],
+            "a2": [("talk", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].goal.archetype = "belief_transformation"
+    state.agents[0].personality.trait_tags = ["devout", "guarded"]
+    state.agents[0].suspicion_level = 85
+    state.world_state.threat_level = 72
+    state.agents[0].relationships["a2"] = RelationshipMemory(trust=4, history=[], notes=None)
+    state.agents[1].relationships["a1"] = RelationshipMemory(trust=3, history=[], notes=None)
+    engine = SimulationEngine(agent_service=service, random_seed=8)
+
+    result = await engine.run_round(state)
+
+    midday_kinds = {
+        event.data.get("kind")
+        for event in result.phases[3].events
+        if isinstance(event.data.get("kind"), str)
+    }
+    assert "cult_activity" in midday_kinds
+    assert "exile_vote" in midday_kinds
+    assert state.exile_history
+    assert state.agents[0].status == "exiled"

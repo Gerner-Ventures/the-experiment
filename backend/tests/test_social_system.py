@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.agents.models import AgentMemoryState, PersonalityAxes, PersonalityProfile, SecretGoal
 from app.engine import EngineAgentState, SimulationState
+from app.engine.models import FactionState
 from app.gm import get_preset_arc
 from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
 from app.social import SocialService
@@ -16,6 +17,8 @@ def _agent(
     empathy: int,
     loyalty: int,
     ambition: int,
+    goal_archetype: str = "communal_survival",
+    trait_tags: list[str] | None = None,
 ) -> EngineAgentState:
     return EngineAgentState(
         agent_id=agent_id,
@@ -29,10 +32,11 @@ def _agent(
                 loyalty=loyalty,
                 ambition=ambition,
             ),
-            trait_tags=["guarded", "protective"] if empathy >= 60 else ["guarded", "scheming"],
+            trait_tags=trait_tags
+            or (["guarded", "protective"] if empathy >= 60 else ["guarded", "scheming"]),
             self_concept=f"{name} is trying to keep up.",
         ),
-        goal=SecretGoal(archetype="communal_survival", text="Keep the town intact."),
+        goal=SecretGoal(archetype=goal_archetype, text="Keep the town intact."),
         memory=AgentMemoryState(),
         location="town_hall",
         relationships={},
@@ -104,3 +108,50 @@ def test_social_service_runs_meeting_with_tally_and_votes() -> None:
         state.agents
     )
     assert "Investigate whoever is spreading lies" in outcome.summary
+
+
+def test_social_service_can_trigger_exile_vote() -> None:
+    service = SocialService(random_seed=19)
+    state = _state()
+    state.agents[0].suspicion_level = 82
+
+    outcome = service.run_meeting(state, proposal="Hold an exile vote before panic spreads")
+
+    assert outcome.exile is not None
+    assert outcome.exile.target_agent_id == "a1"
+    assert outcome.exile.tally["banish"] >= 1
+
+
+def test_social_service_describes_cult_pressure() -> None:
+    service = SocialService(random_seed=19)
+    state = _state()
+    state.agents[0] = _agent(
+        "a1",
+        "Mara",
+        paranoia=72,
+        empathy=38,
+        loyalty=44,
+        ambition=70,
+        goal_archetype="belief_transformation",
+        trait_tags=["devout", "guarded"],
+    )
+    state.factions = [
+        FactionState(
+            faction_id="cult:a1",
+            name="Mara's Circle",
+            kind="cult",
+            leader_id="a1",
+            member_ids=["a1", "a2"],
+            doctrine="Only revelation can save us.",
+            influence=61,
+            formed_round=3,
+            pressure=72,
+        )
+    ]
+    state.agents[0].faction_id = "cult:a1"
+    state.agents[0].faction_role = "leader"
+
+    outcome = service.run_meeting(state, proposal="Submit to the signs")
+
+    assert outcome.faction_pressures
+    assert "doctrine" in outcome.faction_pressures[0]

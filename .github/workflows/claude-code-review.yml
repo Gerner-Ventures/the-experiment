@@ -2,7 +2,7 @@ name: Claude Code Review
 
 on:
   pull_request:
-    types: [opened, synchronize, ready_for_review, reopened]
+    types: [opened, synchronize]
     # Optional: Only run on specific file changes
     # paths:
     #   - "src/**/*.ts"
@@ -12,6 +12,12 @@ on:
 
 jobs:
   claude-review:
+    # Skip bot PRs (Dependabot, Canon auto-generated doc updates)
+    if: >-
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'canonhq[bot]' &&
+      github.event.pull_request.user.login != 'gv-specwright'
+
     # Optional: Filter by PR author
     # if: |
     #   github.event.pull_request.user.login == 'external-contributor' ||
@@ -36,9 +42,25 @@ jobs:
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
-          plugins: 'code-review@claude-code-plugins'
-          prompt: '/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}'
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://code.claude.com/docs/en/cli-reference for available options
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
 
+            Review this pull request. Read the diff with `gh pr diff`, read relevant source files for context, then provide feedback on:
+            - Bugs and correctness issues
+            - Security concerns
+            - Performance considerations
+            - Code quality and best practices
+
+            Use the repository's CLAUDE.md for guidance on style and conventions.
+
+            When your review is complete, post EXACTLY ONE comment on the PR using `gh pr comment`. Compose the entire review as a single markdown comment — do not post multiple comments, test comments, or partial drafts. Use a heredoc to pass the body:
+
+              gh pr comment $PR_NUMBER --body "$(cat <<'REVIEW_EOF'
+              Your full review here...
+              REVIEW_EOF
+              )"
+
+          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
+          # or https://docs.claude.com/en/docs/claude-code/cli-reference for available options
+          claude_args: '--allowed-tools "Bash(gh issue view:*),Bash(gh search:*),Bash(gh issue list:*),Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Bash(gh pr list:*)"'

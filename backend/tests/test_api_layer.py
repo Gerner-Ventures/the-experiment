@@ -9,6 +9,8 @@ from app.agents.models import AgentTurnResult
 from app.api.runtime import runtime
 from app.api.store import InMemoryExperimentStore
 from app.agents.service import AgentService
+from app.llm import UsageTracker
+from app.llm.models import LLMUsage, UsageRecord
 from app.main import app
 from app.schemas.agent_decision import AgentDecision, DecisionAction
 
@@ -44,6 +46,8 @@ runtime.engine.agent_service = _StubAgentService()
 @pytest.fixture(autouse=True)
 def reset_runtime_store() -> None:
     runtime.store = InMemoryExperimentStore()
+    runtime.gm_service.llm_service.client.tracker = UsageTracker()
+    runtime.engine.gm_service.llm_service.client.tracker = UsageTracker()
 
 
 def _payload() -> dict[str, Any]:
@@ -183,3 +187,56 @@ def test_websocket_emits_granular_round_messages() -> None:
                 break
 
         assert required <= seen_types
+
+
+def test_analytics_and_replay_endpoints_return_round_data() -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
+    assert summary.status_code == 200
+    assert summary.json()["rounds_completed"] == 1
+
+    replay = client.get(f"{API_PREFIX}/experiments/{experiment_id}/replay")
+    assert replay.status_code == 200
+    assert replay.json()["rounds"][0]["round_number"] == 1
+
+    snapshot = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/snapshot")
+    assert snapshot.status_code == 200
+    assert snapshot.json()["round_number"] == 1
+    assert snapshot.json()["events"]
+
+
+def test_usage_and_prompt_trace_endpoints_group_records() -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    runtime.gm_service.llm_service.client.tracker.record(
+        UsageRecord(
+            role="gm",
+            model="openai/gpt-4o-mini",
+            provider="openai",
+            experiment_id=experiment_id,
+            round_number=1,
+            prompt_messages=[{"role": "system", "content": "You are the GM."}],
+            response_content='{"round_theme":"Pressure builds"}',
+            parsed_response={"round_theme": "Pressure builds"},
+            usage=LLMUsage(
+                prompt_tokens=20,
+                completion_tokens=10,
+                total_tokens=30,
+                cost_usd=0.002,
+            ),
+        )
+    )
+
+    usage = client.get(f"{API_PREFIX}/experiments/{experiment_id}/usage")
+    assert usage.status_code == 200
+    assert usage.json()["summary"]["total_tokens"] == 30
+    assert usage.json()["by_role"][0]["key"] == "gm"
+
+    traces = client.get(f"{API_PREFIX}/experiments/{experiment_id}/usage/traces")
+    assert traces.status_code == 200
+    assert traces.json()["total"] == 1
+    assert traces.json()["items"][0]["response_content"] == '{"round_theme":"Pressure builds"}'

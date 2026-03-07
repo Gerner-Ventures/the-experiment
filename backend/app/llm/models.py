@@ -52,9 +52,15 @@ class LLMResult(LLMModel):
 class UsageRecord(LLMModel):
     role: LLMRole
     model: str
+    provider: str | None = None
     experiment_id: str | None = None
     round_number: int | None = None
     agent_id: str | None = None
+    prompt_messages: list[dict[str, Any]] = Field(default_factory=list)
+    response_content: str = ""
+    parsed_response: dict[str, Any] | None = None
+    repaired: bool = False
+    raw_response: dict[str, Any] = Field(default_factory=dict)
     usage: LLMUsage
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 

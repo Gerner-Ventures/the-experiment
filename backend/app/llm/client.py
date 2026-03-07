@@ -180,9 +180,15 @@ class LLMClient:
             UsageRecord(
                 role=request.role,
                 model=result.model,
+                provider=result.provider,
                 experiment_id=_string_or_none(metadata.get("experiment_id")),
                 round_number=_int_or_none(metadata.get("round_number")),
                 agent_id=_string_or_none(metadata.get("agent_id")),
+                prompt_messages=[dict(message) for message in request.messages],
+                response_content=result.content,
+                parsed_response=result.parsed,
+                repaired=result.repaired,
+                raw_response=result.raw_response,
                 usage=result.usage,
             )
         )
