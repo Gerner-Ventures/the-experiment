@@ -40,6 +40,21 @@ redis:
       cpu: 50m
       memory: 64Mi
 
+## @section Postgres parameters (local development only)
+postgres:
+  enabled: false
+  image: postgres:16-alpine
+  storage: 1Gi
+  database: experiment
+  user: experiment
+  password: experiment
+  resources:
+    limits:
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
 ## @param imagePullSecrets Docker registry pull secret names
 imagePullSecrets: []
 
