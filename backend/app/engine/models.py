@@ -29,7 +29,6 @@ ActionResolutionOutcome = Literal[
     "rerouted",
     "conflict_winner",
     "conflict_loser",
-    "self_sacrifice",
 ]
 
 

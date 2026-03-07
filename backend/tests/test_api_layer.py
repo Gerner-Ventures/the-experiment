@@ -270,14 +270,34 @@ def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
                     "location": "unknown_place",
                     "goal_progress": "I pushed too hard and got nowhere.",
                     "cooperation_intent": "low",
-                }
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I recovered but still found no real lead.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I finished the round empty-handed.",
+                    "cooperation_intent": "medium",
+                },
             ],
             "Jon": [
                 {
                     "action_type": "observe",
-                    "goal_progress": "I held the line for one more round.",
+                    "goal_progress": "I took one step closer to holding the line.",
                     "cooperation_intent": "medium",
-                }
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I took one step closer to holding the line.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I took one step closer to holding the line.",
+                    "cooperation_intent": "medium",
+                },
             ],
         }
     )
@@ -307,16 +327,29 @@ def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
 
     goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
     assert goals.status_code == 200
-    assert len(goals.json()["items"]) == 2
-    assert goals.json()["items"][0]["progress_history"]
+    goal_items = {item["agent_name"]: item for item in goals.json()["items"]}
+    assert len(goal_items) == 2
+    assert len(goal_items["Mara"]["progress_history"]) == 3
+    assert (
+        goal_items["Mara"]["progress_history"][0]["progress"]
+        == "I pushed too hard and got nowhere."
+    )
+    assert goal_items["Mara"]["outcome"] == "unknown"
+    assert goal_items["Jon"]["outcome"] == "partial"
 
     suspicion = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/suspicion")
     assert suspicion.status_code == 200
     assert len(suspicion.json()["heatmap"]) == 2
+    suspicion_agents = {item["agent_name"]: item for item in suspicion.json()["agents"]}
+    assert set(suspicion_agents) == {"Jon", "Mara"}
+    assert "agent_id" not in suspicion_agents["Mara"]["points"][0]
+    assert suspicion_agents["Mara"]["points"][0]["round_number"] == 1
 
     gm = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/gm")
     assert gm.status_code == 200
     assert gm.json()["items"][0]["round_number"] == 1
+    assert gm.json()["items"][0]["round_theme"]
+    assert gm.json()["items"][0]["narration"]
 
 
 def test_goal_analytics_keeps_high_signal_action_when_agent_acts_multiple_times() -> None:

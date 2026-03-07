@@ -6,7 +6,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.models import PersonalityProfile, SecretGoal
-from app.engine.models import EngineAgentState, ExileOutcome, FactionState, RoundResult
+from app.db.models import AgentStatus
+from app.engine.models import EngineAgentState, ExileOutcome, FactionKind, FactionState, RoundResult
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord
 from app.llm.models import UsageRecord, UsageSummary
 
@@ -173,13 +174,6 @@ class AnalyticsSummary(APIRequestModel):
     current_resources: dict[str, float] = Field(default_factory=dict)
 
 
-class CooperationRound(APIRequestModel):
-    round_number: int
-    cooperation_score: float = 0.0
-    cooperative_actions: int = 0
-    total_actions: int = 0
-
-
 class AgentGoalProgress(APIRequestModel):
     round_number: int
     phase: str | None = None
@@ -195,7 +189,7 @@ class GoalOutcomeSummary(APIRequestModel):
     agent_name: str
     goal_text: str
     goal_archetype: str
-    status: str
+    status: AgentStatus
     outcome: Literal["achieved", "partial", "failed", "unknown"] = "unknown"
     latest_progress: str | None = None
     progress_history: list[AgentGoalProgress] = Field(default_factory=list)
@@ -230,10 +224,15 @@ class SuspicionPoint(APIRequestModel):
     suspicion_level: float = 0.0
 
 
+class SuspicionHistoryPoint(APIRequestModel):
+    round_number: int
+    suspicion_level: float = 0.0
+
+
 class AgentSuspicionHistory(APIRequestModel):
     agent_id: str
     agent_name: str
-    points: list[SuspicionPoint] = Field(default_factory=list)
+    points: list[SuspicionHistoryPoint] = Field(default_factory=list)
 
 
 class SuspicionAnalytics(APIRequestModel):
@@ -245,7 +244,7 @@ class FactionTimelinePoint(APIRequestModel):
     round_number: int
     faction_id: str
     faction_name: str
-    kind: str
+    kind: FactionKind
     pressure: float = 0.0
     influence: float = 0.0
     member_ids: list[str] = Field(default_factory=list)
