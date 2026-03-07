@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from app.core.config import get_settings
 from app.llm.client import LLMClient
 from app.llm.models import (
     LLMRequest,
@@ -23,7 +22,6 @@ if TYPE_CHECKING:
 class LLMService:
     def __init__(self, client: LLMClient | None = None) -> None:
         self.client = client or LLMClient()
-        self.settings = get_settings()
 
     async def generate_gm_plan(
         self,
@@ -84,9 +82,7 @@ class LLMService:
     ) -> MemoryPromotionDecision:
         result = await self.client.generate_structured(
             LLMRequest(
-                role="agent",
-                model_override=self.settings.memory_model,
-                temperature=0,
+                role="memory",
                 messages=[
                     {
                         "role": "system",
@@ -129,9 +125,7 @@ class LLMService:
     ) -> MemoryConsolidationDecision:
         result = await self.client.generate_structured(
             LLMRequest(
-                role="agent",
-                model_override=self.settings.memory_model,
-                temperature=0,
+                role="memory",
                 messages=[
                     {
                         "role": "system",
@@ -177,9 +171,7 @@ class LLMService:
     ) -> RelationshipConsolidationDecision:
         result = await self.client.generate_structured(
             LLMRequest(
-                role="agent",
-                model_override=self.settings.memory_model,
-                temperature=0,
+                role="memory",
                 messages=[
                     {
                         "role": "system",

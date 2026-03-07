@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "canon-mcp": {
+      "type": "stdio",
+      "command": "canon-mcp",
+      "args": []
+    }
+  }
+}

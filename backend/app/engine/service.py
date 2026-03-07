@@ -277,6 +277,7 @@ class SimulationEngine:
             cooperation_ratio=cooperation_ratio,
             crisis_severity=crisis_severity,
         )
+        active_agents = self._active_agents(state)
         night_updates = await asyncio.gather(
             *[
                 self._build_night_reflection(
@@ -284,13 +285,11 @@ class SimulationEngine:
                     round_number=state.world_state.round_number,
                     cooperation_ratio=cooperation_ratio,
                 )
-                for agent in self._active_agents(state)
+                for agent in active_agents
             ]
         )
         reflections = []
-        for agent, (reflection, updated_memory) in zip(
-            self._active_agents(state), night_updates, strict=True
-        ):
+        for agent, (reflection, updated_memory) in zip(active_agents, night_updates, strict=True):
             agent.memory = updated_memory
             agent.relationships = dict(agent.memory.relationship_memory)
             reflections.append(reflection)
@@ -322,6 +321,7 @@ class SimulationEngine:
             important=agent.suspicion_level > 40,
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
+            classify=False,
         )
         updated_memory = await self.agent_service.consolidate_memory(
             updated_memory,

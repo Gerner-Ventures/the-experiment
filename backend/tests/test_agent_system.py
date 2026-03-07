@@ -65,7 +65,7 @@ class _StubLLMService(LLMService):
         )
 
 
-class _StubMemoryLLMService(LLMService):
+class _StubMemoryLLMService:
     def __init__(
         self,
         decision: MemoryPromotionDecision | None = None,
@@ -92,7 +92,6 @@ class _StubMemoryLLMService(LLMService):
             or RelationshipConsolidationDecision(
                 update_notes=True,
                 notes="Jon usually tries to steady me when the town starts to spiral.",
-                confidence=79,
             )
         )
 
@@ -440,7 +439,7 @@ async def test_relationship_memory_consolidates_notes() -> None:
     )
 
     assert memory.relationship_memory["agent-2"].notes is not None
-    assert memory.relationship_memory["agent-2"].last_consolidated_history_signature is not None
+    assert memory.relationship_consolidation_signatures["agent-2"]
     assert "steady me" in memory.relationship_memory["agent-2"].notes
 
     memory = await service.consolidate_relationship_memory(
@@ -534,6 +533,37 @@ async def test_conversation_updates_relationship_memory_for_both_participants() 
     assert len(mara.relationships["a2"].history) == 2
     assert len(jon.relationships["a1"].history) == 2
     assert llm_service.classify_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_night_reflections_skip_classifier_for_low_suspicion_agents() -> None:
+    llm_service = _StubMemoryLLMService()
+    engine = SimulationEngine(agent_service=AgentService(memory_llm_service=llm_service))
+    state = _engine_state()
+
+    await engine._night_phase(state, cooperation_ratio=0.6)
+
+    assert llm_service.classify_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_night_phase_materializes_active_agents_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm_service = _StubMemoryLLMService()
+    engine = SimulationEngine(agent_service=AgentService(memory_llm_service=llm_service))
+    state = _engine_state()
+    active_agent_calls = 0
+    original_active_agents = engine._active_agents
+
+    def counting_active_agents(current_state: SimulationState) -> list[EngineAgentState]:
+        nonlocal active_agent_calls
+        active_agent_calls += 1
+        return original_active_agents(current_state)
+
+    monkeypatch.setattr(engine, "_active_agents", counting_active_agents)
+
+    await engine._night_phase(state, cooperation_ratio=0.6)
+
+    assert active_agent_calls == 1
 
 
 def test_action_registry_exposes_expected_actions() -> None:
