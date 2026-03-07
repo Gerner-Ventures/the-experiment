@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.models import AgentTurnResult
 from app.api.runtime import runtime
+from app.api.store import InMemoryExperimentStore
 from app.agents.service import AgentService
 from app.main import app
 from app.schemas.agent_decision import AgentDecision, DecisionAction
@@ -37,6 +39,11 @@ class _StubAgentService(AgentService):
 
 
 runtime.engine.agent_service = _StubAgentService()
+
+
+@pytest.fixture(autouse=True)
+def reset_runtime_store() -> None:
+    runtime.store = InMemoryExperimentStore()
 
 
 def _payload() -> dict[str, Any]:

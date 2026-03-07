@@ -38,6 +38,9 @@ Thumbs.db
 # Worktrees
 .worktrees/
 
+# DevSpace
+.devspace/
+
 # Coverage
 htmlcov/
 .coverage

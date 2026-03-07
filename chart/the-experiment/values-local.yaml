@@ -1,0 +1,34 @@
+## Local development overrides (Docker Desktop Kubernetes)
+
+postgres:
+  enabled: true
+
+backend:
+  image:
+    repository: the-experiment-backend
+    tag: dev
+    pullPolicy: Never
+
+frontend:
+  image:
+    repository: the-experiment-frontend
+    tag: dev
+    pullPolicy: Never
+
+secrets:
+  neon:
+    databaseUrl: ""
+
+## Relax security for local dev (writable fs for hot reload volumes)
+podSecurityContext:
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
+  fsGroup: 0
+
+securityContext:
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL

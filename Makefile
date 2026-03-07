@@ -193,9 +193,36 @@ docker-build: ## Build production Docker images (tagged :local)
 
 .PHONY: helm-lint
 
-helm-lint: ## Lint Helm charts (default + production values)
+helm-lint: ## Lint Helm charts (default + production + local values)
 	helm lint chart/the-experiment/
 	helm lint chart/the-experiment/ -f chart/the-experiment/values-production.yaml
+	helm lint chart/the-experiment/ -f chart/the-experiment/values-local.yaml
+
+# ============================================================================
+# Local Kubernetes (DevSpace)
+# ============================================================================
+
+##@ Local Kubernetes
+
+.PHONY: local-up local-dev local-down local-status local-logs local-db-shell
+
+local-up: ## Deploy to local k8s (build + deploy, no sync)
+	devspace deploy
+
+local-dev: ## Start local k8s dev mode (build + deploy + sync + port-forward)
+	devspace dev
+
+local-down: ## Tear down local k8s deployment
+	devspace purge
+
+local-status: ## Show pods in the-experiment namespace
+	kubectl get pods -n the-experiment
+
+local-logs: ## Tail all pod logs in the-experiment namespace
+	kubectl logs -n the-experiment -l app.kubernetes.io/instance=the-experiment --all-containers -f
+
+local-db-shell: ## Open psql shell to local k8s postgres
+	kubectl exec -it -n the-experiment statefulset/the-experiment-postgres -- psql -U experiment experiment
 
 # ============================================================================
 # Cleanup
