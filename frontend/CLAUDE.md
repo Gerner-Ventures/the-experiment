@@ -1,0 +1,100 @@
+# Frontend — the-experiment
+
+## Stack
+- Vue 3 (Composition API, `<script setup>`)
+- TypeScript (strict)
+- Tailwind CSS v4 (CSS-first config in `main.css`)
+- Ant Design Vue (all standard UI components)
+- PixiJS v8 (isometric world rendering)
+- Pinia (state management)
+- GSAP (orchestrated animations)
+- Jest (unit tests), Playwright (e2e tests)
+
+## Directory Structure
+
+```
+src/
+├── assets/styles/       # Global CSS (main.css with Tailwind @theme)
+├── components/          # Vue components organized by feature
+│   ├── setup/           # Experiment setup screen components
+│   ├── ui/              # Reusable game-specific UI (GlitchText, etc.)
+│   ├── world/           # (planned) PixiJS isometric world
+│   ├── hud/             # (planned) In-game HUD overlays
+│   ├── dossier/         # (planned) Agent dossier panel
+│   ├── social/          # (planned) Conversations, town meeting
+│   └── log/             # (planned) Experiment event log
+├── composables/         # Vue composables (usePixiWorld, useWebSocket, etc.)
+├── config/              # Constants and configuration
+│   ├── agent-options.ts # Personality traits, goal presets, LLM models, limits
+│   └── arc-presets.ts   # Narrative arc preset definitions
+├── locales/             # i18n string files (no magic strings in components)
+│   ├── en.ts            # English locale (default)
+│   └── index.ts         # Locale loader and useLocale() composable
+├── services/            # API client and mock services
+├── stores/              # Pinia domain stores
+├── types/               # TypeScript interfaces matching shared/schemas/
+│   ├── index.ts         # Barrel re-export of all types
+│   ├── agent.ts         # AgentConfig, Agent, AgentStatus, AgentRelationship
+│   ├── agent-decision.ts# AgentDecision, AgentAction, ActionType
+│   ├── arc.ts           # Arc, Act, ResourcePressure
+│   ├── experiment.ts    # Experiment, ExperimentStatus, Resources
+│   ├── gm.ts            # GMPlan, CrisisEvent, CrisisSeverity
+│   └── websocket.ts     # WSMessage, WSMessageType, RoundPhase
+├── views/               # Route-level view components
+│   ├── SetupView.vue    # Boot sequence + experiment configuration
+│   ├── SimulationView.vue # (planned) Isometric world + game HUD
+│   └── ReportView.vue   # (planned) Post-game analysis
+├── App.vue              # Root layout with route transitions
+└── main.ts              # App entry: fonts, Pinia, Router, Antd
+```
+
+## Architecture Rules
+
+Read `docs/ARCHITECTURE.md` for full decisions. Key rules:
+
+### State
+- Domain Pinia stores: `experimentStore`, `agentStore`, `worldStore`, `gmStore`, `socialStore`, `uiStore`
+- Stores own their domain. Never write to another store directly.
+- WebSocket messages route to stores via `useWebSocket` composable.
+
+### PixiJS ↔ Vue
+- `usePixiWorld()` composable is the ONLY bridge between Vue reactivity and PixiJS.
+- Vue never touches PIXI display objects. PixiJS never reads Pinia stores.
+- PixiJS classes in `components/world/pixi/` are pure TypeScript, no Vue imports.
+
+### Components
+- Organized by feature folder matching tickets (setup/, world/, hud/, dossier/, social/, log/).
+- USE Ant Design for all standard UI (buttons, inputs, cards, modals, etc.).
+- Custom components ONLY for game-specific rendering (PixiJS, threat meter, glitch text, narration).
+
+### Types
+- All TypeScript interfaces live in `src/types/`, matching `shared/schemas/` JSON contracts.
+- Import types via `@/types` barrel export or specific files.
+- Use `snake_case` in API/schema, `camelCase` in TypeScript interfaces (mapped at service layer).
+
+### Locales
+- All user-facing strings live in `src/locales/en.ts`. No hardcoded strings in components.
+- Access via `const locale = useLocale()` in `<script setup>`.
+- Parameterized strings use `{placeholder}` syntax, replaced at call site.
+- Config data (traits, presets, arcs) references locale keys — labels are never hardcoded.
+
+### Animation
+- CSS/Tailwind for simple transitions and hovers.
+- GSAP for orchestrated timelines (boot sequence, narration, cinematics). Always clean up in `onUnmounted`.
+- PixiJS Ticker for all canvas animation. Never use raw `requestAnimationFrame` alongside PixiJS.
+- Always clean up `setTimeout`/`setInterval` in `onUnmounted`.
+
+### Testing
+- Unit tests: `tests/unit/**/*.spec.ts` — Jest + @vue/test-utils
+- E2E tests: `tests/e2e/**/*.spec.ts` — Playwright (Chromium)
+- Mock API responses match `shared/schemas/` contracts.
+
+## Conventions
+- All components use `<script setup lang="ts">` syntax.
+- Props use `defineProps<T>()` with TypeScript interfaces.
+- Models use `defineModel<T>()`.
+- Emit types declared with `defineEmits<T>()`.
+- Composables prefixed with `use` (e.g., `usePixiWorld`, `useWebSocket`).
+- Shared types in `src/types/`.
+- No `any` types. Use `unknown` and narrow.
+- No magic strings or numbers in components. Use `src/locales/` and `src/config/`.

@@ -1,6 +1,11 @@
+import '@fontsource-variable/space-grotesk'
+import '@fontsource-variable/jetbrains-mono'
+import './assets/styles/main.css'
+
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
+import Antd from 'ant-design-vue'
 import App from './App.vue'
 
 const router = createRouter({
@@ -15,4 +20,5 @@ const router = createRouter({
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+app.use(Antd)
 app.mount('#app')
