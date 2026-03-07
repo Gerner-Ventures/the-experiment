@@ -21,7 +21,7 @@ See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full game loop and mechan
 the-experiment/
 ├── frontend/          Vue 3 + PixiJS isometric renderer
 ├── backend/           Python (FastAPI) simulation engine
-├── k8s/               Kubernetes deployment manifests
+├── chart/             Helm chart for Kubernetes deployment
 ├── shared/schemas/    JSON Schema API contracts
 ├── assets/            Sprite sheets, tiles, sounds
 └── docs/              Design docs and work stream details
@@ -32,7 +32,14 @@ the-experiment/
 | Frontend | Vue 3, Vite, TypeScript, PixiJS v8, Pinia |
 | Backend | Python 3.12, FastAPI, SQLAlchemy, LiteLLM |
 | Data | PostgreSQL 16, Redis 7 |
-| Infra | Docker Compose (local), Kubernetes (prod) |
+| Infra | Docker Compose (local), Helm on Kubernetes (prod) |
+
+## Infrastructure Status
+
+- HTTP API is served at `/api/*` in both local and production environments.
+- Kubernetes ingress routes `/api` to the backend service and `/` to the frontend service.
+- `DATABASE_URL` and `REDIS_URL` are configuration inputs for the backend.
+- Application state is not persisted yet. The current experiment runtime is in-memory, so Postgres and Redis are not yet the source of truth for live simulations.
 
 ## Quick Start
 
@@ -51,7 +58,7 @@ make dev
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000
-- Health check: http://localhost:8000/health
+- Health check: http://localhost:8000/api/health
 
 ## Work Streams
 
