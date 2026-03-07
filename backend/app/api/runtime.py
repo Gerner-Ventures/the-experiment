@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ from typing import Any
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
+from starlette.websockets import WebSocketState
 
 from app.agents.models import AgentMemoryState
 from app.api.models import (
@@ -24,13 +26,16 @@ from app.api.models import (
     UsageReport,
 )
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
+from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
 from app.schemas.ws_message import WSMessage, WSMessageType
-from app.world import build_default_world_state
+from app.world import build_default_world_state, resolve_spawn_tile
+
+logger = logging.getLogger(__name__)
 
 
 class ConnectionManager:
@@ -40,16 +45,52 @@ class ConnectionManager:
     async def connect(self, experiment_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
         self.connections[experiment_id].add(websocket)
+        logger.info(
+            "WS connected: experiment=%s total=%d",
+            experiment_id,
+            len(self.connections[experiment_id]),
+        )
 
     def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
-        self.connections[experiment_id].discard(websocket)
+        # Use `.get()` here so disconnects for unknown experiments do not create empty buckets.
+        sockets = self.connections.get(experiment_id)
+        if sockets is None:
+            return
+        sockets.discard(websocket)
+        if not sockets:
+            self.connections.pop(experiment_id, None)
+        logger.info(
+            "WS disconnected: experiment=%s remaining=%d",
+            experiment_id,
+            len(self.connections.get(experiment_id, ())),
+        )
 
     async def broadcast(self, experiment_id: str, payload: dict[str, Any]) -> None:
-        sockets = list(self.connections[experiment_id])
+        sockets = list(self.connections.get(experiment_id, ()))
         if not sockets:
             return
+        encoded_payload = jsonable_encoder(payload)
+        dead_sockets: list[WebSocket] = []
         for socket in sockets:
-            await socket.send_json(jsonable_encoder(payload))
+            try:
+                if socket.client_state == WebSocketState.CONNECTED:
+                    await socket.send_json(encoded_payload)
+                else:
+                    logger.warning(
+                        "Pruning websocket during broadcast: experiment=%s state=%s",
+                        experiment_id,
+                        socket.client_state,
+                    )
+                    dead_sockets.append(socket)
+            except Exception:
+                logger.warning(
+                    "Pruning websocket after send failure: experiment=%s",
+                    experiment_id,
+                    exc_info=True,
+                )
+                dead_sockets.append(socket)
+        for socket in dead_sockets:
+            self.disconnect(experiment_id, socket)
 
 
 class ExperimentRuntime:
@@ -64,6 +105,30 @@ class ExperimentRuntime:
         async with self.lock:
             experiment_id = str(uuid.uuid4())
             arc = request.arc or get_preset_arc(request.preset_arc_id)
+            agents: list[EngineAgentState] = []
+            spawn_counts: dict[str, int] = {}
+            for agent in request.agents:
+                location = agent.location or "town_square"
+                spawn_index = spawn_counts.get(location, 0)
+                spawn_counts[location] = spawn_index + 1
+                spawn_tile = resolve_spawn_tile(location, spawn_index=spawn_index)
+                agents.append(
+                    EngineAgentState(
+                        agent_id=str(uuid.uuid4()),
+                        name=agent.name,
+                        character_id=agent.character_id,
+                        personality=agent.personality,
+                        goal=agent.goal,
+                        memory=AgentMemoryState(),
+                        location=location,
+                        tile_x=spawn_tile[0],
+                        tile_y=spawn_tile[1],
+                        inventory=agent.inventory,
+                        relationships={},
+                        suspicion_level=0,
+                        llm_model=agent.llm_model,
+                    )
+                )
             state = SimulationState(
                 experiment_id=experiment_id,
                 experiment_name=request.name,
@@ -73,22 +138,7 @@ class ExperimentRuntime:
                 auto_approve=request.auto_approve,
                 arc=arc,
                 world_state=build_default_world_state(),
-                agents=[
-                    EngineAgentState(
-                        agent_id=str(uuid.uuid4()),
-                        name=agent.name,
-                        character_id=agent.character_id,
-                        personality=agent.personality,
-                        goal=agent.goal,
-                        memory=AgentMemoryState(),
-                        location=agent.location,
-                        inventory=agent.inventory,
-                        relationships={},
-                        suspicion_level=0,
-                        llm_model=agent.llm_model,
-                    )
-                    for agent in request.agents
-                ],
+                agents=agents,
             )
             await self.store.save_state(state)
             await self._log(
@@ -285,7 +335,7 @@ class ExperimentRuntime:
 
     async def get_analytics_summary(self, experiment_id: str) -> AnalyticsSummary:
         state = await self.get_state(experiment_id)
-        active_agents = [agent for agent in state.agents if agent.status != "exiled"]
+        active_agents = [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
         cooperation_score = await self._cooperation_score(experiment_id)
         return AnalyticsSummary(

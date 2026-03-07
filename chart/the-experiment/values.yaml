@@ -10,6 +10,7 @@ backend:
     pullPolicy: IfNotPresent
   resources:
     limits:
+      cpu: 500m
       memory: 512Mi
     requests:
       cpu: 100m
@@ -24,17 +25,21 @@ frontend:
     pullPolicy: IfNotPresent
   resources:
     limits:
+      cpu: 100m
       memory: 128Mi
     requests:
       cpu: 50m
       memory: 64Mi
 
 ## @section Redis parameters
+## Redis uses emptyDir — data is lost on pod restart.
+## This is fine for caching/pubsub; do not add persistence-dependent logic.
 redis:
   enabled: true
   image: redis:7-alpine
   resources:
     limits:
+      cpu: 100m
       memory: 128Mi
     requests:
       cpu: 50m
@@ -50,6 +55,7 @@ postgres:
   password: experiment
   resources:
     limits:
+      cpu: 250m
       memory: 256Mi
     requests:
       cpu: 100m
@@ -100,7 +106,6 @@ config:
   backendPort: 8000
   logLevel: "info"
   redisUrl: ""
-  posthogEnabled: "false"
   platformUrl: ""
 
 ## @section Service parameters
@@ -126,6 +131,8 @@ podSecurityContext:
   runAsUser: 1001
   runAsGroup: 1001
   fsGroup: 1001
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   allowPrivilegeEscalation: false
