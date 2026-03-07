@@ -9,18 +9,12 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.api.router import api_router
-from app.api.ws_manager import ConnectionManager
-from app.core.config import get_settings
 from app.core import posthog as ph
-from app.engine.runner import ExperimentRunner
+from app.core.config import get_settings
 from app.logging import setup_logging
 
 setup_logging()
 settings = get_settings()
-
-# Global app singletons
-ws_manager = ConnectionManager()
-experiment_runner = ExperimentRunner(ws_manager)
 
 
 @asynccontextmanager

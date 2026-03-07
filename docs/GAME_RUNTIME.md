@@ -390,13 +390,14 @@ The API runtime now persists report-grade derived analytics at round end:
 - `round_end` log rows include compact round summaries for cooperation, goals, suspicion, factions, and GM context
 - replay and analytics endpoints read from those persisted summaries instead of reconstructing everything from websocket-only state
 
-## Current Caveats
+## Runtime Ownership
 
-There are two execution entry points in the repo:
+There is a single backend execution path:
 
-- `ExperimentRuntime` in `backend/app/api/runtime.py`
-- `ExperimentRunner` in `backend/app/engine/runner.py`
+- FastAPI route handlers in `backend/app/api/routes/experiments.py`
+- `ExperimentRuntime` plus its websocket connection manager in `backend/app/api/runtime.py`
+- `ExperimentStore` implementations in `backend/app/api/store.py`
 
-The API runtime plus persistent store appears to be the main current path. If these diverge, this document should track the API runtime behavior.
+`backend/app/main.py` only wires the FastAPI application and middleware; it does not construct a separate runner stack.
 
 This document describes the current implementation, not a guaranteed long-term contract.
