@@ -15,7 +15,9 @@ class GMService:
             return self.apply_plan(self.approve_plan(record))
         return record
 
-    def approve_plan(self, record: GMPlanRecord, modified_plan: GMPlanData | None = None) -> GMPlanRecord:
+    def approve_plan(
+        self, record: GMPlanRecord, modified_plan: GMPlanData | None = None
+    ) -> GMPlanRecord:
         plan = modified_plan or record.plan
         return GMPlanRecord(
             status="modified" if modified_plan is not None else "approved",

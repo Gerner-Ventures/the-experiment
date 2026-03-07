@@ -3,7 +3,13 @@ from __future__ import annotations
 import pytest
 from typing import cast
 
-from app.agents.models import AgentMemoryState, AgentTurnResult, PersonalityAxes, PersonalityProfile, SecretGoal
+from app.agents.models import (
+    AgentMemoryState,
+    AgentTurnResult,
+    PersonalityAxes,
+    PersonalityProfile,
+    SecretGoal,
+)
 from app.agents.service import AgentService
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
 from app.gm import get_preset_arc
@@ -28,10 +34,14 @@ class _StubAgentService(AgentService):
             decision=AgentDecision(
                 inner_thought="A choice is made.",
                 suspicion="The town is slightly off." if action_type == "explore" else None,
-                action=DecisionAction(type=action_type, target=location or "well", location=location),
+                action=DecisionAction(
+                    type=action_type, target=location or "well", location=location
+                ),
                 dialogue=None,
                 goal_progress="Incremental movement.",
-                cooperation_intent="low" if action_type in {"hoard", "sabotage", "explore"} else "medium",
+                cooperation_intent="low"
+                if action_type in {"hoard", "sabotage", "explore"}
+                else "medium",
             ),
             updated_memory=agent_context.memory,
             suspicion_level=agent_context.suspicion_level,
@@ -94,7 +104,14 @@ async def test_engine_runs_all_six_phases() -> None:
 
     result = await engine.run_round(_state())
 
-    assert [phase.phase for phase in result.phases] == ["gm_plan", "dawn", "morning", "midday", "afternoon", "night"]
+    assert [phase.phase for phase in result.phases] == [
+        "gm_plan",
+        "dawn",
+        "morning",
+        "midday",
+        "afternoon",
+        "night",
+    ]
     assert result.round_number == 1
     assert result.gm_plan.status == "applied"
 
@@ -115,7 +132,9 @@ async def test_engine_creates_conflicts_under_simultaneous_pressure() -> None:
     morning_conflicts = result.phases[2].conflicts
     afternoon_conflicts = result.phases[4].conflicts
     assert morning_conflicts or afternoon_conflicts
-    assert any(conflict.location == "well" for conflict in [*morning_conflicts, *afternoon_conflicts])
+    assert any(
+        conflict.location == "well" for conflict in [*morning_conflicts, *afternoon_conflicts]
+    )
 
 
 @pytest.mark.asyncio

@@ -8,7 +8,9 @@ from app.db.models import AgentStatus
 from app.schemas.agent_decision import AgentDecision
 from app.world.models import WorldState
 
-PersonalityAxis = Literal["paranoia", "empathy", "dominance", "impulsiveness", "loyalty", "ambition"]
+PersonalityAxis = Literal[
+    "paranoia", "empathy", "dominance", "impulsiveness", "loyalty", "ambition"
+]
 GoalArchetype = Literal[
     "communal_survival",
     "protective_attachment",
@@ -35,7 +37,9 @@ ActionType = Literal[
     "rest",
     "observe",
 ]
-SuspicionTrigger = Literal["edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"]
+SuspicionTrigger = Literal[
+    "edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"
+]
 
 CURATED_TRAIT_TAGS: tuple[str, ...] = (
     "charming",

@@ -5,7 +5,8 @@
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
     "strict": true,
-    "noEmit": true
+    "composite": true,
+    "emitDeclarationOnly": true
   },
   "include": ["vite.config.ts"]
 }

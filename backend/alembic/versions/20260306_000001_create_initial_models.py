@@ -18,8 +18,12 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-experiment_status = sa.Enum("setup", "running", "paused", "completed", "collapsed", name="experiment_status")
-agent_status = sa.Enum("idle", "thinking", "talking", "moving", "working", "sneaking", "exiled", name="agent_status")
+experiment_status = sa.Enum(
+    "setup", "running", "paused", "completed", "collapsed", name="experiment_status"
+)
+agent_status = sa.Enum(
+    "idle", "thinking", "talking", "moving", "working", "sneaking", "exiled", name="agent_status"
+)
 resource_pressure = sa.Enum("low", "medium", "high", "critical", name="resource_pressure")
 event_type = sa.Enum("round", "action", "social", "crisis", "system", name="event_type")
 
@@ -40,8 +44,18 @@ def upgrade() -> None:
         sa.Column("total_rounds", sa.Integer(), nullable=False),
         sa.Column("threat_level", sa.Float(), nullable=False),
         sa.Column("resources", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_table(
@@ -50,8 +64,18 @@ def upgrade() -> None:
         sa.Column("experiment_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("description", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("experiment_id"),
@@ -67,8 +91,18 @@ def upgrade() -> None:
         sa.Column("gm_instructions", sa.Text(), nullable=False),
         sa.Column("resource_pressure", resource_pressure, nullable=False),
         sa.Column("director_notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["arc_id"], ["arcs.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -85,8 +119,18 @@ def upgrade() -> None:
         sa.Column("suspicion_level", sa.Float(), nullable=False),
         sa.Column("inventory", sa.JSON(), nullable=False),
         sa.Column("relationships", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -97,8 +141,18 @@ def upgrade() -> None:
         sa.Column("round_number", sa.Integer(), nullable=False),
         sa.Column("phase", sa.String(length=100), nullable=False),
         sa.Column("summary", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -110,8 +164,18 @@ def upgrade() -> None:
         sa.Column("agent_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("type", event_type, nullable=False),
         sa.Column("payload", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["agent_id"], ["agents.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["round_id"], ["rounds.id"], ondelete="SET NULL"),
@@ -123,8 +187,18 @@ def upgrade() -> None:
         sa.Column("experiment_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("round_number", sa.Integer(), nullable=False),
         sa.Column("state", sa.JSON(), nullable=False),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -140,15 +214,42 @@ def upgrade() -> None:
         sa.Column("environmental", sa.Text(), nullable=True),
         sa.Column("narration", sa.Text(), nullable=False),
         sa.Column("meta_hint", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.ForeignKeyConstraint(["experiment_id"], ["experiments.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.create_index("ix_rounds_experiment_round_number", "rounds", ["experiment_id", "round_number"], unique=False)
-    op.create_index("ix_events_experiment_created_at", "events", ["experiment_id", "created_at"], unique=False)
-    op.create_index("ix_world_snapshots_experiment_round_number", "world_snapshots", ["experiment_id", "round_number"], unique=False)
-    op.create_index("ix_gm_plans_experiment_round_number", "gm_plans", ["experiment_id", "round_number"], unique=False)
+    op.create_index(
+        "ix_rounds_experiment_round_number",
+        "rounds",
+        ["experiment_id", "round_number"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_events_experiment_created_at", "events", ["experiment_id", "created_at"], unique=False
+    )
+    op.create_index(
+        "ix_world_snapshots_experiment_round_number",
+        "world_snapshots",
+        ["experiment_id", "round_number"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_gm_plans_experiment_round_number",
+        "gm_plans",
+        ["experiment_id", "round_number"],
+        unique=False,
+    )
 
 
 def downgrade() -> None:

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from app.gm.models import CrisisEvent, CrisisSeverity, CrisisTemplate, DirectorAct, GMPlanningContext
+from app.gm.models import (
+    CrisisEvent,
+    CrisisSeverity,
+    CrisisTemplate,
+    DirectorAct,
+    GMPlanningContext,
+)
 from app.gm.models import ResourceDelta
 
 CRISIS_RESPONSE_SCHEMA: dict[str, object] = {
@@ -32,7 +38,14 @@ CRISIS_RESPONSE_SCHEMA: dict[str, object] = {
         "narration": {"type": "string"},
         "meta_hint": {"type": ["string", "null"]},
     },
-    "required": ["round", "round_theme", "reasoning", "crisis_event", "resource_modifiers", "narration"],
+    "required": [
+        "round",
+        "round_theme",
+        "reasoning",
+        "crisis_event",
+        "resource_modifiers",
+        "narration",
+    ],
 }
 
 CRISIS_TEMPLATES: tuple[CrisisTemplate, ...] = (
@@ -87,7 +100,9 @@ CRISIS_TEMPLATES: tuple[CrisisTemplate, ...] = (
 
 def select_crisis_template(context: GMPlanningContext, current_act: DirectorAct) -> CrisisTemplate:
     pressure = current_act.resource_pressure.value
-    plotline_bias = "meta" if any("watch" in plot.lower() for plot in context.unresolved_plotlines) else None
+    plotline_bias = (
+        "meta" if any("watch" in plot.lower() for plot in context.unresolved_plotlines) else None
+    )
 
     if context.threat_level < 25 and plotline_bias is None:
         return _find_template("social")

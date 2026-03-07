@@ -19,7 +19,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     op.add_column("agents", sa.Column("goal_archetype", sa.String(length=100), nullable=True))
-    op.add_column("agents", sa.Column("memory", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")))
+    op.add_column(
+        "agents",
+        sa.Column("memory", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")),
+    )
     op.alter_column("agents", "memory", server_default=None)
 
 

@@ -103,6 +103,7 @@ def test_create_get_and_step_experiment_flow() -> None:
     stepped = client.post(f"/experiments/{experiment_id}/step")
     assert stepped.status_code == 200
     assert stepped.json()["round_result"]["round_number"] == 1
+    assert stepped.json()["round_result"]["gm_plan"]["plan"]["round_theme"] == approved.json()["plan"]["round_theme"]
 
     fetched = client.get(f"/experiments/{experiment_id}")
     assert fetched.status_code == 200

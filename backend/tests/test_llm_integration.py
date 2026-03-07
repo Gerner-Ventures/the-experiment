@@ -63,7 +63,12 @@ async def test_structured_generation_parses_schema_output() -> None:
             "round": 1,
             "round_theme": "A Private Rumor Becomes Public",
             "reasoning": "Pressure needs a face.",
-            "crisis_event": {"type": "social", "description": "A rumor spreads.", "affects": ["bar"], "severity": "medium"},
+            "crisis_event": {
+                "type": "social",
+                "description": "A rumor spreads.",
+                "affects": ["bar"],
+                "severity": "medium",
+            },
             "resource_modifiers": {"food": 0, "water": 0, "materials": 0, "power": 0},
             "environmental": "Rain taps the windows.",
             "narration": "The morning starts with whispers.",
@@ -103,7 +108,9 @@ async def test_one_repair_pass_is_used_for_invalid_json() -> None:
     client.router = fake_router
 
     result = await client.generate_structured(
-        request=client_request("agent", AgentDecision, {"experiment_id": "exp-2", "round_number": 2, "agent_id": "a-1"})
+        request=client_request(
+            "agent", AgentDecision, {"experiment_id": "exp-2", "round_number": 2, "agent_id": "a-1"}
+        )
     )
 
     assert result.repaired is True
