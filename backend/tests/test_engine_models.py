@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from app.agents.models import AgentMemoryState, PersonalityAxes, PersonalityProfile, RelationshipMemory, SecretGoal
+from app.agents.models import (
+    AgentMemoryState,
+    PersonalityAxes,
+    PersonalityProfile,
+    RelationshipMemory,
+    SecretGoal,
+)
 from app.db.models import AgentStatus
 from app.engine.models import EngineAgentState, build_agent_context
 from app.world import build_default_world_state
