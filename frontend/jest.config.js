@@ -1,6 +1,5 @@
-import type { Config } from 'jest'
-
-const config: Config = {
+/** @type {import('jest').Config} */
+export default {
   testEnvironment: 'jsdom',
   transform: {
     '^.+\\.vue$': '@vue/vue3-jest',
@@ -18,5 +17,3 @@ const config: Config = {
     '!src/**/*.d.ts',
   ],
 }
-
-export default config
