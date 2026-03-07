@@ -5,6 +5,10 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
+
+ARG VITE_POSTHOG_KEY=""
+ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
+
 RUN npm run build
 
 # ── Stage 2: Serve with nginx ──────────────────────────
