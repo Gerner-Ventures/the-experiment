@@ -280,12 +280,11 @@ class ExperimentRuntime:
         await self.broadcast_round(experiment_id, round_result)
         return round_result, state
 
-    def start_step(self, experiment_id: str) -> int:
-        """Start a round as a background task, returning the upcoming round number."""
-        # Peek at current state to get the round number
-        # The actual work runs in the background
+    def start_step(self, experiment_id: str) -> None:
+        """Start a round as a background task. Results stream via WS."""
+        if self.lock.locked():
+            raise RuntimeError("A round is already in progress")
         asyncio.create_task(self._step_streaming(experiment_id))
-        return 0  # Will be replaced by the broadcast
 
     async def _step_streaming(self, experiment_id: str) -> None:
         """Run a round using SimulationEngine.run_round() with a streaming hook."""
@@ -300,6 +299,13 @@ class ExperimentRuntime:
                     record = await self.get_or_generate_gm_plan(experiment_id)
                     approved = self.gm_service.approve_plan(record)
                     state.gm_plan = self.gm_service.apply_plan(approved)
+                    await self.store.save_state(state)
+                    await self._log(
+                        experiment_id,
+                        event_type="gm_plan_approved",
+                        summary=state.gm_plan.plan.round_theme,
+                        round_number=state.gm_plan.plan.round,
+                    )
 
                 # Run round through the single engine code path with streaming hook
                 hook = _StreamingHook(
@@ -343,6 +349,14 @@ class ExperimentRuntime:
             )
         except Exception:
             logger.exception("Background step failed for %s", experiment_id)
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "step_error",
+                    round_number=0,
+                    data={"error": "Round execution failed. Check server logs."},
+                ),
+            )
 
     async def list_agents(self, experiment_id: str) -> list[EngineAgentState]:
         return (await self.get_state(experiment_id)).agents
@@ -541,7 +555,8 @@ class ExperimentRuntime:
                 ),
             )
             for event in phase.events:
-                msg_type = _EVENT_KIND_TO_WS_TYPE.get(str(event.data.get("kind")))
+                kind = event.data.get("kind")
+                msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
                 if msg_type:
                     await self.connection_manager.broadcast(
                         experiment_id,
@@ -800,7 +815,8 @@ class ExperimentRuntime:
         }
         for phase in round_result.phases:
             for event in phase.events:
-                event_type = kind_to_type.get(str(event.data.get("kind")), event.phase)
+                kind = event.data.get("kind")
+                event_type = kind_to_type.get(kind, event.phase) if kind else event.phase
                 await self._log(
                     experiment_id,
                     event_type=event_type,
@@ -861,7 +877,8 @@ class _StreamingHook:
         ))
         # Broadcast individual event types for specific WS message consumers
         for event in phase_result.events:
-            msg_type = _EVENT_KIND_TO_WS_TYPE.get(str(event.data.get("kind")))
+            kind = event.data.get("kind")
+            msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
             if msg_type:
                 await cm.broadcast(eid, msg(
                     msg_type, round_number=round_number,

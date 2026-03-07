@@ -18,7 +18,6 @@ from app.api.models import (
     RoundSnapshotResponse,
     ExperimentSummary,
     ObserverEventRequest,
-    StepResponse,
     StepStartedResponse,
     UpdateArcRequest,
     UsageReport,
@@ -86,7 +85,10 @@ async def pause_experiment(experiment_id: str) -> ExperimentSummary:
 )
 async def step_experiment(experiment_id: str) -> StepStartedResponse:
     state = await _get_state(experiment_id)
-    runtime.start_step(experiment_id)
+    try:
+        runtime.start_step(experiment_id)
+    except RuntimeError:
+        raise HTTPException(status_code=409, detail="A round is already in progress")
     return StepStartedResponse(
         round_number=state.current_round + 1,
         experiment_id=experiment_id,
