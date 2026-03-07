@@ -60,11 +60,9 @@ class LLMClient:
 
     def _build_model_list(self) -> list[dict[str, Any]]:
         unique_models = {
-            self.model_configs["gm"].primary_model,
-            *self.model_configs["gm"].fallback_models,
-            self.model_configs["agent"].primary_model,
-            *self.model_configs["agent"].fallback_models,
-            self.settings.memory_model,
+            model
+            for config in self.model_configs.values()
+            for model in [config.primary_model, *config.fallback_models]
         }
         return [
             {"model_name": model, "litellm_params": {"model": model}}
@@ -180,9 +178,15 @@ class LLMClient:
             UsageRecord(
                 role=request.role,
                 model=result.model,
+                provider=result.provider,
                 experiment_id=_string_or_none(metadata.get("experiment_id")),
                 round_number=_int_or_none(metadata.get("round_number")),
                 agent_id=_string_or_none(metadata.get("agent_id")),
+                prompt_messages=[dict(message) for message in request.messages],
+                response_content=result.content,
+                parsed_response=result.parsed,
+                repaired=result.repaired,
+                raw_response=result.raw_response,
                 usage=result.usage,
             )
         )

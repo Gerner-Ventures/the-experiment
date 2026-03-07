@@ -1,0 +1,36 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.6
+    hooks:
+      - id: ruff-check
+        name: ruff check backend
+        args:
+          - --fix
+          - --exit-non-zero-on-fix
+        files: ^backend/.*\.py$
+      - id: ruff-format
+        name: ruff format backend
+        files: ^backend/.*\.py$
+  - repo: local
+    hooks:
+      - id: backend-format-check
+        name: backend format check
+        entry: bash -lc 'cd backend && poetry run ruff format --check .'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: backend-type-check
+        name: backend type check
+        entry: bash -lc 'cd backend && poetry run mypy app'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: backend-tests
+        name: backend tests
+        entry: bash -lc 'cd backend && poetry run pytest'
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

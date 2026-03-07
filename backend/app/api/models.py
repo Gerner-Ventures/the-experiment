@@ -6,13 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.models import PersonalityProfile, SecretGoal
-from app.engine.models import (
-    EngineAgentState,
-    ExileOutcome,
-    FactionState,
-    RoundResult,
-)
+from app.engine.models import EngineAgentState, ExileOutcome, FactionState, RoundResult
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord
+from app.llm.models import UsageRecord, UsageSummary
 
 
 class APIRequestModel(BaseModel):
@@ -95,6 +91,10 @@ EventLogType = Literal[
     "phase_change",
     "agent_action",
     "agent_move",
+    "faction_update",
+    "cult_activity",
+    "exile_vote",
+    "exile_enacted",
     "crisis_event",
     "threat_update",
     "resource_update",
@@ -124,3 +124,89 @@ class EventLogPage(APIRequestModel):
 class StepResponse(APIRequestModel):
     round_result: RoundResult
     experiment: ExperimentDetail
+
+
+class UsageGroup(APIRequestModel):
+    key: str
+    label: str
+    request_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+
+
+class UsageReport(APIRequestModel):
+    summary: UsageSummary
+    by_role: list[UsageGroup] = Field(default_factory=list)
+    by_model: list[UsageGroup] = Field(default_factory=list)
+    by_agent: list[UsageGroup] = Field(default_factory=list)
+    by_round: list[UsageGroup] = Field(default_factory=list)
+
+
+class PromptTracePage(APIRequestModel):
+    items: list[UsageRecord] = Field(default_factory=list)
+    total: int
+    limit: int
+    offset: int
+
+
+class RelationshipEdge(APIRequestModel):
+    source_agent_id: str
+    source_agent_name: str
+    target_agent_id: str
+    target_agent_name: str
+    trust: float
+    faction_id: str | None = None
+
+
+class AnalyticsSummary(APIRequestModel):
+    experiment_id: str
+    rounds_completed: int = 0
+    active_agents: int = 0
+    exiled_agents: int = 0
+    faction_count: int = 0
+    cult_count: int = 0
+    cooperation_score: float = 0.0
+    threat_level: float = 0.0
+    dominant_faction: str | None = None
+    current_resources: dict[str, float] = Field(default_factory=dict)
+
+
+class HighlightItem(APIRequestModel):
+    round_number: int | None = None
+    score: float = 0.0
+    category: str
+    summary: str
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
+class ReplayRound(APIRequestModel):
+    round_number: int
+    summary: str
+    threat_level: float = 0.0
+    event_count: int = 0
+
+
+class ReplayIndex(APIRequestModel):
+    rounds: list[ReplayRound] = Field(default_factory=list)
+    highlights: list[HighlightItem] = Field(default_factory=list)
+
+
+class RoundSnapshotResponse(APIRequestModel):
+    experiment_id: str
+    round_number: int
+    snapshot: dict[str, Any]
+    events: list[EventLogItem] = Field(default_factory=list)
+
+
+class RelationshipAnalytics(APIRequestModel):
+    items: list[RelationshipEdge] = Field(default_factory=list)
+
+
+class FactionAnalytics(APIRequestModel):
+    items: list[FactionState] = Field(default_factory=list)
+
+
+class HighlightPage(APIRequestModel):
+    items: list[HighlightItem] = Field(default_factory=list)

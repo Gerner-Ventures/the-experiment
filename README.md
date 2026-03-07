@@ -15,7 +15,7 @@ A **Layered Game Master** system controls the narrative:
 
 See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full game loop and mechanics.
 API usage and endpoint details live in [docs/API.md](docs/API.md).
-
+Backend architecture, setup, and configuration live in [docs/BACKEND.md](docs/BACKEND.md).
 Infrastructure and persistence notes live in [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
 
 ## Architecture
@@ -42,7 +42,8 @@ the-experiment/
 - HTTP API is served at `/api/*` in both local and production environments.
 - Kubernetes ingress routes `/api` to the backend service and `/` to the frontend service.
 - `DATABASE_URL` and `REDIS_URL` are configuration inputs for the backend.
-- Application state is not persisted yet. The current experiment runtime is in-memory, so Postgres and Redis are not yet the source of truth for live simulations.
+- Experiment state is persisted through the backend store boundary, with Postgres as the durable store for experiment state, logs, GM plans, and round snapshots.
+- Active WebSocket connections are still process-local, and Redis is not yet used for multi-pod fanout.
 
 ## Quick Start
 
@@ -52,18 +53,24 @@ git clone https://github.com/Gerner-Ventures/the-experiment.git
 cd the-experiment
 
 # Copy env file
-cp backend/.env.example backend/.env
-# Edit backend/.env with your LLM API keys
+make env
+# Edit backend/.env with your database URL and any LLM API keys you plan to use
 
-# Start everything
-make dev
+# Start services
+make dev-detached
+
+# Apply database migrations before creating experiments
+make migrate
 ```
+
+To enable local Ruff autofixes before each commit, run `pre-commit install`.
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api
 - Health check: http://localhost:8000/api/health
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
+- Backend guide: [docs/BACKEND.md](docs/BACKEND.md)
 
 ## Work Streams
 

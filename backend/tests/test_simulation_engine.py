@@ -8,6 +8,7 @@ from app.agents.models import (
     AgentTurnResult,
     PersonalityAxes,
     PersonalityProfile,
+    RelationshipMemory,
     SecretGoal,
 )
 from app.agents.service import AgentService
@@ -202,6 +203,8 @@ async def test_engine_generates_social_events_and_relationship_updates() -> None
     assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
     assert state.agents[0].relationships
     assert state.agents[1].relationships
+
+
 @pytest.mark.asyncio
 async def test_engine_caps_movement_and_converts_far_actions_into_travel() -> None:
     service = _StubAgentService(
@@ -285,3 +288,71 @@ async def test_engine_blocks_resource_actions_at_invalid_locations() -> None:
     assert first_action.data["action_type"] == "observe"
     assert "requires one of" in first_action.summary
     assert state.world_state.resources.materials <= materials_before
+
+
+@pytest.mark.asyncio
+async def test_engine_forms_cults_and_applies_exile_results() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("talk", "town_hall"), ("pray", "town_hall"), ("observe", "town_hall")],
+            "a2": [("talk", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].goal.archetype = "belief_transformation"
+    state.agents[0].personality.trait_tags = ["devout", "guarded"]
+    state.agents[0].suspicion_level = 85
+    state.world_state.threat_level = 72
+    state.agents[0].relationships["a2"] = RelationshipMemory(trust=4, history=[], notes=None)
+    state.agents[1].relationships["a1"] = RelationshipMemory(trust=3, history=[], notes=None)
+    engine = SimulationEngine(agent_service=service, random_seed=8)
+
+    result = await engine.run_round(state)
+
+    midday_kinds = {
+        event.data.get("kind")
+        for event in result.phases[3].events
+        if isinstance(event.data.get("kind"), str)
+    }
+    assert "cult_activity" in midday_kinds
+    assert "exile_vote" in midday_kinds
+    assert state.exile_history
+    assert state.agents[0].status == "exiled"
+
+
+@pytest.mark.asyncio
+async def test_engine_forms_cults_and_applies_exile_results() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("talk", "town_hall"), ("pray", "town_hall"), ("observe", "town_hall")],
+            "a2": [("talk", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].goal.archetype = "belief_transformation"
+    state.agents[0].personality.trait_tags = ["devout", "guarded"]
+    state.agents[0].suspicion_level = 85
+    state.world_state.threat_level = 72
+    state.agents[0].relationships["a2"] = RelationshipMemory(trust=4, history=[], notes=None)
+    state.agents[1].relationships["a1"] = RelationshipMemory(trust=3, history=[], notes=None)
+    state.agents[0].location = "town_hall"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
+    state.agents[1].location = "town_hall"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("town_hall")
+    state.agents[2].location = "town_hall"
+    state.agents[2].tile_x, state.agents[2].tile_y = resolve_spawn_tile("town_hall")
+    engine = SimulationEngine(agent_service=service, random_seed=8)
+
+    result = await engine.run_round(state)
+
+    midday_kinds = {
+        event.data.get("kind")
+        for event in result.phases[3].events
+        if isinstance(event.data.get("kind"), str)
+    }
+    assert "cult_activity" in midday_kinds
+    assert "exile_vote" in midday_kinds
+    assert state.exile_history
+    assert state.agents[0].status == "exiled"
