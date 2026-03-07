@@ -34,7 +34,10 @@ router = APIRouter(prefix="/experiments", tags=["experiments"])
     "",
     response_model=ExperimentDetail,
     summary="Create an experiment",
-    description="Create a new in-memory experiment with agents, arc settings, and round limits.",
+    description=(
+        "Create a new experiment, persist its initial state, and return the starting "
+        "world, agents, and arc configuration."
+    ),
 )
 async def create_experiment(request: CreateExperimentRequest) -> ExperimentDetail:
     state = await runtime.create_experiment(request)
@@ -102,7 +105,10 @@ async def inject_observer_event(
 @router.get(
     "/{experiment_id}/gm/plan",
     summary="Get the next GM plan",
-    description="Generate the next pending GM plan if needed, or return the cached plan for the upcoming round.",
+    description=(
+        "Generate the next pending GM plan if needed, or return the cached plan for the "
+        "upcoming round."
+    ),
 )
 async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
     await _get_state(experiment_id)
@@ -112,7 +118,10 @@ async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
 @router.post(
     "/{experiment_id}/gm/approve",
     summary="Approve or modify a GM plan",
-    description="Approve the pending GM plan as-is, or submit a modified plan payload to apply instead.",
+    description=(
+        "Approve the pending GM plan as-is, or submit a modified plan payload to apply "
+        "instead."
+    ),
 )
 async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> GMPlanRecord:
     await _get_state(experiment_id)
@@ -181,31 +190,59 @@ async def get_event_log(
     return EventLogPage(items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/{experiment_id}/analytics/summary", response_model=AnalyticsSummary)
+@router.get(
+    "/{experiment_id}/analytics/summary",
+    response_model=AnalyticsSummary,
+    summary="Get experiment analytics summary",
+    description=(
+        "Return a high-level analytics snapshot including rounds completed, active and "
+        "exiled agents, faction counts, resources, threat, and cooperation score."
+    ),
+)
 async def get_analytics_summary(experiment_id: str) -> AnalyticsSummary:
     await _get_state(experiment_id)
     return await runtime.get_analytics_summary(experiment_id)
 
 
-@router.get("/{experiment_id}/analytics/relationships", response_model=RelationshipAnalytics)
+@router.get(
+    "/{experiment_id}/analytics/relationships",
+    response_model=RelationshipAnalytics,
+    summary="Get relationship analytics",
+    description="Return relationship edges derived from persisted agent relationship memory.",
+)
 async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytics:
     await _get_state(experiment_id)
     return RelationshipAnalytics(items=await runtime.get_relationship_analytics(experiment_id))
 
 
-@router.get("/{experiment_id}/analytics/factions", response_model=FactionAnalytics)
+@router.get(
+    "/{experiment_id}/analytics/factions",
+    response_model=FactionAnalytics,
+    summary="Get faction analytics",
+    description="Return the current alliance and cult state for the experiment.",
+)
 async def get_faction_analytics(experiment_id: str) -> FactionAnalytics:
     state = await _get_state(experiment_id)
     return FactionAnalytics(items=state.factions)
 
 
-@router.get("/{experiment_id}/analytics/highlights", response_model=HighlightPage)
+@router.get(
+    "/{experiment_id}/analytics/highlights",
+    response_model=HighlightPage,
+    summary="Get experiment highlights",
+    description="Return the highest-signal events derived from the persisted event log.",
+)
 async def get_highlights(experiment_id: str) -> HighlightPage:
     await _get_state(experiment_id)
     return HighlightPage(items=await runtime.get_highlights(experiment_id))
 
 
-@router.get("/{experiment_id}/replay", response_model=ReplayIndex)
+@router.get(
+    "/{experiment_id}/replay",
+    response_model=ReplayIndex,
+    summary="Get replay index",
+    description="Return a round-by-round replay index with summaries, threat levels, and highlights.",
+)
 async def get_replay_index(experiment_id: str) -> ReplayIndex:
     await _get_state(experiment_id)
     return await runtime.get_replay_index(experiment_id)
@@ -214,6 +251,8 @@ async def get_replay_index(experiment_id: str) -> ReplayIndex:
 @router.get(
     "/{experiment_id}/rounds/{round_number}/snapshot",
     response_model=RoundSnapshotResponse,
+    summary="Get round snapshot",
+    description="Return the stored world snapshot and event log entries for a completed round.",
 )
 async def get_round_snapshot(experiment_id: str, round_number: int) -> RoundSnapshotResponse:
     await _get_state(experiment_id)
@@ -223,7 +262,15 @@ async def get_round_snapshot(experiment_id: str, round_number: int) -> RoundSnap
         raise HTTPException(status_code=404, detail="Round snapshot not found") from exc
 
 
-@router.get("/{experiment_id}/usage", response_model=UsageReport)
+@router.get(
+    "/{experiment_id}/usage",
+    response_model=UsageReport,
+    summary="Get LLM usage report",
+    description=(
+        "Return aggregated LLM usage totals grouped by role, model, agent, and round, "
+        "optionally filtered to one round or agent."
+    ),
+)
 async def get_usage_report(
     experiment_id: str,
     round_number: int | None = Query(default=None, ge=1),
@@ -237,7 +284,15 @@ async def get_usage_report(
     )
 
 
-@router.get("/{experiment_id}/usage/traces", response_model=PromptTracePage)
+@router.get(
+    "/{experiment_id}/usage/traces",
+    response_model=PromptTracePage,
+    summary="Get LLM prompt traces",
+    description=(
+        "Return paginated prompt-level usage records, optionally filtered by round, "
+        "agent, and role."
+    ),
+)
 async def get_prompt_traces(
     experiment_id: str,
     limit: int = Query(default=50, ge=1, le=200),
