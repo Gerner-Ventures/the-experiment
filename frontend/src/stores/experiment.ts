@@ -112,7 +112,11 @@ export const useExperimentStore = defineStore('experiment', () => {
   function onPhaseChange(msg: WSMessage) {
     const phase = (msg.phase as RoundPhase) ?? null
     currentPhase.value = phase
-    if (phase) {
+    const data = msg.data as Record<string, unknown>
+
+    // phase_change with {status: "starting"} = phase is about to begin (set stepping label)
+    // phase_change with {events: [...]} = phase completed (log the event)
+    if (data.status && phase) {
       const locale = useLocale()
       const labels: Record<string, string> = {
         gm_plan: locale.hud.steppingGmPlan,
@@ -124,7 +128,9 @@ export const useExperimentStore = defineStore('experiment', () => {
       }
       useUIStore().steppingStatus = labels[phase] ?? phase
     }
-    addEvent(msg)
+    if (data.events) {
+      addEvent(msg)
+    }
   }
 
   function onEnd(msg: WSMessage) {
