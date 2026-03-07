@@ -22,7 +22,7 @@ from app.db.models import (
     Round,
     WorldSnapshot,
 )
-from app.engine.models import EngineAgentState, RoundResult, SimulationState
+from app.engine.models import EngineAgentState, ExileOutcome, FactionState, RoundResult, SimulationState
 from app.gm.models import DirectorAct, DirectorArc, GMPlanRecord
 from app.world import build_default_world_state
 from app.world.models import ResourceState, WorldState
@@ -338,8 +338,8 @@ class SqlAlchemyExperimentStore:
             unresolved_plotlines=list(experiment.unresolved_plotlines),
             recent_events=list(experiment.recent_events),
             gm_plan=gm_plan,
-            factions=experiment.factions,
-            exile_history=experiment.exile_history,
+            factions=[FactionState.model_validate(f) for f in experiment.factions],
+            exile_history=[ExileOutcome.model_validate(e) for e in experiment.exile_history],
         )
 
     def _to_gm_plan_record(self, row: GMPlan) -> GMPlanRecord:
