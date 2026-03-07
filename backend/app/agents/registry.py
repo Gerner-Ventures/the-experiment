@@ -177,6 +177,12 @@ ACTION_REGISTRY: dict[str, ActionDefinition] = {
         category="neutral",
         description="Suffer an emotional collapse in public or private.",
     ),
+    "self_sacrifice": ActionDefinition(
+        type="self_sacrifice",
+        category="cooperative",
+        description="Give up your life in a ritualized sacrifice to steady the town.",
+        requires_location=True,
+    ),
 }
 
 

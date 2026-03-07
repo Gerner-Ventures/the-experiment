@@ -295,7 +295,11 @@ class ExperimentRuntime:
 
     async def get_analytics_summary(self, experiment_id: str) -> AnalyticsSummary:
         state = await self.get_state(experiment_id)
-        active_agents = [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
+        active_agents = [
+            agent
+            for agent in state.agents
+            if agent.status not in {AgentStatus.EXILED, AgentStatus.DEAD}
+        ]
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
         cooperation_score = await self._cooperation_score(experiment_id)
         return AnalyticsSummary(

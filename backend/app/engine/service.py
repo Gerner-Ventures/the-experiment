@@ -21,6 +21,7 @@ from app.engine.models import (
     PhaseResult,
     RoundEvent,
     RoundResult,
+    SacrificeOutcome,
     SimulationState,
     build_agent_context,
 )
@@ -53,6 +54,9 @@ class SimulationEngine:
     MAX_MOVE_TILES_PER_ACTION = 2
     CONTACT_RANGE_TILES = 2
     RANGED_CONTACT_RANGE_TILES = 4
+    SELF_SACRIFICE_THREAT_DELTA = -8.0
+    SELF_SACRIFICE_RESOURCE_EFFECTS = {"food": 1.0, "materials": 0.8}
+    SELF_SACRIFICE_SUSPICION_DELTA = 9.0
     AGENT_INTERACTION_ACTIONS = {
         "talk",
         "trade",
@@ -253,6 +257,8 @@ class SimulationEngine:
                 agent.suspicion_level = turn.suspicion_level
                 prepared = self._prepare_action(state, agent, turn)
                 actions.append(prepared)
+                if prepared.action_type == "self_sacrifice":
+                    break
             all_turns[agent.agent_id] = turns
 
         result = await self._resolve_actions(state, phase=phase, actions=actions)
@@ -443,16 +449,32 @@ class SimulationEngine:
                 for prepared in group:
                     agent = prepared.agent
                     turn = prepared.turn
-                    self._apply_clean_action(state, agent, prepared.action_type, location)
+                    sacrifice = None
+                    if prepared.action_type == "self_sacrifice":
+                        sacrifice = self._apply_self_sacrifice(state, agent, location)
+                    else:
+                        self._apply_clean_action(state, agent, prepared.action_type, location)
                     events.append(
                         RoundEvent(
                             phase=phase,
-                            summary=prepared.summary
-                            or f"{agent.name} chose to {prepared.action_type} at {location}.",
+                            summary=(
+                                sacrifice.reason
+                                if sacrifice is not None
+                                else prepared.summary
+                                or f"{agent.name} chose to {prepared.action_type} at {location}."
+                            ),
                             data={
                                 "agent_id": agent.agent_id,
                                 "action_type": prepared.action_type,
                                 "requested_action_type": turn.decision.action.type,
+                                **(
+                                    {
+                                        "kind": "self_sacrifice",
+                                        "sacrifice": sacrifice.model_dump(mode="json"),
+                                    }
+                                    if sacrifice is not None
+                                    else {}
+                                ),
                             },
                         )
                     )
@@ -507,6 +529,71 @@ class SimulationEngine:
             state.world_state.resources.power = max(
                 0.0, round(state.world_state.resources.power - 0.9, 2)
             )
+
+    def _apply_self_sacrifice(
+        self, state: SimulationState, agent: EngineAgentState, location: str
+    ) -> SacrificeOutcome:
+        occupancy = state.world_state.location_occupancy.setdefault(location, [])
+        if agent.agent_id not in occupancy:
+            occupancy.append(agent.agent_id)
+
+        state.world_state.resources.food = round(
+            state.world_state.resources.food + self.SELF_SACRIFICE_RESOURCE_EFFECTS["food"], 2
+        )
+        state.world_state.resources.materials = round(
+            state.world_state.resources.materials
+            + self.SELF_SACRIFICE_RESOURCE_EFFECTS["materials"],
+            2,
+        )
+        state.world_state.threat_level = max(
+            0.0,
+            round(state.world_state.threat_level + self.SELF_SACRIFICE_THREAT_DELTA, 2),
+        )
+
+        agent.status = AgentStatus.DEAD
+        agent.location = location
+        agent.faction_id = None
+        agent.faction_role = None
+        agent.influence = 0.0
+        agent.death_round = state.world_state.round_number
+        agent.death_cause = "self_sacrifice"
+
+        witness_ids: list[str] = []
+        for witness in self._active_agents(state):
+            if witness.agent_id == agent.agent_id:
+                continue
+            witness_ids.append(witness.agent_id)
+            witness.suspicion_level = min(
+                100.0,
+                round(witness.suspicion_level + self.SELF_SACRIFICE_SUSPICION_DELTA, 2),
+            )
+            witness.memory = append_recent_event(
+                witness.memory,
+                MemoryEvent(
+                    round_number=state.world_state.round_number,
+                    summary=f"{agent.name} gave up their life at {location}, and the town froze.",
+                    emotional_charge=35,
+                    tags=["self_sacrifice", "death", location],
+                ),
+            )
+
+        outcome = SacrificeOutcome(
+            round_number=state.world_state.round_number,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
+            location=location,
+            reason=(
+                f"{agent.name} performs a ritual self-sacrifice at {location}, "
+                "shocking the town into temporary order."
+            ),
+            threat_delta=self.SELF_SACRIFICE_THREAT_DELTA,
+            resource_effects=dict(self.SELF_SACRIFICE_RESOURCE_EFFECTS),
+            witness_ids=witness_ids,
+        )
+        state.sacrifice_history.append(outcome)
+        state.sacrifice_history = state.sacrifice_history[-12:]
+        self._refresh_factions(state)
+        return outcome
 
     def _meeting_proposal(self, state: SimulationState) -> str:
         if any(agent.suspicion_level >= 70 for agent in self._active_agents(state)):
@@ -735,6 +822,9 @@ class SimulationEngine:
         for agent in state.agents:
             agent.faction_id = None
             agent.faction_role = None
+            if agent.status in {AgentStatus.EXILED, AgentStatus.DEAD}:
+                agent.influence = 0.0
+                continue
             agent.influence = round(self._influence_score(agent), 2)
         faction_map = {
             member_id: faction for faction in factions for member_id in faction.member_ids
@@ -857,6 +947,7 @@ class SimulationEngine:
                     "pray",
                     "rally",
                     "mourn",
+                    "self_sacrifice",
                 }:
                     cooperative += 1
         if total == 0:
@@ -864,7 +955,11 @@ class SimulationEngine:
         return round(cooperative / total, 2)
 
     def _active_agents(self, state: SimulationState) -> list[EngineAgentState]:
-        return [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
+        return [
+            agent
+            for agent in state.agents
+            if agent.status not in {AgentStatus.EXILED, AgentStatus.DEAD}
+        ]
 
     def _build_observations(
         self, agent: EngineAgentState, state: SimulationState

@@ -55,7 +55,11 @@ class SocialService:
     def run_meeting(self, state: SimulationState, *, proposal: str) -> MeetingOutcome:
         speeches: list[MeetingSpeech] = []
         vote_records: list[MeetingVote] = []
-        active_agents = [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
+        active_agents = [
+            agent
+            for agent in state.agents
+            if agent.status not in {AgentStatus.EXILED, AgentStatus.DEAD}
+        ]
 
         for agent in active_agents:
             stance = self._meeting_stance(agent, state)
