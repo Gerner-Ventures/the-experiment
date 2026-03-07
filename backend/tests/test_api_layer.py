@@ -319,6 +319,77 @@ def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
     assert gm.json()["items"][0]["round_number"] == 1
 
 
+def test_goal_analytics_keeps_high_signal_action_when_agent_acts_multiple_times() -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "accuse",
+                    "location": "unknown_place",
+                    "goal_progress": "I pushed too hard and got nowhere.",
+                    "cooperation_intent": "low",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I watched the others settle.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I kept my counsel through the afternoon.",
+                    "cooperation_intent": "medium",
+                },
+            ],
+            "Jon": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I kept watch.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
+    assert goals.status_code == 200
+    mara = next(item for item in goals.json()["items"] if item["agent_name"] == "Mara")
+    assert mara["progress_history"][0]["requested_action_type"] == "accuse"
+    assert mara["progress_history"][0]["summary"]
+
+
+def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal() -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I waited in silence.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+            "Jon": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I held still and listened.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
+    assert goals.status_code == 200
+    assert all(item["outcome"] == "unknown" for item in goals.json()["items"])
+
+
 def test_betrayal_and_faction_analytics_expose_timeline_data() -> None:
     runtime.engine.agent_service = _ScriptedAgentService(
         {

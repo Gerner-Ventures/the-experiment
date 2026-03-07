@@ -39,7 +39,8 @@ from app.api.models import (
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
 from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
-from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
+from app.engine import RoundResult, SimulationEngine
+from app.engine.models import ActionResolution, EngineAgentState, SimulationState
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
@@ -1208,10 +1209,7 @@ class ExperimentRuntime:
             or action.resolved_action_type in SABOTAGE_ACTION_TYPES
         )
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
-        latest_actions = {
-            action.agent_id: action.model_dump(mode="json")
-            for action in round_result.action_resolutions
-        }
+        best_actions = self._best_round_actions(round_result.action_resolutions)
         return {
             "summary": (
                 f"Round {round_result.round_number} closes with cooperation "
@@ -1248,18 +1246,18 @@ class ExperimentRuntime:
                     "goal_text": agent.goal.text,
                     "goal_archetype": agent.goal.archetype,
                     "status": self._status_value(agent.status),
-                    "goal_progress": latest_actions.get(agent.agent_id, {}).get("goal_progress"),
-                    "requested_action_type": latest_actions.get(agent.agent_id, {}).get(
+                    "goal_progress": best_actions.get(agent.agent_id, {}).get("goal_progress"),
+                    "requested_action_type": best_actions.get(agent.agent_id, {}).get(
                         "requested_action_type"
                     ),
-                    "resolved_action_type": latest_actions.get(agent.agent_id, {}).get(
+                    "resolved_action_type": best_actions.get(agent.agent_id, {}).get(
                         "resolved_action_type"
                     ),
-                    "cooperation_intent": latest_actions.get(agent.agent_id, {}).get(
+                    "cooperation_intent": best_actions.get(agent.agent_id, {}).get(
                         "cooperation_intent"
                     ),
-                    "phase": latest_actions.get(agent.agent_id, {}).get("phase"),
-                    "summary": latest_actions.get(agent.agent_id, {}).get("summary"),
+                    "phase": best_actions.get(agent.agent_id, {}).get("phase"),
+                    "summary": best_actions.get(agent.agent_id, {}).get("summary"),
                 }
                 for agent in state.agents
             ],
@@ -1374,9 +1372,37 @@ class ExperimentRuntime:
             return "achieved"
         if status == "exiled" or any(keyword in progress_text for keyword in GOAL_FAILED_KEYWORDS):
             return "failed"
-        if history or any(keyword in progress_text for keyword in GOAL_PARTIAL_KEYWORDS):
+        if any(keyword in progress_text for keyword in GOAL_PARTIAL_KEYWORDS):
             return "partial"
         return "unknown"
+
+    def _best_round_actions(self, actions: list[ActionResolution]) -> dict[str, dict[str, Any]]:
+        best_actions: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
+        for index, action in enumerate(actions):
+            score = self._goal_progress_priority(action, index)
+            current = best_actions.get(action.agent_id)
+            if current is None or score > current[0]:
+                best_actions[action.agent_id] = (score, action.model_dump(mode="json"))
+        return {agent_id: payload for agent_id, (_, payload) in best_actions.items()}
+
+    def _goal_progress_priority(self, action: ActionResolution, index: int) -> tuple[int, int]:
+        progress_text = action.goal_progress.lower()
+        score = 0
+        if action.requested_action_type != "observe":
+            score += 2
+        if action.resolved_action_type != "observe":
+            score += 2
+        if action.requested_action_type in SABOTAGE_ACTION_TYPES | HOSTILE_ACTION_TYPES:
+            score += 4
+        if action.resolved_action_type in SABOTAGE_ACTION_TYPES | HOSTILE_ACTION_TYPES:
+            score += 4
+        if any(keyword in progress_text for keyword in GOAL_ACHIEVED_KEYWORDS):
+            score += 3
+        elif any(keyword in progress_text for keyword in GOAL_FAILED_KEYWORDS):
+            score += 2
+        elif any(keyword in progress_text for keyword in GOAL_PARTIAL_KEYWORDS):
+            score += 1
+        return score, index
 
     def _string_value(self, value: object, *, default: str | None = None) -> str | None:
         if isinstance(value, str):
