@@ -1,3 +1,25 @@
+# Makefile DevEx Overhaul Implementation Plan
+
+> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+
+**Goal:** Replace the minimal Makefile with a comprehensive, self-documenting Makefile covering setup, dev, testing, linting, formatting, logs, database, shell access, and cleanup.
+
+**Architecture:** Single Makefile rewrite using the `##` comment self-documenting pattern with `##@` section headers. All dev workflow is Docker Compose-based.
+
+**Tech Stack:** GNU Make, Docker Compose, Poetry (backend), npm (frontend), ruff, mypy, ESLint, Alembic, psql
+
+---
+
+### Task 1: Write the new Makefile
+
+**Files:**
+- Modify: `Makefile` (full rewrite)
+
+**Step 1: Replace the Makefile with the new version**
+
+Write this exact content to `Makefile`:
+
+```makefile
 .DEFAULT_GOAL := help
 
 # ============================================================================
@@ -29,11 +51,7 @@ setup: ## Install all dependencies (backend + frontend)
 	cd frontend && npm install
 
 env: ## Copy .env.example to backend/.env if missing
-	@if [ -f backend/.env ]; then \
-		echo "backend/.env already exists"; \
-	else \
-		cp backend/.env.example backend/.env && echo "Created backend/.env from .env.example"; \
-	fi
+	@test -f backend/.env || (cp backend/.env.example backend/.env && echo "Created backend/.env from .env.example") || echo "backend/.env already exists"
 
 # ============================================================================
 # Development
@@ -107,7 +125,7 @@ test-frontend: ## Run frontend type-check
 
 ##@ Linting & Formatting
 
-.PHONY: lint lint-backend lint-frontend format format-backend format-frontend check build-frontend
+.PHONY: lint lint-backend lint-frontend format format-backend format-frontend check
 
 lint: lint-backend lint-frontend ## Run all linters
 
@@ -123,12 +141,9 @@ format-backend: ## Auto-format backend (ruff)
 	cd backend && poetry run ruff format . && poetry run ruff check --fix .
 
 format-frontend: ## Auto-format frontend (ESLint --fix)
-	cd frontend && npx eslint --fix .
+	cd frontend && npx eslint --fix src/
 
-check: lint test build-frontend helm-lint ## Run all checks (CI parity)
-
-build-frontend: ## Build frontend for production
-	cd frontend && npm run build
+check: lint test ## Run all linters and tests (CI parity)
 
 # ============================================================================
 # Database
@@ -213,3 +228,42 @@ clean-all: clean ## Full cleanup (volumes + caches + build artifacts)
 	find backend -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 	rm -rf backend/.ruff_cache backend/.mypy_cache
 	@echo "All clean."
+```
+
+**Step 2: Verify help output works**
+
+Run: `make help`
+Expected: Categorized help output with all targets listed under section headers.
+
+**Step 3: Spot-check a few targets**
+
+Run: `make status`
+Expected: Docker Compose ps output (may show no running containers, that's fine).
+
+**Step 4: Commit**
+
+```bash
+git add Makefile
+git commit -m "feat: overhaul Makefile with comprehensive devex commands
+
+Add self-documenting help system, formatting, log tailing, db-reset,
+shell access, clean-all, and dev-detached targets."
+```
+
+---
+
+### Task 2: Update design doc status
+
+**Files:**
+- Modify: `docs/plans/2026-03-07-makefile-devex-design.md`
+
+**Step 1: Update status to Implemented**
+
+Change `**Status:** Approved` to `**Status:** Implemented`
+
+**Step 2: Commit**
+
+```bash
+git add docs/plans/2026-03-07-makefile-devex-design.md
+git commit -m "docs: mark makefile devex design as implemented"
+```
