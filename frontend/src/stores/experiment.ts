@@ -5,7 +5,7 @@ import type { RoundPhase, WSMessage } from '@/types/websocket'
 import { useWorldStore } from '@/stores/world'
 import { useAgentStore } from '@/stores/agent'
 import { useUIStore } from '@/stores/ui'
-import locale from '@/locales/en'
+import { useLocale } from '@/locales'
 
 export interface ExperimentEvent {
   id: number
@@ -69,7 +69,10 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = msg.round ?? currentRound.value
     currentPhase.value = null
     status.value = 'running'
-    useUIStore().setSteppingStatus(`Round ${currentRound.value} started`)
+    const locale = useLocale()
+    useUIStore().setSteppingStatus(
+      locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value)),
+    )
     addEvent(msg)
   }
 
@@ -107,20 +110,30 @@ export const useExperimentStore = defineStore('experiment', () => {
   function onPhaseChange(msg: WSMessage) {
     const phase = (msg.phase as RoundPhase) ?? null
     currentPhase.value = phase
+    const data = msg.data as Record<string, unknown>
     const worldStore = useWorldStore()
+
     if (phase) {
       worldStore.onPhaseChange(phase)
-      const phaseLabels: Record<string, string> = {
-        gm_plan: locale.hud.phaseGmPlan,
-        dawn: locale.hud.phaseDawn,
-        morning: locale.hud.phaseMorning,
-        midday: locale.hud.phaseMidday,
-        afternoon: locale.hud.phaseAfternoon,
-        night: locale.hud.phaseNight,
-      }
-      useUIStore().setSteppingStatus(phaseLabels[phase] ?? phase)
     }
-    addEvent(msg)
+
+    // phase_change with {status: "starting"} = phase is about to begin (set stepping label)
+    // phase_change with {events: [...]} = phase completed (log the event)
+    if (data.status === 'starting' && phase) {
+      const locale = useLocale()
+      const labels: Record<string, string> = {
+        gm_plan: locale.hud.steppingGmPlan,
+        dawn: locale.hud.steppingDawn,
+        morning: locale.hud.steppingMorning,
+        midday: locale.hud.steppingMidday,
+        afternoon: locale.hud.steppingAfternoon,
+        night: locale.hud.steppingNight,
+      }
+      useUIStore().setSteppingStatus(labels[phase] ?? phase)
+    }
+    if ((data.events as unknown[])?.length) {
+      addEvent(msg)
+    }
   }
 
   function onEnd(msg: WSMessage) {

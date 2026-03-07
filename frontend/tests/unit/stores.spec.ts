@@ -109,7 +109,7 @@ describe('experimentStore', () => {
   describe('onPhaseChange', () => {
     it('sets currentPhase', () => {
       const store = useExperimentStore()
-      store.onPhaseChange(makeMsg({ type: 'phase_change', phase: 'dawn', data: {} }))
+      store.onPhaseChange(makeMsg({ type: 'phase_change', phase: 'dawn', data: { events: [{ type: 'dawn' }] } }))
       expect(store.currentPhase).toBe('dawn')
       expect(store.events).toHaveLength(1)
     })

@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
 import type { WSMessage } from '@/types/websocket'
 import { useUIStore } from '@/stores/ui'
+import { useLocale } from '@/locales'
 
 export const useAgentStore = defineStore('agent', () => {
   const agents = ref<Map<string, Agent>>(new Map())
@@ -58,8 +59,13 @@ export const useAgentStore = defineStore('agent', () => {
     if (agent) {
       agent.status = actionToStatus(actionType)
     }
-    const name = data.agent_name ?? agent?.name ?? 'Agent'
-    useUIStore().setSteppingStatus(`${name}: ${actionType}`)
+    const agentName = data.agent_name ?? agent?.name ?? 'Agent'
+    const locale = useLocale()
+    useUIStore().setSteppingStatus(
+      locale.hud.steppingAgent
+        .replace('{name}', agentName)
+        .replace('{action}', actionType),
+    )
   }
 
   function onMove(msg: WSMessage) {
