@@ -20,12 +20,10 @@ class Settings(BaseSettings):
     platform_url: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
     anthropic_api_key: str | None = None
-    openai_api_key: str | None = None
-    google_api_key: str | None = None
-    gm_model: str = "anthropic/claude-3-5-sonnet-20241022"
-    gm_fallback_model: str = "openai/gpt-4o-mini"
-    agent_model: str = "openai/gpt-4o-mini"
-    agent_fallback_model: str = "anthropic/claude-3-5-haiku-20241022"
+    gm_model: str = "anthropic/claude-sonnet-4-5-20250514"
+    gm_fallback_model: str = "anthropic/claude-haiku-4-5-20251001"
+    agent_model: str = "anthropic/claude-haiku-4-5-20251001"
+    agent_fallback_model: str = "anthropic/claude-sonnet-4-5-20250514"
     llm_timeout_seconds: float = 45.0
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2

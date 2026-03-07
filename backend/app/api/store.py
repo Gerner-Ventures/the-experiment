@@ -105,7 +105,6 @@ class SqlAlchemyExperimentStore:
                     id=uuid.UUID(state.experiment_id), name=state.experiment_name
                 )
                 session.add(experiment)
-                await session.flush()
             self._apply_state(experiment, state)
             await session.commit()
 

@@ -27,15 +27,7 @@ export function getGoalPreset(key: GoalPresetKey) {
   return locale.agents.goalPresets[key]
 }
 
-export const LLM_MODELS: { value: string; label: string }[] = [
-  { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-  { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-  { value: 'gpt-4o', label: 'GPT-4o' },
-  { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-  { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
-]
-
-export const DEFAULT_LLM_MODEL = 'claude-sonnet-4-6'
+export const DEFAULT_LLM_MODEL = 'anthropic/claude-haiku-4-5-20251001'
 export const MAX_PERSONALITY_TRAITS = 4
 export const MIN_AGENTS = 6
 export const MAX_AGENTS = 12

@@ -105,7 +105,7 @@ function parseAgent(a: Record<string, unknown>): Agent {
       targetLocationId: (goal?.target_location_id ?? goal?.targetLocationId) as string | undefined,
       progressSignals: ((goal?.progress_signals ?? goal?.progressSignals) as string[]) || [],
     },
-    llmModel: ((a.llm_model ?? a.llmModel) as string) || 'openai/gpt-4o-mini',
+    llmModel: ((a.llm_model ?? a.llmModel) as string) || 'anthropic/claude-haiku-4-5-20251001',
     location: (a.location as string) || 'town_square',
     status: ((a.status as string) || 'idle') as AgentStatus,
     suspicionLevel: ((a.suspicion_level ?? a.suspicionLevel) as number) || 0,

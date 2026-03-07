@@ -92,7 +92,8 @@ dev-frontend: ## Start frontend dev server
 	cd frontend && npm run dev
 
 dev-redis: ## Start local Redis via Docker (background)
-	@docker compose up -d redis
+	@docker start the-experiment-redis 2>/dev/null || docker run -d --name the-experiment-redis -p 6379:6379 redis:7-alpine
+	@echo "Redis running on localhost:6379"
 
 # ============================================================================
 # Logs
@@ -209,7 +210,7 @@ neon-create: ## Create a Neon branch for current git branch (from prod, 7-day TT
 		--branch $(BRANCH_NAME) \
 		--database-name $(NEON_DB_NAME) \
 		--role-name $(NEON_ROLE)) && \
-	ASYNC_URL=$$(echo "$$FULL_URL" | sed 's|postgresql://|postgresql+asyncpg://|') && \
+	ASYNC_URL=$$(echo "$$FULL_URL" | sed 's|postgresql://|postgresql+asyncpg://|' | sed 's|?.*||')\"?ssl=require\" && \
 	doppler secrets set DATABASE_URL="$$ASYNC_URL" --project the-experiment --config dev && \
 	echo "Neon branch '$(BRANCH_NAME)' created and DATABASE_URL updated in Doppler dev config."
 

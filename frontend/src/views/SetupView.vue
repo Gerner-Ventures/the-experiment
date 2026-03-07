@@ -14,7 +14,7 @@ import MapThemePicker from '@/components/setup/MapThemePicker.vue'
 import ParameterControls from '@/components/setup/ParameterControls.vue'
 import type { AgentConfig } from '@/types/agent'
 import { useLocale } from '@/locales'
-import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES, GOAL_PRESET_KEYS, GOAL_ARCHETYPE_MAP } from '@/config/agent-options'
+import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES, GOAL_PRESET_KEYS, GOAL_ARCHETYPE_MAP, PERSONALITY_TRAIT_KEYS } from '@/config/agent-options'
 import { CHARACTERS } from '@/config/character-options'
 import { api } from '@/services/api'
 import type { AgentCreatePayload } from '@/services/api'
@@ -52,23 +52,25 @@ function enterSetup() {
 }
 
 const defaultGoalKeys = GOAL_PRESET_KEYS.slice(0, MIN_AGENTS)
+const defaultTraitPairs: [number, number][] = [[0,14],[1,7],[2,4],[3,11],[5,12],[6,16]]
 const defaultAgents: AgentConfig[] = CHARACTERS.slice(0, MIN_AGENTS).map((char, i) => {
   const goalKey = defaultGoalKeys[i % defaultGoalKeys.length]
+  const [t1, t2] = defaultTraitPairs[i % defaultTraitPairs.length]
   return {
     id: String(i + 1),
     name: char.name,
     characterId: char.id,
-    personality: [],
+    personality: [PERSONALITY_TRAIT_KEYS[t1], PERSONALITY_TRAIT_KEYS[t2]],
     personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
     secretGoal: locale.agents.goalPresets[goalKey].goal,
     goalArchetype: GOAL_ARCHETYPE_MAP[goalKey],
-    llmModel: i % 3 === 2 ? 'gpt-4o' : DEFAULT_LLM_MODEL,
+    llmModel: DEFAULT_LLM_MODEL,
   }
 })
 const agents = ref<AgentConfig[]>(defaultAgents)
 
 const selectedTheme = ref('lord-of-the-flies')
-const selectedArc = ref('lord-of-the-flies')
+const selectedArc = ref('lord_of_the_flies')
 const totalRounds = ref(15)
 const startingResources = ref(100)
 
