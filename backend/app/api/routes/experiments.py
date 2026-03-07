@@ -260,7 +260,9 @@ async def get_suspicion_analytics(experiment_id: str) -> SuspicionAnalytics:
 )
 async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytics:
     state = await _get_state(experiment_id)
-    return RelationshipAnalytics(items=await runtime.get_relationship_analytics(experiment_id, state=state))
+    return RelationshipAnalytics(
+        items=await runtime.get_relationship_analytics(experiment_id, state=state)
+    )
 
 
 @router.get(

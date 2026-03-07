@@ -464,7 +464,9 @@ class ExperimentRuntime:
                     goal_text=agent.goal.text,
                     goal_archetype=agent.goal.archetype,
                     status=agent.status,
-                    outcome=self._goal_outcome(self._status_value(agent.status), latest_progress, history),
+                    outcome=self._goal_outcome(
+                        self._status_value(agent.status), latest_progress, history
+                    ),
                     latest_progress=latest_progress,
                     progress_history=history,
                 )
@@ -490,7 +492,10 @@ class ExperimentRuntime:
                     agent_id,
                     self._string_or(item.data.get("agent_name")),
                 )
-                if requested_action in SABOTAGE_ACTION_TYPES or resolved_action in SABOTAGE_ACTION_TYPES:
+                if (
+                    requested_action in SABOTAGE_ACTION_TYPES
+                    or resolved_action in SABOTAGE_ACTION_TYPES
+                ):
                     items.append(
                         BetrayalTimelineItem(
                             round_number=item.round_number or 0,
@@ -504,7 +509,10 @@ class ExperimentRuntime:
                             resolved=resolved_action in SABOTAGE_ACTION_TYPES,
                         )
                     )
-                elif requested_action in HOSTILE_ACTION_TYPES or resolved_action in HOSTILE_ACTION_TYPES:
+                elif (
+                    requested_action in HOSTILE_ACTION_TYPES
+                    or resolved_action in HOSTILE_ACTION_TYPES
+                ):
                     target_value = self._string_value(item.data.get("target"))
                     items.append(
                         BetrayalTimelineItem(
