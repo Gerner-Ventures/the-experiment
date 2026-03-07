@@ -892,6 +892,8 @@ class SimulationEngine:
         current_tile = self._agent_tile(agent)
         requested_action = turn.decision.action.type
         requested_location = turn.decision.action.location
+        action_tile = current_tile
+        action_location = agent.location or location_label_for_tile(current_tile)
 
         if requested_location:
             goals = resolve_location_target(requested_location)
@@ -910,8 +912,9 @@ class SimulationEngine:
                 max_steps=self.MAX_MOVE_TILES_PER_ACTION,
             )
             destination = path[-1]
-            self._set_agent_tile(agent, destination)
+            destination_location = location_label_for_tile(destination)
             if requested_action == "move":
+                self._set_agent_tile(agent, destination)
                 reached = destination in goals
                 summary = (
                     f"{agent.name} moves to {agent.location}."
@@ -927,6 +930,7 @@ class SimulationEngine:
                 )
 
             if destination not in goals:
+                self._set_agent_tile(agent, destination)
                 return PreparedAction(
                     agent=agent,
                     turn=turn,
@@ -936,9 +940,10 @@ class SimulationEngine:
                         f"{agent.name} heads toward {requested_location} and spends the turn traveling."
                     ),
                 )
+            action_tile = destination
+            action_location = destination_location
 
-        location = agent.location or location_label_for_tile(self._agent_tile(agent))
-        location_type = get_location_type(location)
+        location_type = get_location_type(action_location)
         allowed_location_types = self.ACTION_LOCATION_RULES.get(requested_action)
         if allowed_location_types is not None and location_type not in allowed_location_types:
             allowed = ", ".join(sorted(allowed_location_types))
@@ -948,7 +953,7 @@ class SimulationEngine:
                 round_number=state.world_state.round_number,
                 requested_action=requested_action,
                 note=(
-                    f"{agent.name} cannot {requested_action} effectively at {location}; "
+                    f"{agent.name} cannot {requested_action} effectively at {action_location}; "
                     f"that action requires one of: {allowed}."
                 ),
             )
@@ -959,23 +964,28 @@ class SimulationEngine:
                 if requested_action in self.RANGED_ACTIONS
                 else self.CONTACT_RANGE_TILES
             )
-            if not self._has_nearby_agent(state, agent, max_distance=interaction_range):
+            if not self._has_nearby_agent(
+                state, agent, max_distance=interaction_range, origin_tile=action_tile
+            ):
                 return self._block_action(
                     agent,
                     turn=turn,
                     round_number=state.world_state.round_number,
                     requested_action=requested_action,
                     note=(
-                        f"{agent.name} cannot {requested_action} from {location}; "
+                        f"{agent.name} cannot {requested_action} from {action_location}; "
                         "no other agent is close enough."
                     ),
                 )
+
+        if action_tile != current_tile:
+            self._set_agent_tile(agent, action_tile)
 
         return PreparedAction(
             agent=agent,
             turn=turn,
             action_type=requested_action,
-            location=location,
+            location=action_location,
         )
 
     def _block_action(
@@ -1012,9 +1022,14 @@ class SimulationEngine:
         )
 
     def _has_nearby_agent(
-        self, state: SimulationState, agent: EngineAgentState, *, max_distance: int
+        self,
+        state: SimulationState,
+        agent: EngineAgentState,
+        *,
+        max_distance: int,
+        origin_tile: tuple[int, int] | None = None,
     ) -> bool:
-        origin = self._agent_tile(agent)
+        origin = origin_tile or self._agent_tile(agent)
         for other in self._active_agents(state):
             if other.agent_id == agent.agent_id:
                 continue

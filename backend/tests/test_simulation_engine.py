@@ -292,6 +292,35 @@ async def test_engine_blocks_resource_actions_at_invalid_locations() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_does_not_move_agent_when_reached_action_is_blocked() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("repair", "brothel"), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+            "a3": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+        }
+    )
+    state = _state()
+    start_tile = resolve_spawn_tile("well")
+    state.agents[0].location = "well"
+    state.agents[0].tile_x, state.agents[0].tile_y = start_tile
+    state.agents[1].location = "workshop"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("workshop")
+
+    engine = SimulationEngine(agent_service=service, random_seed=11)
+    result = await engine.run_round(state)
+
+    first_action = next(
+        event for event in result.phases[2].events if event.data.get("agent_id") == "a1"
+    )
+
+    assert first_action.data["action_type"] == "observe"
+    assert "requires one of" in first_action.summary
+    assert (state.agents[0].tile_x, state.agents[0].tile_y) == start_tile
+    assert state.agents[0].location == "well"
+
+
+@pytest.mark.asyncio
 async def test_engine_allows_vote_action_in_meeting_hall() -> None:
     service = _StubAgentService(
         {
