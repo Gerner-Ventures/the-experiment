@@ -16,9 +16,13 @@ from app.agents.models import (
     PersonalityProfile,
     SecretGoal,
 )
+from app.engine.models import ConversationOutcome, ConversationTurn, EngineAgentState, SimulationState
 from app.agents.registry import get_action_definition
 from app.agents.service import AgentService
 from app.agents.suspicion import apply_suspicion_trigger
+from app.engine.service import SimulationEngine
+from app.gm import get_preset_arc
+from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
 from app.llm import LLMService
 from app.llm.models import LLMResult
 from app.world import build_default_world_state
@@ -124,6 +128,70 @@ def _context() -> AgentContext:
         observations=[
             Observation(summary="Someone left the bar through the back door.", importance=4)
         ],
+    )
+
+
+def _engine_state() -> SimulationState:
+    return SimulationState(
+        experiment_id="exp-1",
+        experiment_name="Memory Trial",
+        total_rounds=8,
+        current_round=1,
+        status="running",
+        auto_approve=True,
+        arc=get_preset_arc("slow_burn"),
+        world_state=build_default_world_state(round_number=2),
+        agents=[
+            EngineAgentState(
+                agent_id="a1",
+                name="Mara",
+                personality=_context().personality,
+                goal=_context().goal,
+                memory=AgentMemoryState(),
+                location="bar",
+                relationships={},
+            ),
+            EngineAgentState(
+                agent_id="a2",
+                name="Jon",
+                personality=PersonalityProfile(
+                    axes=PersonalityAxes(
+                        paranoia=35,
+                        empathy=68,
+                        dominance=44,
+                        impulsiveness=39,
+                        loyalty=75,
+                        ambition=48,
+                    ),
+                    trait_tags=["dutiful", "protective"],
+                    self_concept="Someone has to hold things together.",
+                ),
+                goal=SecretGoal(
+                    archetype="communal_survival",
+                    text="Keep the town functional until rescue arrives.",
+                ),
+                memory=AgentMemoryState(),
+                location="bar",
+                relationships={},
+            ),
+        ],
+        gm_plan=GMPlanRecord(
+            status="applied",
+            plan=GMPlanData(
+                round=2,
+                round_theme="Rumors spread",
+                reasoning="Push social mistrust",
+                crisis_event=CrisisEvent(
+                    type="social",
+                    severity="medium",
+                    description="Rumors spread that someone is staging the shortages.",
+                ),
+                resource_modifiers=ResourceDelta(),
+                environmental=None,
+                narration="Everyone feels watched.",
+                meta_hint=None,
+            ),
+        ),
     )
 
 
@@ -259,6 +327,50 @@ def test_relationship_updates_are_biased_and_persisted() -> None:
 
     assert memory.relationship_memory["agent-2"].trust == -12
     assert "withholding information" in memory.relationship_memory["agent-2"].history[-1]
+
+
+@pytest.mark.asyncio
+async def test_conversation_updates_relationship_memory_for_both_participants() -> None:
+    engine = SimulationEngine(agent_service=AgentService(memory_llm_service=_StubMemoryLLMService()))
+    state = _engine_state()
+
+    outcomes = [
+        ConversationOutcome(
+            location="bar",
+            participants=["a1", "a2"],
+            turns=[
+                ConversationTurn(
+                    speaker_id="a1",
+                    speaker_name="Mara",
+                    listener_id="a2",
+                    listener_name="Jon",
+                    tone="suspicious",
+                    content="Mara warns Jon that the shortage feels staged.",
+                    trust_delta=-1.5,
+                ),
+                ConversationTurn(
+                    speaker_id="a2",
+                    speaker_name="Jon",
+                    listener_id="a1",
+                    listener_name="Mara",
+                    tone="supportive",
+                    content="Jon tells Mara they need to stay steady.",
+                    trust_delta=2.0,
+                ),
+            ],
+            summary="They trade a tense read of the situation.",
+        )
+    ]
+
+    await engine._apply_conversation_outcomes(state, outcomes)
+
+    mara = next(agent for agent in state.agents if agent.agent_id == "a1")
+    jon = next(agent for agent in state.agents if agent.agent_id == "a2")
+
+    assert mara.relationships["a2"].trust == 0.5
+    assert jon.relationships["a1"].trust == 0.5
+    assert len(mara.relationships["a2"].history) == 2
+    assert len(jon.relationships["a1"].history) == 2
 
 
 def test_action_registry_exposes_expected_actions() -> None:

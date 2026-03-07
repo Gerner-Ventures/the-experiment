@@ -454,6 +454,13 @@ class SimulationEngine:
                     note=turn.content,
                 )
                 speaker.relationships = dict(speaker.memory.relationship_memory)
+                listener.memory = self.agent_service.update_relationship(
+                    listener.memory,
+                    other_agent_id=speaker.agent_id,
+                    trust_delta=turn.trust_delta,
+                    note=turn.content,
+                )
+                listener.relationships = dict(listener.memory.relationship_memory)
                 occupancy = state.world_state.location_occupancy.setdefault(outcome.location, [])
                 for participant_id in outcome.participants:
                     if participant_id not in occupancy:
