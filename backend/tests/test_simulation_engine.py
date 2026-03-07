@@ -14,6 +14,7 @@ from app.agents.models import (
 from app.agents.service import AgentService
 from app.db.models import AgentStatus
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
+from app.engine.service import PreparedAction
 from app.gm import get_preset_arc
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
 from app.world import build_default_world_state, resolve_spawn_tile, tile_distance
@@ -96,6 +97,36 @@ def _state() -> SimulationState:
             _agent("a3", "Eli", "workshop"),
         ],
     )
+
+
+def test_action_outcome_only_marks_observe_and_move_rewrites_as_non_resolved() -> None:
+    agent = _agent("a1", "Mara", "well")
+    engine = SimulationEngine()
+    turn = AgentTurnResult(
+        decision=AgentDecision(
+            inner_thought="A choice is made.",
+            suspicion=None,
+            action=DecisionAction(
+                type=cast(DecisionActionType, "attack"),
+                target="a2",
+                location="well",
+            ),
+            dialogue=None,
+            goal_progress="Incremental movement.",
+            cooperation_intent="low",
+        ),
+        updated_memory=agent.memory,
+        suspicion_level=agent.suspicion_level,
+        prompt="stub",
+    )
+
+    blocked = PreparedAction(agent=agent, turn=turn, action_type="observe", location="well")
+    rerouted = PreparedAction(agent=agent, turn=turn, action_type="move", location="street")
+    resolved = PreparedAction(agent=agent, turn=turn, action_type="repair", location="workshop")
+
+    assert engine._action_outcome(blocked) == "blocked"
+    assert engine._action_outcome(rerouted) == "rerouted"
+    assert engine._action_outcome(resolved) == "resolved"
 
 
 @pytest.mark.asyncio
@@ -204,6 +235,81 @@ async def test_engine_generates_social_events_and_relationship_updates() -> None
     assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
     assert state.agents[0].relationships
     assert state.agents[1].relationships
+
+
+@pytest.mark.asyncio
+async def test_self_sacrifice_marks_agent_dead_and_stops_future_turns() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
+            "a2": [("gather", "well"), ("observe", "well"), ("repair", "workshop")],
+            "a3": [("repair", "workshop"), ("observe", "workshop"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].location = "town_hall"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
+    engine = SimulationEngine(agent_service=service, random_seed=6)
+
+    result = await engine.run_round(state)
+
+    sacrifice_events = [
+        event for event in result.phases[2].events if event.data.get("kind") == "self_sacrifice"
+    ]
+    afternoon_agent_ids = {
+        event.data.get("agent_id")
+        for event in result.phases[4].events
+        if isinstance(event.data.get("agent_id"), str)
+    }
+
+    assert len(sacrifice_events) == 1
+    assert service.calls["a1"] == 1
+    assert state.agents[0].status == AgentStatus.DEAD
+    assert state.agents[0].death_round == 1
+    assert state.agents[0].death_cause == "self_sacrifice"
+    assert state.sacrifice_history
+    assert state.sacrifice_history[0].agent_id == "a1"
+    assert state.agents[1].suspicion_level > 0
+    assert "a1" not in afternoon_agent_ids
+    assert "a1" not in state.world_state.location_occupancy.get("town_hall", [])
+
+
+@pytest.mark.asyncio
+async def test_multiple_self_sacrifices_are_explicitly_supported() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
+            "a2": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
+            "a3": [("observe", "well"), ("observe", "well"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    for agent in state.agents[:2]:
+        agent.location = "town_hall"
+        agent.tile_x, agent.tile_y = resolve_spawn_tile("town_hall")
+    engine = SimulationEngine(agent_service=service, random_seed=9)
+
+    result = await engine.run_round(state)
+
+    morning_sacrifices = [
+        event for event in result.phases[2].events if event.data.get("kind") == "self_sacrifice"
+    ]
+    afternoon_agent_ids = {
+        event.data.get("agent_id")
+        for event in result.phases[4].events
+        if isinstance(event.data.get("agent_id"), str)
+    }
+
+    assert len(morning_sacrifices) == 2
+    assert service.calls["a1"] == 1
+    assert service.calls["a2"] == 1
+    assert state.agents[0].status == AgentStatus.DEAD
+    assert state.agents[1].status == AgentStatus.DEAD
+    assert len(state.sacrifice_history) == 2
+    assert "a1" not in afternoon_agent_ids
+    assert "a2" not in afternoon_agent_ids
+    assert "a1" not in state.world_state.location_occupancy.get("town_hall", [])
+    assert "a2" not in state.world_state.location_occupancy.get("town_hall", [])
 
 
 @pytest.mark.asyncio

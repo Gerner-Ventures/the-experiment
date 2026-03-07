@@ -29,9 +29,11 @@ Audit all components for hardcoded/mock data and wire to real backend API/WebSoc
 ## Acceptance Criteria
 
 - [ ] Stores initialize from API data
+<!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
 - [ ] HUD displays live store data
 - [ ] API endpoints match backend routes
 - [ ] WebSocket handles all message types
+<!-- specwright:realized-in:PR#69 file:frontend/tests/unit/ws-routing.spec.ts -->
 - [ ] No placeholder data in production paths
 - [ ] Demo mode still works as opt-in
 

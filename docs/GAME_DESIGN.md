@@ -79,6 +79,7 @@ Phase 4: AFTERNOON — ACTION PHASE
   1 committed action per agent
   COOPERATE: repair, ration, fortify, heal (reduces threat)
   SELFISH: hoard, sabotage, explore restricted areas (personal goal)
+  DESPERATE: terminal acts like ritual self-sacrifice can stabilize the town at extreme personal cost
   Actions resolved simultaneously
 
 Phase 5: NIGHT — CONSEQUENCES
@@ -125,6 +126,7 @@ Crisis events escalate from minor inconveniences to existential threats. The thr
 | Town Survives + Goal Incomplete | Survived but unfulfilled |
 | Town Collapses (threat=100) | Everyone loses, game over |
 | Exiled | Agent voted out, removed from simulation |
+| Dead | Agent removed through violence or terminal choices like ritual self-sacrifice |
 
 ## The Meta Layer
 

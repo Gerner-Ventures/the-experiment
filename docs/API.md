@@ -30,7 +30,7 @@ Important behavior:
 
 - `POST /api/experiments/{id}/step` will move an experiment from `setup` to `running` automatically.
 - The current implementation does not block `step` on prior manual GM approval. If you want to inspect or replace the upcoming GM plan, do it before calling `step`.
-- Experiment state, GM plans, event logs, round snapshots, faction state, and exile history are persisted through the store boundary.
+- Experiment state, GM plans, event logs, round snapshots, faction state, exile history, and sacrifice history are persisted through the store boundary.
 - The WebSocket stream is server-push only. Control actions still go through REST.
 
 ## Typical Flow
@@ -60,8 +60,13 @@ Important behavior:
 | `GET` | `/api/experiments/{experiment_id}/agents/{agent_id}/dossier` | Inspect a single agent in detail |
 | `GET` | `/api/experiments/{experiment_id}/log` | Paginate and filter the event log |
 | `GET` | `/api/experiments/{experiment_id}/analytics/summary` | Aggregate snapshot of rounds, resources, factions, and cooperation |
+| `GET` | `/api/experiments/{experiment_id}/analytics/rounds` | Round-level report data with cooperation, betrayal counts, and GM context |
+| `GET` | `/api/experiments/{experiment_id}/analytics/goals` | Per-agent goal progress history and derived end-state outcomes |
+| `GET` | `/api/experiments/{experiment_id}/analytics/betrayals` | Betrayal and sabotage timeline including exile events |
+| `GET` | `/api/experiments/{experiment_id}/analytics/suspicion` | Suspicion heatmap and per-agent suspicion history |
 | `GET` | `/api/experiments/{experiment_id}/analytics/relationships` | Relationship graph edges derived from agent memory |
-| `GET` | `/api/experiments/{experiment_id}/analytics/factions` | Current faction state |
+| `GET` | `/api/experiments/{experiment_id}/analytics/factions` | Current faction state plus pressure and membership-change timeline |
+| `GET` | `/api/experiments/{experiment_id}/analytics/gm` | GM narration and crisis timeline by round |
 | `GET` | `/api/experiments/{experiment_id}/analytics/highlights` | High-signal events ranked from the log |
 | `GET` | `/api/experiments/{experiment_id}/replay` | Replay index with round summaries and highlights |
 | `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/snapshot` | World snapshot and per-round events |
@@ -107,10 +112,11 @@ curl -X POST http://localhost:8000/api/experiments \
 Selected response fields:
 
 - `world_state`: current resources, threat, round number, and location occupancy
-- `agents`: full agent state including memory, relationships, faction assignment, and influence
+- `agents`: full agent state including memory, relationships, faction assignment, influence, and terminal metadata like `death_round`/`death_cause`
 - `gm_plan`: current plan record for the upcoming or most recently applied round
 - `factions`: current alliance/cult state
 - `exile_history`: prior exile outcomes
+- `sacrifice_history`: prior ritual self-sacrifice outcomes
 
 ## GM Plan Flow
 
@@ -218,9 +224,40 @@ Common event types:
 - a derived cooperation score
 - the dominant faction, when one exists
 
+Additional report-grade analytics endpoints expose persisted derived views for frontend reports and dashboards:
+
+- `GET /api/experiments/{experiment_id}/analytics/rounds`
+  - one round-level item per completed round
+  - GM theme, narration, and crisis payload
+  - resolved cooperation score, betrayal count (includes sabotage), sabotage count (subset of betrayal)
+  - `sabotage_count` is a subset of the broader `betrayal_count`
+  - round resources, threat, and dominant faction
+- `GET /api/experiments/{experiment_id}/analytics/goals`
+  - one item per agent
+  - round-by-round goal progress snapshots
+  - a derived final outcome: `achieved`, `partial`, `failed`, or `unknown`
+  - `status` is serialized from `AgentStatus`
+- `GET /api/experiments/{experiment_id}/analytics/betrayals`
+  - sabotage actions
+  - hostile actions such as `accuse`, `attack`, `threaten`, `stab`, `shoot`, and `poison`
+  - exile votes and enacted exiles
+- `GET /api/experiments/{experiment_id}/analytics/suspicion`
+  - flat heatmap points for charting
+  - grouped per-agent suspicion histories
+  - grouped history points include only `round_number` and `suspicion_level`
+- `GET /api/experiments/{experiment_id}/analytics/factions`
+  - current factions
+  - faction pressure timeline
+  - membership joins/leaves by round
+  - timeline `kind` may be `null` for legacy logs that predate explicit faction-kind persistence
+- `GET /api/experiments/{experiment_id}/analytics/gm`
+  - round theme
+  - narration
+  - crisis payload
+
 `GET /api/experiments/{experiment_id}/replay` returns a replay-friendly index:
 
-- one item per completed round with a summary, threat level, and event count
+- one item per completed round with a summary, threat level, event count, cooperation score, sabotage count, betrayal count, and GM context
 - the same highlight feed used by the analytics highlight endpoint
 
 `GET /api/experiments/{experiment_id}/usage` and `.../usage/traces` expose LLM usage:
@@ -288,6 +325,12 @@ Connection semantics:
 - `exile_enacted`
 - `faction_update`
 - `cult_activity`
+
+Analytics persistence notes:
+
+- persisted `agent_action` log rows now store both `requested_action_type` and `resolved_action_type`
+- persisted `round_end` log rows now include compact round-summary payloads for goals, suspicion, factions, and GM context
+- cooperation analytics use resolved outcomes, not only requested action intent
 
 ## Error Semantics
 

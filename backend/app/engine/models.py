@@ -76,6 +76,15 @@ MeetingStance = Literal["support", "oppose", "hesitant"]
 MeetingVoteChoice = Literal["support", "oppose", "abstain"]
 ExileVoteChoice = Literal["banish", "protect", "abstain"]
 FactionKind = Literal["alliance", "cult"]
+TerminalActionType = Literal["self_sacrifice"]
+ActionResolutionOutcome = Literal[
+    "resolved",
+    "blocked",
+    "rerouted",
+    "conflict_winner",
+    "conflict_loser",
+    "self_sacrifice",
+]
 
 
 class EngineModel(BaseModel):
@@ -100,6 +109,8 @@ class EngineAgentState(EngineModel):
     faction_id: str | None = None
     faction_role: Literal["leader", "member"] | None = None
     influence: float = Field(default=0, ge=0, le=100)
+    death_round: int | None = Field(default=None, ge=0)
+    death_cause: str | None = Field(default=None, max_length=100)
 
 
 class ConflictRecord(EngineModel):
@@ -139,6 +150,7 @@ class SimulationState(EngineModel):
     gm_plan: GMPlanRecord | None = None
     factions: list["FactionState"] = Field(default_factory=list)
     exile_history: list["ExileOutcome"] = Field(default_factory=list)
+    sacrifice_history: list["SacrificeOutcome"] = Field(default_factory=list)
 
 
 class RoundResult(EngineModel):
@@ -149,7 +161,24 @@ class RoundResult(EngineModel):
     threat_level: float = Field(ge=0, le=100)
     world_state: WorldState
     agent_turns: dict[str, list[AgentTurnResult]] = Field(default_factory=dict)
+    action_resolutions: list["ActionResolution"] = Field(default_factory=list)
     created_at: datetime
+
+
+class ActionResolution(EngineModel):
+    phase: Literal["morning", "afternoon"]
+    agent_id: str
+    agent_name: str
+    location: str
+    requested_action_type: str
+    resolved_action_type: str
+    outcome: ActionResolutionOutcome = "resolved"
+    cooperation_intent: str
+    goal_progress: str
+    summary: str
+    target: str | None = None
+    dialogue_target: str | None = None
+    suspicion_level: float = Field(ge=0, le=100)
 
 
 class ConversationTurn(EngineModel):
@@ -199,6 +228,18 @@ class ExileOutcome(EngineModel):
     tally: dict[str, int] = Field(default_factory=dict)
     enacted: bool = False
     reason: str | None = None
+
+
+class SacrificeOutcome(EngineModel):
+    round_number: int = Field(ge=0)
+    agent_id: str
+    agent_name: str
+    location: str
+    action_type: TerminalActionType
+    reason: str
+    threat_delta: float = 0.0
+    resource_effects: dict[str, float] = Field(default_factory=dict)
+    affected_agent_ids: list[str] = Field(default_factory=list)
 
 
 class FactionState(EngineModel):

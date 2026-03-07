@@ -101,6 +101,13 @@ secrets:
     apiKey: ""
     existingSecret: ""
 
+  ## @section Langfuse secrets
+  langfuse:
+    publicKey: ""
+    secretKey: ""
+    host: ""
+    existingSecret: ""
+
 ## @section Application configuration
 config:
   backendPort: 8000

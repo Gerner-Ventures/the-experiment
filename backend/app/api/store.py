@@ -27,6 +27,7 @@ from app.engine.models import (
     ExileOutcome,
     FactionState,
     RoundResult,
+    SacrificeOutcome,
     SimulationState,
 )
 from app.gm.models import DirectorAct, DirectorArc, GMPlanRecord
@@ -202,6 +203,9 @@ class SqlAlchemyExperimentStore:
         experiment.exile_history = [
             record.model_dump(mode="json") for record in state.exile_history
         ]
+        experiment.sacrifice_history = [
+            record.model_dump(mode="json") for record in state.sacrifice_history
+        ]
 
         if experiment.arc is None:
             experiment.arc = Arc(name=state.arc.name, description=state.arc.description)
@@ -263,6 +267,8 @@ class SqlAlchemyExperimentStore:
         agent.faction_id = agent_state.faction_id
         agent.faction_role = agent_state.faction_role
         agent.influence = agent_state.influence
+        agent.death_round = agent_state.death_round
+        agent.death_cause = agent_state.death_cause
         return agent
 
     def _apply_gm_plan(self, row: GMPlan, plan: GMPlanRecord) -> None:
@@ -318,6 +324,8 @@ class SqlAlchemyExperimentStore:
                     "influence": agent.influence,
                     "tile_x": agent.tile_x,
                     "tile_y": agent.tile_y,
+                    "death_round": agent.death_round,
+                    "death_cause": agent.death_cause,
                 }
             )
             for agent in experiment.agents
@@ -349,6 +357,9 @@ class SqlAlchemyExperimentStore:
             gm_plan=gm_plan,
             factions=[FactionState.model_validate(item) for item in experiment.factions],
             exile_history=[ExileOutcome.model_validate(item) for item in experiment.exile_history],
+            sacrifice_history=[
+                SacrificeOutcome.model_validate(item) for item in experiment.sacrifice_history
+            ],
         )
 
     def _to_gm_plan_record(self, row: GMPlan) -> GMPlanRecord:

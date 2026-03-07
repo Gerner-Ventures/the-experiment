@@ -44,7 +44,6 @@ def upgrade() -> None:
     op.alter_column("experiments", "unresolved_plotlines", server_default=None)
     op.alter_column("experiments", "recent_events", server_default=None)
 
-    op.add_column("agents", sa.Column("character_id", sa.String(length=255), nullable=True))
     op.add_column(
         "agents",
         sa.Column("goal", sa.JSON(), nullable=False, server_default=sa.text("'{}'::json")),
@@ -65,7 +64,6 @@ def downgrade() -> None:
     op.drop_column("gm_plans", "approved_at")
     op.drop_column("gm_plans", "status")
     op.drop_column("agents", "goal")
-    op.drop_column("agents", "character_id")
     op.drop_column("experiments", "recent_events")
     op.drop_column("experiments", "unresolved_plotlines")
     op.drop_column("experiments", "world_state")

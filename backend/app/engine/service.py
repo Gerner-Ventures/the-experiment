@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from random import Random
-from typing import cast
+from typing import Literal, cast
 
 from app.agents.memory import append_recent_event
 from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
 from app.agents.suspicion import apply_suspicion_trigger
 from app.agents.service import AgentService
+from app.core import langfuse as lf
 from app.db.models import AgentStatus
 from app.engine.models import (
+    ActionResolution,
+    ActionResolutionOutcome,
     ConflictRecord,
     ConversationOutcome,
     EngineAgentState,
@@ -23,6 +27,7 @@ from app.engine.models import (
     RoundEvent,
     RoundHook,
     RoundResult,
+    SacrificeOutcome,
     SimulationState,
     build_agent_context,
 )
@@ -41,6 +46,8 @@ from app.world.service import (
     tile_distance,
 )
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class PreparedAction:
@@ -55,6 +62,9 @@ class SimulationEngine:
     MAX_MOVE_TILES_PER_ACTION = 2
     CONTACT_RANGE_TILES = 2
     RANGED_CONTACT_RANGE_TILES = 4
+    SELF_SACRIFICE_THREAT_DELTA = -8.0
+    SELF_SACRIFICE_RESOURCE_EFFECTS = {"food": 1.0, "materials": 0.8}
+    SELF_SACRIFICE_SUSPICION_DELTA = 9.0
     AGENT_INTERACTION_ACTIONS = {
         "talk",
         "trade",
@@ -88,6 +98,17 @@ class SimulationEngine:
         self.social_service = social_service or SocialService(random_seed=random_seed + 10)
         self.random = Random(random_seed)
 
+    @staticmethod
+    def _obj_id(obj: object) -> str:
+        return getattr(obj, "id", None) or ""
+
+    @staticmethod
+    def _set_phase_context(trace: object, span: object) -> None:
+        trace_id = SimulationEngine._obj_id(trace)
+        span_id = SimulationEngine._obj_id(span)
+        if trace_id:
+            lf.set_trace_context(trace_id=trace_id, span_id=span_id)
+
     async def run_round(
         self, state: SimulationState, *, hook: RoundHook | None = None
     ) -> RoundResult:
@@ -96,6 +117,16 @@ class SimulationEngine:
         state.world_state.round_number = round_number
         self._refresh_factions(state)
 
+        trace = lf.trace(
+            name=f"round-{round_number}",
+            session_id=state.experiment_id,
+            metadata={
+                "experiment_id": state.experiment_id,
+                "round_number": round_number,
+                "total_rounds": state.total_rounds,
+            },
+        )
+
         # --- GM Plan phase ---
         if (
             state.gm_plan
@@ -103,6 +134,7 @@ class SimulationEngine:
             and state.gm_plan.status == "applied"
         ):
             gm_plan = state.gm_plan
+            lf.span(name="gm_plan", parent=trace, metadata={"pre_approved": True})
             gm_result = PhaseResult(
                 phase="gm_plan",
                 events=[
@@ -114,6 +146,8 @@ class SimulationEngine:
                 ],
             )
         else:
+            gm_span = lf.span(name="gm_plan", parent=trace)
+            self._set_phase_context(trace, gm_span)
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         await h.on_round_start(round_number, gm_plan)
         await h.on_phase_start(round_number, "gm_plan")
@@ -121,13 +155,22 @@ class SimulationEngine:
 
         # --- Dawn phase ---
         await h.on_phase_start(round_number, "dawn")
+        dawn_span = lf.span(name="dawn", parent=trace)
+        self._set_phase_context(trace, dawn_span)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
         await h.on_phase_complete(round_number, dawn_result)
 
         # --- Morning actions ---
         await h.on_phase_start(round_number, "morning")
-        morning_result, morning_turns = await self._action_phase(
-            state, phase="morning", actions_per_agent=2, hook=h
+        morning_span = lf.span(name="morning", parent=trace)
+        self._set_phase_context(trace, morning_span)
+        morning_result, morning_turns, morning_actions = await self._action_phase(
+            state,
+            phase="morning",
+            actions_per_agent=2,
+            hook=h,
+            trace=trace,
+            phase_span=morning_span,
         )
         await h.on_phase_complete(round_number, morning_result)
 
@@ -138,8 +181,15 @@ class SimulationEngine:
 
         # --- Afternoon actions ---
         await h.on_phase_start(round_number, "afternoon")
-        afternoon_result, afternoon_turns = await self._action_phase(
-            state, phase="afternoon", actions_per_agent=1, hook=h
+        afternoon_span = lf.span(name="afternoon", parent=trace)
+        self._set_phase_context(trace, afternoon_span)
+        afternoon_result, afternoon_turns, afternoon_actions = await self._action_phase(
+            state,
+            phase="afternoon",
+            actions_per_agent=1,
+            hook=h,
+            trace=trace,
+            phase_span=afternoon_span,
         )
         await h.on_phase_complete(round_number, afternoon_result)
 
@@ -148,7 +198,14 @@ class SimulationEngine:
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
-        night_result = await self._night_phase(state, cooperation_ratio)
+        night_span = lf.span(name="night", parent=trace)
+        self._set_phase_context(trace, night_span)
+        night_result = await self._night_phase(
+            state,
+            cooperation_ratio,
+            trace=trace,
+            night_span=night_span,
+        )
         await h.on_phase_complete(round_number, night_result)
 
         # --- Finalize state ---
@@ -157,6 +214,17 @@ class SimulationEngine:
             night_result.cooperation_ratio or state.world_state.threat_level
         )
         self._update_experiment_status(state)
+        if trace is not None:
+            try:
+                trace.update(
+                    metadata={
+                        "status": state.status,
+                        "cooperation_ratio": cooperation_ratio,
+                        "threat_level": state.world_state.threat_level,
+                    }
+                )
+            except Exception:
+                logger.warning("langfuse trace.update failed", exc_info=True)
         state.recent_events.extend(
             event.summary
             for phase_result in [
@@ -171,14 +239,14 @@ class SimulationEngine:
         )
         state.recent_events = state.recent_events[-20:]
         state.gm_plan = gm_plan
+        agent_turns: dict[str, list[AgentTurnResult]] = {}
+        for agent_id in set(morning_turns) | set(afternoon_turns):
+            agent_turns[agent_id] = [
+                *morning_turns.get(agent_id, []),
+                *afternoon_turns.get(agent_id, []),
+            ]
 
-        # Merge per-agent turn lists (morning + afternoon) instead of overwriting
-        merged_turns: dict[str, list[AgentTurnResult]] = {}
-        for agent_id, turns in morning_turns.items():
-            merged_turns.setdefault(agent_id, []).extend(turns)
-        for agent_id, turns in afternoon_turns.items():
-            merged_turns.setdefault(agent_id, []).extend(turns)
-
+        lf.reset_trace_context()
         return RoundResult(
             round_number=round_number,
             gm_plan=gm_plan,
@@ -193,7 +261,8 @@ class SimulationEngine:
             cooperation_ratio=cooperation_ratio,
             threat_level=state.world_state.threat_level,
             world_state=state.world_state.model_copy(deep=True),
-            agent_turns=merged_turns,
+            agent_turns=agent_turns,
+            action_resolutions=[*morning_actions, *afternoon_actions],
             created_at=datetime.now(UTC),
         )
 
@@ -262,10 +331,12 @@ class SimulationEngine:
         self,
         state: SimulationState,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         actions_per_agent: int,
-        hook: RoundHook,
-    ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]]]:
+        hook: RoundHook | None = None,
+        trace: object = None,
+        phase_span: object = None,
+    ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]], list[ActionResolution]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
         actions: list[PreparedAction] = []
         for agent in self._active_agents(state):
@@ -274,6 +345,16 @@ class SimulationEngine:
         # If one agent moves first, later proximity checks in the same phase will see that
         # updated tile position.
         for agent in self._active_agents(state):
+            agent_span = lf.span(
+                name=f"agent:{agent.name}",
+                parent=phase_span or trace,
+                metadata={"agent_id": agent.agent_id, "agent_name": agent.name},
+            )
+            if agent_span:
+                lf.set_trace_context(
+                    trace_id=self._obj_id(trace),
+                    span_id=self._obj_id(agent_span),
+                )
             turns = []
             for _ in range(actions_per_agent):
                 context = build_agent_context(
@@ -291,11 +372,16 @@ class SimulationEngine:
                 agent.suspicion_level = turn.suspicion_level
                 prepared = self._prepare_action(state, agent, turn)
                 actions.append(prepared)
-                await hook.on_agent_action(state.world_state.round_number, phase, agent, turn)
+                if hook:
+                    await hook.on_agent_action(state.world_state.round_number, phase, agent, turn)
+                if prepared.action_type == "self_sacrifice":
+                    break
             all_turns[agent.agent_id] = turns
 
-        result = await self._resolve_actions(state, phase=phase, actions=actions)
-        return result, all_turns
+        result, action_resolutions = await self._resolve_actions(
+            state, phase=phase, actions=actions
+        )
+        return result, all_turns, action_resolutions
 
     def _midday_phase(self, state: SimulationState) -> PhaseResult:
         proposal = self._meeting_proposal(state)
@@ -355,7 +441,13 @@ class SimulationEngine:
             events=events,
         )
 
-    async def _night_phase(self, state: SimulationState, cooperation_ratio: float) -> PhaseResult:
+    async def _night_phase(
+        self,
+        state: SimulationState,
+        cooperation_ratio: float,
+        trace: object = None,
+        night_span: object = None,
+    ) -> PhaseResult:
         crisis_severity = (
             _severity_to_float(state.gm_plan.plan.crisis_event.severity) if state.gm_plan else 0.2
         )
@@ -371,6 +463,8 @@ class SimulationEngine:
                     agent,
                     round_number=state.world_state.round_number,
                     cooperation_ratio=cooperation_ratio,
+                    trace=trace,
+                    night_span=night_span,
                 )
                 for agent in active_agents
             ]
@@ -398,7 +492,19 @@ class SimulationEngine:
         *,
         round_number: int,
         cooperation_ratio: float,
+        trace: object = None,
+        night_span: object = None,
     ) -> tuple[str, AgentMemoryState]:
+        memory_span = lf.span(
+            name=f"memory:{agent.name}",
+            parent=night_span or trace,
+            metadata={"agent_id": agent.agent_id, "agent_name": agent.name},
+        )
+        if memory_span:
+            lf.set_trace_context(
+                trace_id=self._obj_id(trace),
+                span_id=self._obj_id(memory_span),
+            )
         reflection = f"{agent.name} ends the night feeling {self._night_mood(agent.suspicion_level, cooperation_ratio)}."
         updated_memory = await self.agent_service.register_observation(
             agent.memory,
@@ -426,12 +532,14 @@ class SimulationEngine:
         self,
         state: SimulationState,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         actions: list[PreparedAction],
-    ) -> PhaseResult:
+    ) -> tuple[PhaseResult, list[ActionResolution]]:
         grouped: dict[tuple[str, str], list[PreparedAction]] = {}
         events: list[RoundEvent] = []
         conflicts: list[ConflictRecord] = []
+        action_resolutions: list[ActionResolution] = []
+        faction_refresh_needed = False
 
         for prepared in actions:
             key = (prepared.location, prepared.action_type)
@@ -447,6 +555,19 @@ class SimulationEngine:
                 await self._apply_conversation_outcomes(state, outcomes)
                 for outcome in outcomes:
                     events.extend(self._conversation_events(phase, outcome))
+                for prepared in group:
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type="talk",
+                            summary=(
+                                prepared.summary
+                                or f"{prepared.agent.name} joins a tense conversation at {location}."
+                            ),
+                            outcome="resolved",
+                        )
+                    )
                 continue
             if len(group) > 1 and action_type in {
                 "gather",
@@ -477,26 +598,135 @@ class SimulationEngine:
                     )
                 )
                 self._apply_conflict_consequences(state, location, action_type, winners, losers)
-                events.append(RoundEvent(phase=phase, summary=summary))
+                events.append(
+                    RoundEvent(
+                        phase=phase,
+                        summary=summary,
+                        data={
+                            "kind": "action_conflict",
+                            "location": location,
+                            "action_type": action_type,
+                            "participants": [prepared.agent.agent_id for prepared in group],
+                            "winner_ids": [prepared.agent.agent_id for prepared in winners],
+                            "loser_ids": [prepared.agent.agent_id for prepared in losers],
+                        },
+                    )
+                )
+                for prepared in winners:
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type=action_type,
+                            summary=f"{prepared.agent.name} wins the clash over {action_type} at {location}.",
+                            outcome="conflict_winner",
+                        )
+                    )
+                for prepared in losers:
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type="observe",
+                            summary=(
+                                f"{prepared.agent.name} loses the clash over {action_type} at "
+                                f"{location} and falls back."
+                            ),
+                            outcome="conflict_loser",
+                        )
+                    )
             else:
                 for prepared in group:
                     agent = prepared.agent
                     turn = prepared.turn
-                    self._apply_clean_action(state, agent, prepared.action_type, location)
+                    sacrifice = None
+                    if prepared.action_type == "self_sacrifice":
+                        sacrifice = self._apply_self_sacrifice(state, agent, location)
+                        faction_refresh_needed = True
+                    else:
+                        self._apply_clean_action(state, agent, prepared.action_type, location)
+                    summary = (
+                        sacrifice.reason
+                        if sacrifice is not None
+                        else prepared.summary
+                        or f"{agent.name} chose to {prepared.action_type} at {location}."
+                    )
                     events.append(
                         RoundEvent(
                             phase=phase,
-                            summary=prepared.summary
-                            or f"{agent.name} chose to {prepared.action_type} at {location}.",
+                            summary=summary,
                             data={
+                                "kind": "agent_action",
                                 "agent_id": agent.agent_id,
+                                "agent_name": agent.name,
+                                "location": location,
                                 "action_type": prepared.action_type,
                                 "requested_action_type": turn.decision.action.type,
+                                **(
+                                    {
+                                        "kind": "self_sacrifice",
+                                        "sacrifice": sacrifice.model_dump(mode="json"),
+                                    }
+                                    if sacrifice is not None
+                                    else {}
+                                ),
                             },
                         )
                     )
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type=prepared.action_type,
+                            summary=summary,
+                            outcome=self._action_outcome(prepared),
+                        )
+                    )
 
-        return PhaseResult(phase=phase, events=events, conflicts=conflicts)
+        if faction_refresh_needed:
+            self._refresh_factions(state)
+
+        return PhaseResult(phase=phase, events=events, conflicts=conflicts), action_resolutions
+
+    def _action_resolution(
+        self,
+        *,
+        phase: Literal["morning", "afternoon"],
+        prepared: PreparedAction,
+        resolved_action_type: str,
+        summary: str,
+        outcome: ActionResolutionOutcome,
+    ) -> ActionResolution:
+        dialogue_target = (
+            prepared.turn.decision.dialogue.target if prepared.turn.decision.dialogue else None
+        )
+        return ActionResolution(
+            phase=phase,
+            agent_id=prepared.agent.agent_id,
+            agent_name=prepared.agent.name,
+            location=prepared.location,
+            requested_action_type=prepared.turn.decision.action.type,
+            resolved_action_type=resolved_action_type,
+            outcome=outcome,
+            cooperation_intent=prepared.turn.decision.cooperation_intent,
+            goal_progress=prepared.turn.decision.goal_progress,
+            summary=summary,
+            target=prepared.turn.decision.action.target,
+            dialogue_target=dialogue_target,
+            suspicion_level=prepared.agent.suspicion_level,
+        )
+
+    def _action_outcome(self, prepared: PreparedAction) -> ActionResolutionOutcome:
+        requested_action = prepared.turn.decision.action.type
+        if prepared.action_type == "self_sacrifice":
+            return "self_sacrifice"
+        if requested_action == prepared.action_type:
+            return "resolved"
+        if prepared.action_type == "observe":
+            return "blocked"
+        if prepared.action_type == "move":
+            return "rerouted"
+        return "resolved"
 
     def _apply_clean_action(
         self, state: SimulationState, agent: EngineAgentState, action_type: str, location: str
@@ -546,6 +776,67 @@ class SimulationEngine:
             state.world_state.resources.power = max(
                 0.0, round(state.world_state.resources.power - 0.9, 2)
             )
+
+    def _apply_self_sacrifice(
+        self, state: SimulationState, agent: EngineAgentState, location: str
+    ) -> SacrificeOutcome:
+        state.world_state.resources.food = round(
+            state.world_state.resources.food + self.SELF_SACRIFICE_RESOURCE_EFFECTS["food"], 2
+        )
+        state.world_state.resources.materials = round(
+            state.world_state.resources.materials
+            + self.SELF_SACRIFICE_RESOURCE_EFFECTS["materials"],
+            2,
+        )
+        state.world_state.threat_level = max(
+            0.0,
+            round(state.world_state.threat_level + self.SELF_SACRIFICE_THREAT_DELTA, 2),
+        )
+
+        agent.status = AgentStatus.DEAD
+        agent.location = location
+        agent.faction_id = None
+        agent.faction_role = None
+        agent.influence = 0.0
+        agent.death_round = state.world_state.round_number
+        agent.death_cause = "self_sacrifice"
+        self._remove_agent_from_occupancy(state, agent.agent_id)
+
+        # This is modeled as a town-wide shock event, not a strict proximity-based witness system.
+        affected_agent_ids: list[str] = []
+        for witness in self._active_agents(state):
+            affected_agent_ids.append(witness.agent_id)
+            witness.suspicion_level = min(
+                100.0,
+                round(witness.suspicion_level + self.SELF_SACRIFICE_SUSPICION_DELTA, 2),
+            )
+            witness.memory = append_recent_event(
+                witness.memory,
+                MemoryEvent(
+                    round_number=state.world_state.round_number,
+                    summary=f"{agent.name} gave up their life at {location}, and the town froze.",
+                    emotional_charge=35,
+                    tags=["self_sacrifice", "death", location],
+                ),
+            )
+
+        outcome = SacrificeOutcome(
+            round_number=state.world_state.round_number,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
+            location=location,
+            action_type="self_sacrifice",
+            reason=(
+                f"{agent.name} performs a ritual self-sacrifice at {location}, "
+                "shocking the town into temporary order."
+            ),
+            threat_delta=self.SELF_SACRIFICE_THREAT_DELTA,
+            resource_effects=dict(self.SELF_SACRIFICE_RESOURCE_EFFECTS),
+            affected_agent_ids=affected_agent_ids,
+        )
+        state.sacrifice_history.append(outcome)
+        state.sacrifice_history = state.sacrifice_history[-12:]
+        return outcome
 
     def _meeting_proposal(self, state: SimulationState) -> str:
         if any(agent.suspicion_level >= 70 for agent in self._active_agents(state)):
@@ -661,6 +952,7 @@ class SimulationEngine:
             agent.location = "perimeter_fence"
             agent.faction_id = None
             agent.faction_role = None
+            self._remove_agent_from_occupancy(state, agent.agent_id)
             break
 
         state.exile_history.append(outcome.exile)
@@ -774,6 +1066,9 @@ class SimulationEngine:
         for agent in state.agents:
             agent.faction_id = None
             agent.faction_role = None
+            if agent.status in {AgentStatus.EXILED, AgentStatus.DEAD}:
+                agent.influence = 0.0
+                continue
             agent.influence = round(self._influence_score(agent), 2)
         faction_map = {
             member_id: faction for faction in factions for member_id in faction.member_ids
@@ -896,6 +1191,7 @@ class SimulationEngine:
                     "pray",
                     "rally",
                     "mourn",
+                    "self_sacrifice",
                 }:
                     cooperative += 1
         if total == 0:
@@ -903,7 +1199,11 @@ class SimulationEngine:
         return round(cooperative / total, 2)
 
     def _active_agents(self, state: SimulationState) -> list[EngineAgentState]:
-        return [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
+        return [
+            agent
+            for agent in state.agents
+            if agent.status not in {AgentStatus.EXILED, AgentStatus.DEAD}
+        ]
 
     def _build_observations(
         self, agent: EngineAgentState, state: SimulationState
@@ -1090,6 +1390,11 @@ class SimulationEngine:
     def _set_agent_tile(self, agent: EngineAgentState, tile: tuple[int, int]) -> None:
         agent.tile_x, agent.tile_y = tile
         agent.location = location_label_for_tile(tile)
+
+    def _remove_agent_from_occupancy(self, state: SimulationState, agent_id: str) -> None:
+        for occupants in state.world_state.location_occupancy.values():
+            while agent_id in occupants:
+                occupants.remove(agent_id)
 
     def _summarize_relationships(self, agents: list[EngineAgentState]) -> str:
         fragments: list[str] = []

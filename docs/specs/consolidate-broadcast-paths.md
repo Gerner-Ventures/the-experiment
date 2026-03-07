@@ -1,12 +1,9 @@
 ---
+title: "Consolidate WS broadcast paths (broadcast_round → RoundHook)"
+status: todo
 priority: P2
 review_status: approved
-status: todo
-tags:
-- stream-2
-- backend
-- refactor
-title: Consolidate WS broadcast paths (broadcast_round → RoundHook)
+tags: [stream-2, backend, refactor]
 ---
 
 # Consolidate WS Broadcast Paths
@@ -65,7 +62,8 @@ Both `_step_streaming` and the updated `step()` need to broadcast `round_end` wi
 - [ ] `_broadcast_round_end()` is shared between `step()` and `_step_streaming()`
 - [ ] WS message sequence is identical for both `step()` and `start_step()` paths
 - [ ] All existing tests pass
-- [ ] Frontend receives same events regardless of which endpoint triggered the round
+- [x] Frontend receives same events regardless of which endpoint triggered the round
+<!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
 
 ## Key Files
 

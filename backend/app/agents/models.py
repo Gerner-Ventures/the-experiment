@@ -58,6 +58,7 @@ ActionType = Literal[
     "monologue",
     "panic",
     "breakdown",
+    "self_sacrifice",
 ]
 SuspicionTrigger = Literal[
     "edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"
@@ -123,6 +124,7 @@ ACTION_TYPES: tuple[ActionType, ...] = (
     "monologue",
     "panic",
     "breakdown",
+    "self_sacrifice",
 )
 
 
