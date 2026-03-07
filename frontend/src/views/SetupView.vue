@@ -13,7 +13,7 @@ import ArcSelector from '@/components/setup/ArcSelector.vue'
 import ParameterControls from '@/components/setup/ParameterControls.vue'
 import type { AgentConfig } from '@/types/agent'
 import { useLocale } from '@/locales'
-import { MIN_AGENTS, DEFAULT_LLM_MODEL } from '@/config/agent-options'
+import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES } from '@/config/agent-options'
 import { CHARACTERS } from '@/config/character-options'
 
 const locale = useLocale()
@@ -48,7 +48,9 @@ const defaultAgents: AgentConfig[] = CHARACTERS.slice(0, MIN_AGENTS).map((char, 
   name: char.name,
   characterId: char.id,
   personality: [],
+  personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
   secretGoal: '',
+  goalArchetype: '',
   llmModel: i % 3 === 2 ? 'gpt-4o' : DEFAULT_LLM_MODEL,
 }))
 const agents = ref<AgentConfig[]>(defaultAgents)

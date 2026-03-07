@@ -1,4 +1,4 @@
-export type { AgentConfig, Agent, AgentStatus, AgentRelationship, AgentPersonality } from './agent'
+export type { AgentConfig, Agent, AgentStatus, AgentRelationship, PersonalityProfile, PersonalityAxes, PersonalityAxis, SecretGoal, GoalArchetype } from './agent'
 export type { Experiment, ExperimentStatus, Resources } from './experiment'
 export type { Arc, Act, ResourcePressure } from './arc'
 export type { GMPlan, CrisisEvent, CrisisEventType, CrisisSeverity } from './gm'

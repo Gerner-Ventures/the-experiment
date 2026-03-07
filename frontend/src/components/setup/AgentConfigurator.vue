@@ -12,6 +12,7 @@ import type { AgentConfig } from '@/types/agent'
 import {
   PERSONALITY_TRAIT_KEYS, GOAL_PRESET_KEYS, LLM_MODELS,
   MAX_PERSONALITY_TRAITS, MIN_AGENTS, MAX_AGENTS, DEFAULT_LLM_MODEL,
+  DEFAULT_PERSONALITY_AXES, GOAL_ARCHETYPE_MAP,
   getTraitLabel, getGoalPreset,
   type PersonalityTrait,
 } from '@/config/agent-options'
@@ -60,7 +61,9 @@ function addAgent() {
     name: nextChar.name,
     characterId: nextChar.id,
     personality: [],
+    personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
     secretGoal: '',
+    goalArchetype: '',
     llmModel: DEFAULT_LLM_MODEL,
   })
   activeKeys.value = [nextId]
@@ -247,7 +250,7 @@ function removeAgent(id: string) {
                 :class="agent.secretGoal === getGoalPreset(key).goal
                   ? '!bg-accent/15 !text-accent !border-accent/30'
                   : '!bg-white/[0.06] !text-white/50 !border-white/[0.12] hover:!bg-white/[0.10] hover:!text-white/70 hover:!border-white/[0.20]'"
-                @click="agent.secretGoal = getGoalPreset(key).goal"
+                @click="agent.secretGoal = getGoalPreset(key).goal; agent.goalArchetype = GOAL_ARCHETYPE_MAP[key]"
               >
                 {{ getGoalPreset(key).label }}
               </Tag>
