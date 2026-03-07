@@ -66,7 +66,6 @@ class TestLangfuseLifecycle:
         assert langfuse._client is None
 
     def test_init_creates_client_when_enabled(self) -> None:
-        import importlib
         import sys
 
         from app.core import langfuse
@@ -361,7 +360,6 @@ class TestTraceContextPropagation:
     async def test_engine_sets_trace_context_for_agent_decisions(self) -> None:
         """Engine should set trace context so agent LLM calls get trace_id/span_id."""
         from app.core import langfuse as lf_module
-        from app.core.langfuse import get_trace_context
 
         mock_trace_obj = MagicMock()
         mock_trace_obj.id = "trace-999"
@@ -562,7 +560,7 @@ class TestRepairAndStatusMetadata:
             lf_module.trace = original_trace  # type: ignore[assignment]
 
 
-def _build_engine_and_state() -> tuple["SimulationEngine", "SimulationState"]:
+def _build_engine_and_state() -> tuple[object, object]:
     from app.agents.models import (
         AgentMemoryState,
         AgentTurnResult,
@@ -572,7 +570,7 @@ def _build_engine_and_state() -> tuple["SimulationEngine", "SimulationState"]:
     )
     from app.engine import EngineAgentState, SimulationEngine, SimulationState
     from app.gm import get_preset_arc
-    from app.gm.models import GMPlanData, GMPlanRecord, GMPlanningContext
+    from app.gm.models import GMPlanRecord, GMPlanningContext
     from app.gm.planner import generate_rule_based_plan
     from app.gm.service import GMService
     from app.schemas.agent_decision import AgentDecision, DecisionAction
