@@ -1,10 +1,9 @@
 import posthog from 'posthog-js'
-import type { App } from 'vue'
 
 const POSTHOG_KEY = import.meta.env.VITE_POSTHOG_KEY as string | undefined
 const POSTHOG_HOST = (import.meta.env.VITE_POSTHOG_HOST as string) || 'https://us.posthog.com'
 
-export function initPostHog(_app: App): void {
+export function initPostHog(): void {
   if (!POSTHOG_KEY) return
 
   posthog.init(POSTHOG_KEY, {
