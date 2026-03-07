@@ -21,6 +21,7 @@ websockets = "^14.0"
 structlog = "^25.1"
 greenlet = "^3.1"
 posthog = "^3.0"
+langfuse = "^2.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -42,4 +43,8 @@ strict = true
 
 [[tool.mypy.overrides]]
 module = "structlog"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "langfuse"
 ignore_missing_imports = true

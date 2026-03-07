@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from random import Random
@@ -10,6 +11,7 @@ from app.agents.memory import append_recent_event
 from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
 from app.agents.suspicion import apply_suspicion_trigger
 from app.agents.service import AgentService
+from app.core import langfuse as lf
 from app.db.models import AgentStatus
 from app.engine.models import (
     ActionResolution,
@@ -40,6 +42,8 @@ from app.world.service import (
     step_toward,
     tile_distance,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -88,10 +92,31 @@ class SimulationEngine:
         self.social_service = social_service or SocialService(random_seed=random_seed + 10)
         self.random = Random(random_seed)
 
+    @staticmethod
+    def _obj_id(obj: object) -> str:
+        return getattr(obj, "id", None) or ""
+
+    @staticmethod
+    def _set_phase_context(trace: object, span: object) -> None:
+        trace_id = SimulationEngine._obj_id(trace)
+        span_id = SimulationEngine._obj_id(span)
+        if trace_id:
+            lf.set_trace_context(trace_id=trace_id, span_id=span_id)
+
     async def run_round(self, state: SimulationState) -> RoundResult:
         round_number = state.current_round + 1
         state.world_state.round_number = round_number
         self._refresh_factions(state)
+
+        trace = lf.trace(
+            name=f"round-{round_number}",
+            session_id=state.experiment_id,
+            metadata={
+                "experiment_id": state.experiment_id,
+                "round_number": round_number,
+                "total_rounds": state.total_rounds,
+            },
+        )
 
         if (
             state.gm_plan
@@ -99,6 +124,7 @@ class SimulationEngine:
             and state.gm_plan.status == "applied"
         ):
             gm_plan = state.gm_plan
+            lf.span(name="gm_plan", parent=trace, metadata={"pre_approved": True})
             gm_result = PhaseResult(
                 phase="gm_plan",
                 events=[
@@ -110,25 +136,59 @@ class SimulationEngine:
                 ],
             )
         else:
+            gm_span = lf.span(name="gm_plan", parent=trace)
+            self._set_phase_context(trace, gm_span)
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
+        dawn_span = lf.span(name="dawn", parent=trace)
+        self._set_phase_context(trace, dawn_span)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
+        morning_span = lf.span(name="morning", parent=trace)
+        self._set_phase_context(trace, morning_span)
         morning_result, morning_turns, morning_actions = await self._action_phase(
-            state, phase="morning", actions_per_agent=2
+            state,
+            phase="morning",
+            actions_per_agent=2,
+            trace=trace,
+            phase_span=morning_span,
         )
         midday_result = self._midday_phase(state)
+        afternoon_span = lf.span(name="afternoon", parent=trace)
+        self._set_phase_context(trace, afternoon_span)
         afternoon_result, afternoon_turns, afternoon_actions = await self._action_phase(
-            state, phase="afternoon", actions_per_agent=1
+            state,
+            phase="afternoon",
+            actions_per_agent=1,
+            trace=trace,
+            phase_span=afternoon_span,
         )
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
-        night_result = await self._night_phase(state, cooperation_ratio)
+        night_span = lf.span(name="night", parent=trace)
+        self._set_phase_context(trace, night_span)
+        night_result = await self._night_phase(
+            state,
+            cooperation_ratio,
+            trace=trace,
+            night_span=night_span,
+        )
 
         state.current_round = round_number
         state.world_state.threat_level = (
             night_result.cooperation_ratio or state.world_state.threat_level
         )
         self._update_experiment_status(state)
+        if trace is not None:
+            try:
+                trace.update(
+                    metadata={
+                        "status": state.status,
+                        "cooperation_ratio": cooperation_ratio,
+                        "threat_level": state.world_state.threat_level,
+                    }
+                )
+            except Exception:
+                logger.warning("langfuse trace.update failed", exc_info=True)
         state.recent_events.extend(
             event.summary
             for phase in [
@@ -150,6 +210,7 @@ class SimulationEngine:
                 *afternoon_turns.get(agent_id, []),
             ]
 
+        lf.reset_trace_context()
         return RoundResult(
             round_number=round_number,
             gm_plan=gm_plan,
@@ -236,6 +297,8 @@ class SimulationEngine:
         *,
         phase: Literal["morning", "afternoon"],
         actions_per_agent: int,
+        trace: object = None,
+        phase_span: object = None,
     ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]], list[ActionResolution]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
         actions: list[PreparedAction] = []
@@ -245,6 +308,16 @@ class SimulationEngine:
         # If one agent moves first, later proximity checks in the same phase will see that
         # updated tile position.
         for agent in self._active_agents(state):
+            agent_span = lf.span(
+                name=f"agent:{agent.name}",
+                parent=phase_span or trace,
+                metadata={"agent_id": agent.agent_id, "agent_name": agent.name},
+            )
+            if agent_span:
+                lf.set_trace_context(
+                    trace_id=self._obj_id(trace),
+                    span_id=self._obj_id(agent_span),
+                )
             turns = []
             for _ in range(actions_per_agent):
                 context = build_agent_context(
@@ -327,7 +400,13 @@ class SimulationEngine:
             events=events,
         )
 
-    async def _night_phase(self, state: SimulationState, cooperation_ratio: float) -> PhaseResult:
+    async def _night_phase(
+        self,
+        state: SimulationState,
+        cooperation_ratio: float,
+        trace: object = None,
+        night_span: object = None,
+    ) -> PhaseResult:
         crisis_severity = (
             _severity_to_float(state.gm_plan.plan.crisis_event.severity) if state.gm_plan else 0.2
         )
@@ -343,6 +422,8 @@ class SimulationEngine:
                     agent,
                     round_number=state.world_state.round_number,
                     cooperation_ratio=cooperation_ratio,
+                    trace=trace,
+                    night_span=night_span,
                 )
                 for agent in active_agents
             ]
@@ -370,7 +451,19 @@ class SimulationEngine:
         *,
         round_number: int,
         cooperation_ratio: float,
+        trace: object = None,
+        night_span: object = None,
     ) -> tuple[str, AgentMemoryState]:
+        memory_span = lf.span(
+            name=f"memory:{agent.name}",
+            parent=night_span or trace,
+            metadata={"agent_id": agent.agent_id, "agent_name": agent.name},
+        )
+        if memory_span:
+            lf.set_trace_context(
+                trace_id=self._obj_id(trace),
+                span_id=self._obj_id(memory_span),
+            )
         reflection = f"{agent.name} ends the night feeling {self._night_mood(agent.suspicion_level, cooperation_ratio)}."
         updated_memory = await self.agent_service.register_observation(
             agent.memory,

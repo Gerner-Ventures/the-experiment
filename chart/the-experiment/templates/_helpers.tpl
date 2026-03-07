@@ -144,6 +144,14 @@ Secret name helpers
 {{- end -}}
 {{- end }}
 
+{{- define "the-experiment.langfuseSecretName" -}}
+{{- if .Values.secrets.langfuse.existingSecret -}}
+{{ .Values.secrets.langfuse.existingSecret }}
+{{- else -}}
+{{ include "the-experiment.fullname" . }}-langfuse
+{{- end -}}
+{{- end }}
+
 {{- define "the-experiment.postgresSelectorLabels" -}}
 {{ include "the-experiment.selectorLabels" . }}
 app.kubernetes.io/component: postgres

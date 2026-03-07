@@ -63,3 +63,4 @@ alembic/versions/*.pyc
 # Assets (large binaries tracked separately)
 *.psd
 *.ai
+uv.lock

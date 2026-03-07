@@ -7,6 +7,7 @@ import litellm
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
+from app.core.langfuse import get_trace_context, log_event
 from app.llm.config import get_default_model_configs
 from app.llm.models import LLMModelConfig, LLMRequest, LLMResult, LLMUsage, RepairAttempt
 from app.llm.tracker import UsageTracker
@@ -17,6 +18,7 @@ class LLMClient:
         self.settings = get_settings()
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
+        self._register_langfuse_callbacks()
         router_cls = cast(Any, getattr(litellm, "Router"))
         self.router = router_cls(
             model_list=self._build_model_list(),
@@ -27,8 +29,21 @@ class LLMClient:
             set_verbose=False,
         )
 
+    def _register_langfuse_callbacks(self) -> None:
+        if not self.settings.langfuse_enabled:
+            return
+        if "langfuse" not in litellm.success_callback:
+            litellm.success_callback.append("langfuse")
+        if "langfuse" not in litellm.failure_callback:
+            litellm.failure_callback.append("langfuse")
+
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         model_config = self._resolve_model_config(request)
+        metadata = {
+            **request.metadata,
+            **get_trace_context(),
+            "generation_name": request.role,
+        }
         response = await self.router.acompletion(
             model=request.model_override or model_config.primary_model,
             messages=cast(Any, request.messages),
@@ -37,13 +52,17 @@ class LLMClient:
             if request.temperature is not None
             else model_config.temperature,
             timeout=model_config.timeout_seconds,
-            metadata=request.metadata,
+            metadata=metadata,
         )
         result = self._build_result(response)
 
         if request.response_format is not None:
             parsed = self._parse_structured_content(result.content, request.response_format)
             if parsed is None:
+                log_event(
+                    name="json_repair_attempted",
+                    metadata={"role": request.role, "original_content": result.content[:500]},
+                )
                 repaired = await self._repair_json(request, result)
                 if repaired is not None:
                     result = repaired
@@ -157,7 +176,12 @@ class LLMClient:
             messages=cast(Any, repair_messages),
             temperature=0,
             timeout=model_config.timeout_seconds,
-            metadata={**request.metadata, "repair_pass": True},
+            metadata={
+                **request.metadata,
+                **get_trace_context(),
+                "generation_name": f"{request.role}:repair",
+                "repair_pass": True,
+            },
         )
         repaired_result = self._build_result(repair_response)
         response_format = request.response_format
