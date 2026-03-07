@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 
 from app.api.models import (
     AnalyticsSummary,
@@ -27,7 +27,7 @@ from app.api.models import (
     UpdateArcRequest,
     UsageReport,
 )
-from app.api.runtime import runtime
+from app.api.runtime import ExperimentRuntime
 from app.engine import EngineAgentState, SimulationState
 from app.gm.models import GMPlanRecord
 from app.schemas.ws_message import WSMessage
@@ -44,8 +44,9 @@ router = APIRouter(prefix="/experiments", tags=["experiments"])
         "world, agents, and arc configuration."
     ),
 )
-async def create_experiment(request: CreateExperimentRequest) -> ExperimentDetail:
-    state = await runtime.create_experiment(request)
+async def create_experiment(request: Request, body: CreateExperimentRequest) -> ExperimentDetail:
+    runtime = _runtime_from_request(request)
+    state = await runtime.create_experiment(body)
     return _detail(state)
 
 
@@ -55,8 +56,9 @@ async def create_experiment(request: CreateExperimentRequest) -> ExperimentDetai
     summary="Get experiment state",
     description="Fetch the current experiment state, including agents, world state, and GM plan.",
 )
-async def get_experiment(experiment_id: str) -> ExperimentDetail:
-    state = await _get_state(experiment_id)
+async def get_experiment(experiment_id: str, request: Request) -> ExperimentDetail:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
     return _detail(state)
 
 
@@ -66,9 +68,12 @@ async def get_experiment(experiment_id: str) -> ExperimentDetail:
     summary="Start an experiment",
     description="Transition an experiment from setup or pause into the running state.",
 )
-async def start_experiment(experiment_id: str) -> ExperimentSummary:
-    state = await runtime.start(experiment_id)
-    return _summary(state)
+async def start_experiment(experiment_id: str, request: Request) -> ExperimentSummary:
+    runtime = _runtime_from_request(request)
+    try:
+        return _summary(await runtime.start(experiment_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 
 @router.post(
@@ -77,9 +82,12 @@ async def start_experiment(experiment_id: str) -> ExperimentSummary:
     summary="Pause an experiment",
     description="Pause the active experiment without mutating the current round state.",
 )
-async def pause_experiment(experiment_id: str) -> ExperimentSummary:
-    state = await runtime.pause(experiment_id)
-    return _summary(state)
+async def pause_experiment(experiment_id: str, request: Request) -> ExperimentSummary:
+    runtime = _runtime_from_request(request)
+    try:
+        return _summary(await runtime.pause(experiment_id))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 
 @router.post(
@@ -88,10 +96,13 @@ async def pause_experiment(experiment_id: str) -> ExperimentSummary:
     summary="Advance one round",
     description="Start a simulation round in the background. Results stream over WebSocket.",
 )
-async def step_experiment(experiment_id: str) -> StepStartedResponse:
-    state = await _get_state(experiment_id)
+async def step_experiment(experiment_id: str, request: Request) -> StepStartedResponse:
+    runtime = _runtime_from_request(request)
     try:
+        state = await runtime.get_state(experiment_id)
         runtime.start_step(experiment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
     except RuntimeError:
         raise HTTPException(status_code=409, detail="A round is already in progress")
     return StepStartedResponse(
@@ -107,10 +118,15 @@ async def step_experiment(experiment_id: str) -> StepStartedResponse:
     description="Append an out-of-band observer event that raises tension inside the experiment.",
 )
 async def inject_observer_event(
-    experiment_id: str, request: ObserverEventRequest
+    experiment_id: str,
+    request: Request,
+    body: ObserverEventRequest,
 ) -> ExperimentDetail:
-    state = await runtime.inject_observer_event(experiment_id, request.description)
-    return _detail(state)
+    runtime = _runtime_from_request(request)
+    try:
+        return _detail(await runtime.inject_observer_event(experiment_id, body.description))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 
 @router.get(
@@ -121,9 +137,12 @@ async def inject_observer_event(
         "upcoming round."
     ),
 )
-async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
-    await _get_state(experiment_id)
-    return await runtime.get_or_generate_gm_plan(experiment_id)
+async def get_gm_plan(experiment_id: str, request: Request) -> GMPlanRecord:
+    runtime = _runtime_from_request(request)
+    try:
+        return await runtime.get_or_generate_gm_plan(experiment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 
 @router.post(
@@ -133,9 +152,16 @@ async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
         "Approve the pending GM plan as-is, or submit a modified plan payload to apply " "instead."
     ),
 )
-async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> GMPlanRecord:
-    await _get_state(experiment_id)
-    return await runtime.approve_gm_plan(experiment_id, request.modified_plan)
+async def approve_gm_plan(
+    experiment_id: str,
+    request: Request,
+    body: ApproveGMPlanRequest,
+) -> GMPlanRecord:
+    runtime = _runtime_from_request(request)
+    try:
+        return await runtime.approve_gm_plan(experiment_id, body.modified_plan)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 
 @router.put(
@@ -144,9 +170,16 @@ async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> 
     summary="Replace the active narrative arc",
     description="Swap the current director arc for a new one while the experiment is in progress.",
 )
-async def update_arc(experiment_id: str, request: UpdateArcRequest) -> ExperimentDetail:
-    state = await runtime.update_arc(experiment_id, request.arc)
-    return _detail(state)
+async def update_arc(
+    experiment_id: str,
+    request: Request,
+    body: UpdateArcRequest,
+) -> ExperimentDetail:
+    runtime = _runtime_from_request(request)
+    try:
+        return _detail(await runtime.update_arc(experiment_id, body.arc))
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 
 @router.get(
@@ -154,8 +187,9 @@ async def update_arc(experiment_id: str, request: UpdateArcRequest) -> Experimen
     summary="List experiment agents",
     description="Return the current state for every agent participating in the experiment.",
 )
-async def list_agents(experiment_id: str) -> list[EngineAgentState]:
-    await _get_state(experiment_id)
+async def list_agents(experiment_id: str, request: Request) -> list[EngineAgentState]:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return await runtime.list_agents(experiment_id)
 
 
@@ -164,8 +198,9 @@ async def list_agents(experiment_id: str) -> list[EngineAgentState]:
     summary="Get an agent dossier",
     description="Return the detailed state for a single agent, including memory, relationships, and status.",
 )
-async def get_agent_dossier(experiment_id: str, agent_id: str) -> EngineAgentState:
-    await _get_state(experiment_id)
+async def get_agent_dossier(experiment_id: str, agent_id: str, request: Request) -> EngineAgentState:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     try:
         return await runtime.get_agent(experiment_id, agent_id)
     except KeyError as exc:
@@ -180,6 +215,7 @@ async def get_agent_dossier(experiment_id: str, agent_id: str) -> EngineAgentSta
 )
 async def get_event_log(
     experiment_id: str,
+    request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     phase: str | None = None,
@@ -187,7 +223,8 @@ async def get_event_log(
     agent_id: str | None = None,
     round_number: int | None = Query(default=None, ge=1),
 ) -> EventLogPage:
-    await _get_state(experiment_id)
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     items, total = await runtime.get_log(
         experiment_id,
         limit=limit,
@@ -209,8 +246,9 @@ async def get_event_log(
         "exiled agents, faction counts, resources, threat, and cooperation score."
     ),
 )
-async def get_analytics_summary(experiment_id: str) -> AnalyticsSummary:
-    state = await _get_state(experiment_id)
+async def get_analytics_summary(experiment_id: str, request: Request) -> AnalyticsSummary:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
     return await runtime.get_analytics_summary(experiment_id, state=state)
 
 
@@ -220,8 +258,9 @@ async def get_analytics_summary(experiment_id: str) -> AnalyticsSummary:
     summary="Get round analytics",
     description="Return round-level report data including cooperation, betrayal counts, and GM narration.",
 )
-async def get_round_analytics(experiment_id: str) -> RoundAnalyticsPage:
-    await _get_state(experiment_id)
+async def get_round_analytics(experiment_id: str, request: Request) -> RoundAnalyticsPage:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return RoundAnalyticsPage(items=await runtime.get_round_analytics(experiment_id))
 
 
@@ -231,8 +270,9 @@ async def get_round_analytics(experiment_id: str) -> RoundAnalyticsPage:
     summary="Get goal analytics",
     description="Return per-agent goal progress history and a derived final outcome summary.",
 )
-async def get_goal_analytics(experiment_id: str) -> GoalAnalytics:
-    state = await _get_state(experiment_id)
+async def get_goal_analytics(experiment_id: str, request: Request) -> GoalAnalytics:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
     return GoalAnalytics(items=await runtime.get_goal_analytics(experiment_id, state=state))
 
 
@@ -242,8 +282,9 @@ async def get_goal_analytics(experiment_id: str) -> GoalAnalytics:
     summary="Get betrayal analytics",
     description="Return sabotage, hostile-action, and exile timeline entries.",
 )
-async def get_betrayal_analytics(experiment_id: str) -> BetrayalAnalytics:
-    state = await _get_state(experiment_id)
+async def get_betrayal_analytics(experiment_id: str, request: Request) -> BetrayalAnalytics:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
     return BetrayalAnalytics(items=await runtime.get_betrayal_analytics(experiment_id, state=state))
 
 
@@ -253,8 +294,9 @@ async def get_betrayal_analytics(experiment_id: str) -> BetrayalAnalytics:
     summary="Get suspicion analytics",
     description="Return the round-by-round suspicion heatmap and per-agent suspicion history.",
 )
-async def get_suspicion_analytics(experiment_id: str) -> SuspicionAnalytics:
-    await _get_state(experiment_id)
+async def get_suspicion_analytics(experiment_id: str, request: Request) -> SuspicionAnalytics:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return await runtime.get_suspicion_analytics(experiment_id)
 
 
@@ -264,8 +306,9 @@ async def get_suspicion_analytics(experiment_id: str) -> SuspicionAnalytics:
     summary="Get relationship analytics",
     description="Return relationship edges derived from persisted agent relationship memory.",
 )
-async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytics:
-    state = await _get_state(experiment_id)
+async def get_relationship_analytics(experiment_id: str, request: Request) -> RelationshipAnalytics:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
     return RelationshipAnalytics(
         items=await runtime.get_relationship_analytics(experiment_id, state=state)
     )
@@ -277,8 +320,9 @@ async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytic
     summary="Get faction analytics",
     description="Return the current alliance/cult state plus faction pressure timeline and membership changes.",
 )
-async def get_faction_analytics(experiment_id: str) -> FactionAnalytics:
-    state = await _get_state(experiment_id)
+async def get_faction_analytics(experiment_id: str, request: Request) -> FactionAnalytics:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
     return await runtime.get_faction_analytics(experiment_id, state=state)
 
 
@@ -288,8 +332,9 @@ async def get_faction_analytics(experiment_id: str) -> FactionAnalytics:
     summary="Get GM timeline analytics",
     description="Return the round-by-round GM narration and crisis timeline.",
 )
-async def get_gm_timeline(experiment_id: str) -> GMTimelinePage:
-    await _get_state(experiment_id)
+async def get_gm_timeline(experiment_id: str, request: Request) -> GMTimelinePage:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return GMTimelinePage(items=await runtime.get_gm_timeline(experiment_id))
 
 
@@ -299,8 +344,9 @@ async def get_gm_timeline(experiment_id: str) -> GMTimelinePage:
     summary="Get experiment highlights",
     description="Return the highest-signal events derived from the persisted event log.",
 )
-async def get_highlights(experiment_id: str) -> HighlightPage:
-    await _get_state(experiment_id)
+async def get_highlights(experiment_id: str, request: Request) -> HighlightPage:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return HighlightPage(items=await runtime.get_highlights(experiment_id))
 
 
@@ -310,8 +356,9 @@ async def get_highlights(experiment_id: str) -> HighlightPage:
     summary="Get replay index",
     description="Return a round-by-round replay index with summaries, threat levels, and highlights.",
 )
-async def get_replay_index(experiment_id: str) -> ReplayIndex:
-    await _get_state(experiment_id)
+async def get_replay_index(experiment_id: str, request: Request) -> ReplayIndex:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return await runtime.get_replay_index(experiment_id)
 
 
@@ -321,8 +368,13 @@ async def get_replay_index(experiment_id: str) -> ReplayIndex:
     summary="Get round snapshot",
     description="Return the stored world snapshot and event log entries for a completed round.",
 )
-async def get_round_snapshot(experiment_id: str, round_number: int) -> RoundSnapshotResponse:
-    await _get_state(experiment_id)
+async def get_round_snapshot(
+    experiment_id: str,
+    round_number: int,
+    request: Request,
+) -> RoundSnapshotResponse:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     try:
         return await runtime.get_round_snapshot(experiment_id, round_number)
     except KeyError as exc:
@@ -340,10 +392,12 @@ async def get_round_snapshot(experiment_id: str, round_number: int) -> RoundSnap
 )
 async def get_usage_report(
     experiment_id: str,
+    request: Request,
     round_number: int | None = Query(default=None, ge=1),
     agent_id: str | None = None,
 ) -> UsageReport:
-    await _get_state(experiment_id)
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     return await runtime.get_usage_report(
         experiment_id,
         round_number=round_number,
@@ -362,13 +416,15 @@ async def get_usage_report(
 )
 async def get_prompt_traces(
     experiment_id: str,
+    request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     round_number: int | None = Query(default=None, ge=1),
     agent_id: str | None = None,
     role: str | None = Query(default=None, pattern="^(gm|agent|memory)$"),
 ) -> PromptTracePage:
-    await _get_state(experiment_id)
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
     items, total = await runtime.get_prompt_traces(
         experiment_id,
         limit=limit,
@@ -382,7 +438,8 @@ async def get_prompt_traces(
 
 @router.websocket("/{experiment_id}/ws")
 async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
-    await _get_state(experiment_id)
+    runtime = _runtime_from_websocket(websocket)
+    await _get_state(runtime, experiment_id)
     await runtime.connection_manager.connect(experiment_id, websocket)
     try:
         await websocket.send_json(
@@ -399,11 +456,23 @@ async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
         runtime.connection_manager.disconnect(experiment_id, websocket)
 
 
-async def _get_state(experiment_id: str) -> SimulationState:
+async def _get_state(runtime: ExperimentRuntime, experiment_id: str) -> SimulationState:
     try:
         return await runtime.get_state(experiment_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
+
+
+def _runtime_from_request(request: Request) -> ExperimentRuntime:
+    runtime = getattr(request.app.state, "runtime", None)
+    assert isinstance(runtime, ExperimentRuntime), "app.state.runtime not configured"
+    return runtime
+
+
+def _runtime_from_websocket(websocket: WebSocket) -> ExperimentRuntime:
+    runtime = getattr(websocket.app.state, "runtime", None)
+    assert isinstance(runtime, ExperimentRuntime), "app.state.runtime not configured"
+    return runtime
 
 
 def _summary(state: SimulationState) -> ExperimentSummary:

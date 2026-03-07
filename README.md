@@ -85,6 +85,26 @@ default no-setup path; add `--mode live` only when the relevant provider API key
 your shell environment. If you want the raw report too, add
 `HEADLESS_JSON_OUT=/tmp/headless-report.json`.
 
+### Local Backend E2E Smoke
+
+Use this path when you need the real FastAPI app, real HTTP routes, websockets, and Postgres-backed
+persistence instead of the fast in-memory headless runner.
+
+```bash
+make migrate
+BACKEND_RUNTIME_MODE=smoke_mock make backend-run
+make backend-e2e
+```
+
+Notes:
+
+- `backend-run` starts `uvicorn app.main:app` from `backend/`
+- `backend-e2e` drives `/api/health`, experiment creation, GM plan approval, one round step, log,
+  analytics, replay, snapshot, and websocket assertions against `http://127.0.0.1:8000` by default
+- this workflow requires local Postgres via `DATABASE_URL`
+- `smoke_mock` is the repeatable no-provider-key mode; use `BACKEND_RUNTIME_MODE=smoke_live` only
+  when you intentionally want the live LLM-backed services
+
 ## Work Streams
 
 Development is split into 3 parallel work streams. See [docs/WORKSTREAMS.md](docs/WORKSTREAMS.md) for the full breakdown.

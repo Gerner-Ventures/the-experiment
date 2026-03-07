@@ -142,14 +142,27 @@ HEADLESS_SEED ?= 11
 HEADLESS_JSON_OUT ?=
 HEADLESS_CONFIG ?=
 HEADLESS_ARGS = --rounds $(HEADLESS_ROUNDS) --seed $(HEADLESS_SEED) $(if $(HEADLESS_JSON_OUT),--json-out $(HEADLESS_JSON_OUT),) $(if $(HEADLESS_CONFIG),--config $(HEADLESS_CONFIG),)
+BACKEND_HOST ?= 127.0.0.1
+BACKEND_PORT ?= 8000
+BACKEND_BASE_URL ?= http://$(BACKEND_HOST):$(BACKEND_PORT)
+BACKEND_RUNTIME_MODE ?= default
 
-.PHONY: headless headless-live
+.PHONY: headless headless-live backend-run backend-e2e backend-e2e-live
 
 headless: ## Run the mock headless backend simulation
 	cd backend && poetry run python -m app.headless.cli --mode mock $(HEADLESS_ARGS)
 
 headless-live: ## Run the live-LLM headless backend simulation
 	cd backend && poetry run python -m app.headless.cli --mode live $(HEADLESS_ARGS)
+
+backend-run: ## Run the FastAPI backend locally (set BACKEND_RUNTIME_MODE=smoke_mock for smoke mode)
+	cd backend && BACKEND_RUNTIME_MODE=$(BACKEND_RUNTIME_MODE) poetry run uvicorn app.main:app --host $(BACKEND_HOST) --port $(BACKEND_PORT) --reload
+
+backend-e2e: ## Run the backend HTTP + websocket smoke client against the running server
+	cd backend && poetry run python -m app.e2e.smoke --base-url $(BACKEND_BASE_URL)
+
+backend-e2e-live: ## Run the smoke client against a live-mode backend server
+	cd backend && poetry run python -m app.e2e.smoke --base-url $(BACKEND_BASE_URL)
 
 # ============================================================================
 # Linting & Formatting
