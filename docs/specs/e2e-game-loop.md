@@ -52,6 +52,7 @@ Backend sends types frontend doesn't handle: `connected`, `faction_update`, `cul
 - [ ] Game completes > experiment_end > redirect to report
 - [ ] Full loop works with MockAgentBrain
 - [ ] Error handling for API failures and WS disconnects
+<!-- specwright:realized-in:PR#67 file:backend/app/agents/brain.py -->
 
 ## Key Files
 

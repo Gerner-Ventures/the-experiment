@@ -5,8 +5,12 @@ from typing import Any
 
 import pytest
 
-from app.llm import LLMClient, LLMService, get_default_model_configs
-from app.llm.models import UsageRecord, LLMUsage
+import app.llm.client as llm_client_module
+import app.llm.config as llm_config_module
+from app.core.config import Settings
+from app.llm import LLMClient, get_default_model_configs
+from app.llm.models import LLMUsage, LLMResult, UsageRecord
+from app.llm.service import LLMService
 from app.schemas.agent_decision import AgentDecision
 from app.schemas.gm_plan import GMPlanRead
 
@@ -48,12 +52,37 @@ class _FakeRouter:
         return self.responses.pop(0)
 
 
+class _FakeLLMClient:
+    def __init__(self, result: LLMResult) -> None:
+        self._result = result
+
+    async def generate_structured(self, request: Any) -> LLMResult:
+        return self._result
+
+
 @pytest.mark.asyncio
 async def test_defaults_include_gm_and_agent_configs() -> None:
     configs = get_default_model_configs()
-    assert set(configs) == {"gm", "agent"}
+    assert set(configs) == {"gm", "agent", "memory"}
     assert configs["gm"].primary_model
     assert configs["agent"].fallback_models
+    assert configs["memory"].fallback_models
+
+
+def test_router_model_list_includes_memory_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = Settings(
+        memory_model="anthropic/claude-3-5-sonnet-20241022",
+        memory_fallback_model="openai/gpt-4o-mini",
+    )
+    monkeypatch.setattr(llm_client_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(llm_config_module, "get_settings", lambda: settings)
+
+    client = LLMClient()
+    model_names = {entry["model_name"] for entry in client.router.model_list}
+
+    assert "anthropic/claude-3-5-sonnet-20241022" in model_names
+    assert "openai/gpt-4o-mini" in model_names
+    assert {settings.memory_model: [settings.memory_fallback_model]} in client._build_fallbacks()
 
 
 @pytest.mark.asyncio
@@ -162,6 +191,23 @@ async def test_usage_summary_groups_by_agent_and_round() -> None:
     assert summary.request_count == 2
     assert summary.total_tokens == 27
     assert summary.cost_usd == 0.0022
+
+
+@pytest.mark.asyncio
+async def test_memory_classifier_raises_when_result_is_unparsed() -> None:
+    service = LLMService(client=_FakeLLMClient(LLMResult(model="openai/gpt-4o-mini", content="{}")))
+
+    with pytest.raises(
+        ValueError, match="memory classification returned no parsed structured payload"
+    ):
+        await service.classify_memory_event(
+            event=type(
+                "Event", (), {"model_dump": lambda self, mode="json": {}, "round_number": 1}
+            )(),
+            goal=None,
+            suspicion_level=0,
+            recent_key_memories=[],
+        )
 
 
 def client_request(role: str, response_format: type[Any], metadata: dict[str, object]) -> Any:

@@ -17,6 +17,9 @@ dist/
 .output/
 *.tsbuildinfo
 
+# Yarn
+**/.yarn/install-state.gz
+
 # IDE
 .vscode/
 .idea/

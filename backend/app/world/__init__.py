@@ -4,8 +4,14 @@ from app.world.service import (
     build_default_world_state,
     calculate_threat_level,
     create_world_snapshot,
+    get_location_type,
+    location_label_for_tile,
     load_default_world_map,
+    resolve_location_target,
+    resolve_spawn_tile,
     restore_world_snapshot,
+    step_toward,
+    tile_distance,
 )
 
 __all__ = [
@@ -14,6 +20,12 @@ __all__ = [
     "build_default_world_state",
     "calculate_threat_level",
     "create_world_snapshot",
+    "get_location_type",
+    "location_label_for_tile",
     "load_default_world_map",
+    "resolve_location_target",
+    "resolve_spawn_tile",
     "restore_world_snapshot",
+    "step_toward",
+    "tile_distance",
 ]

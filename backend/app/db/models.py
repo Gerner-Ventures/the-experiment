@@ -164,6 +164,8 @@ class Agent(TimestampMixin, Base):
     secret_goal: Mapped[str] = mapped_column(Text, nullable=False)
     llm_model: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[str | None] = mapped_column(String(255))
+    tile_x: Mapped[int | None] = mapped_column(Integer)
+    tile_y: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[AgentStatus] = mapped_column(
         Enum(AgentStatus, name="agent_status"),
         default=AgentStatus.IDLE,
