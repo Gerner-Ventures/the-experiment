@@ -12,6 +12,7 @@ from app.agents.models import (
     SecretGoal,
 )
 from app.agents.service import AgentService
+from app.db.models import AgentStatus
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
 from app.gm import get_preset_arc
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
@@ -306,37 +307,6 @@ async def test_engine_forms_cults_and_applies_exile_results() -> None:
     state.world_state.threat_level = 72
     state.agents[0].relationships["a2"] = RelationshipMemory(trust=4, history=[], notes=None)
     state.agents[1].relationships["a1"] = RelationshipMemory(trust=3, history=[], notes=None)
-    engine = SimulationEngine(agent_service=service, random_seed=8)
-
-    result = await engine.run_round(state)
-
-    midday_kinds = {
-        event.data.get("kind")
-        for event in result.phases[3].events
-        if isinstance(event.data.get("kind"), str)
-    }
-    assert "cult_activity" in midday_kinds
-    assert "exile_vote" in midday_kinds
-    assert state.exile_history
-    assert state.agents[0].status == "exiled"
-
-
-@pytest.mark.asyncio
-async def test_engine_forms_cults_and_applies_exile_results() -> None:
-    service = _StubAgentService(
-        {
-            "a1": [("talk", "town_hall"), ("pray", "town_hall"), ("observe", "town_hall")],
-            "a2": [("talk", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
-            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
-        }
-    )
-    state = _state()
-    state.agents[0].goal.archetype = "belief_transformation"
-    state.agents[0].personality.trait_tags = ["devout", "guarded"]
-    state.agents[0].suspicion_level = 85
-    state.world_state.threat_level = 72
-    state.agents[0].relationships["a2"] = RelationshipMemory(trust=4, history=[], notes=None)
-    state.agents[1].relationships["a1"] = RelationshipMemory(trust=3, history=[], notes=None)
     state.agents[0].location = "town_hall"
     state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
     state.agents[1].location = "town_hall"
@@ -355,4 +325,4 @@ async def test_engine_forms_cults_and_applies_exile_results() -> None:
     assert "cult_activity" in midday_kinds
     assert "exile_vote" in midday_kinds
     assert state.exile_history
-    assert state.agents[0].status == "exiled"
+    assert state.agents[0].status == AgentStatus.EXILED

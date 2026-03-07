@@ -43,11 +43,13 @@ def _locations_by_id() -> dict[str, object]:
     return {location.id: location for location in DEFAULT_WORLD_MAP.locations}
 
 
-def _location_entry_tiles(location_id: str) -> set[tuple[int, int]]:
+@lru_cache(maxsize=None)
+def _location_entry_tiles(location_id: str) -> frozenset[tuple[int, int]]:
     if location_id == "town_square":
-        return {DEFAULT_SPAWN_TILE}
+        return frozenset({DEFAULT_SPAWN_TILE})
     if location_id == "perimeter_fence":
-        return {
+        return frozenset(
+            {
             (tile.x, tile.y)
             for tile in DEFAULT_WORLD_MAP.tiles
             if tile.walkable
@@ -55,12 +57,15 @@ def _location_entry_tiles(location_id: str) -> set[tuple[int, int]]:
                 tile.x in {1, DEFAULT_WORLD_MAP.width - 2}
                 or tile.y in {1, DEFAULT_WORLD_MAP.height - 2}
             )
+            }
+        )
+    return frozenset(
+        {
+            (tile.x, tile.y)
+            for tile in DEFAULT_WORLD_MAP.tiles
+            if tile.walkable and tile.location_id == location_id
         }
-    return {
-        (tile.x, tile.y)
-        for tile in DEFAULT_WORLD_MAP.tiles
-        if tile.walkable and tile.location_id == location_id
-    }
+    )
 
 
 def resolve_spawn_tile(location_id: str | None) -> tuple[int, int]:
@@ -74,7 +79,7 @@ def resolve_spawn_tile(location_id: str | None) -> tuple[int, int]:
 def resolve_location_target(location_id: str | None) -> set[tuple[int, int]]:
     if location_id is None:
         return set()
-    return _location_entry_tiles(location_id)
+    return set(_location_entry_tiles(location_id))
 
 
 def get_location_type(location_id: str | None) -> str | None:
@@ -133,6 +138,7 @@ def get_adjacent_walkable_tiles(tile: tuple[int, int]) -> list[tuple[int, int]]:
     return [neighbor for neighbor in neighbors if neighbor in walkable]
 
 
+@lru_cache(maxsize=None)
 def location_label_for_tile(tile: tuple[int, int]) -> str:
     location_id = _tile_location_ids().get(tile)
     if location_id is not None:
