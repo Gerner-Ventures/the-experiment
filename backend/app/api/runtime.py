@@ -266,6 +266,58 @@ class ExperimentRuntime:
                     data={"events": [event.model_dump(mode="json") for event in phase.events]},
                 ),
             )
+            for event in phase.events:
+                kind = event.data.get("kind")
+                if kind == "agent_speak":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "agent_speak",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_start":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_start",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_speech":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_speech",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_vote":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_vote",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_result":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_result",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
         for agent_id, turns in round_result.agent_turns.items():
             for turn in turns:
                 await self.connection_manager.broadcast(
