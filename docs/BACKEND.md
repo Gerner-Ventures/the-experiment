@@ -20,7 +20,7 @@ flowchart LR
     ENGINE --> WORLD["World services"]
     RUNTIME --> WS["ConnectionManager"]
     GM --> LLM["LiteLLM-backed providers"]
-    AGENTS --> LLM
+    AGENTS --> LLM["LiteLLM-backed providers"]
 ```
 
 ## Code Layout
@@ -33,7 +33,7 @@ flowchart LR
 | `backend/app/api/store.py` | Store interface plus in-memory and SQLAlchemy-backed implementations |
 | `backend/app/engine/` | Core simulation loop and round-phase execution |
 | `backend/app/gm/` | Director arc models, preset arcs, GM planning/generation |
-| `backend/app/agents/` | Agent prompts, decisions, memory handling, relationship state |
+| `backend/app/agents/` | Agent prompts, decisions, observation recording, memory consolidation, relationship state |
 | `backend/app/social/` | Meetings, conversations, relationship deltas |
 | `backend/app/world/` | World map, locations, resources, threat model |
 | `backend/app/db/` | SQLAlchemy models and async session setup |
@@ -115,7 +115,7 @@ The backend settings are defined in `backend/app/core/config.py` and sample valu
 | `GM_FALLBACK_MODEL` | `openai/gpt-4o-mini` | No | Fallback GM model |
 | `AGENT_MODEL` | `openai/gpt-4o-mini` | No | Primary model for agent decisions |
 | `AGENT_FALLBACK_MODEL` | `anthropic/claude-3-5-haiku-20241022` | No | Fallback agent model |
-| `MEMORY_MODEL` | `openai/gpt-4o-mini` | No | Model used for memory consolidation |
+| `MEMORY_MODEL` | `openai/gpt-4o-mini` | No | Model used for observation classification and memory/relationship consolidation |
 | `LLM_TIMEOUT_SECONDS` | `45` | No | Per-request timeout for LLM calls |
 | `LLM_MAX_RETRIES` | `2` | No | Retries before falling back |
 | `LLM_MAX_FALLBACKS` | `2` | No | Number of fallback attempts |
@@ -125,6 +125,26 @@ Provider guidance:
 
 - You do not need every provider key, only the keys required by the model aliases you configured.
 - If you change model families, make sure the matching API key is present.
+
+## Agent Memory Pipeline
+
+PR 47 expands the agent runtime beyond one decision call per turn. Memory now has three distinct behaviors:
+
+1. Decision-time updates:
+   `AgentBrain.decide` still appends a recent event for the chosen action and may add a deterministic key memory for strongly selfish decisions.
+2. Observation registration:
+   `AgentService.register_observation` appends a `recent_events` item and can call the memory model to decide whether that observation should be promoted into `key_memories`, including a salience classification such as `threat`, `goal_clue`, or `relationship`.
+3. Night consolidation:
+   the engine now runs asynchronous night-time reflection work across active agents, using the memory model to:
+   - classify the reflective observation
+   - summarize unconsolidated recent events into a higher-level key memory once enough events accumulate
+   - compress relationship history into stable relationship notes once enough interaction history exists
+
+Important implementation detail:
+
+- memory classification and consolidation calls use the `agent` usage role, but they can run on a different model via `MEMORY_MODEL`
+- conversation observations are recorded without running the classifier inline, while relationship trust still updates during the social phase
+- relationship consolidation writes durable notes and a history signature so the same history is not repeatedly re-summarized
 
 ## Persistence And Runtime Boundaries
 
@@ -151,6 +171,7 @@ This means a backend restart should preserve experiment state, but not live subs
 - `step` does not currently require prior manual GM approval. If you need to override the next GM plan, call `GET /gm/plan` and `POST /gm/approve` before stepping.
 - The WebSocket endpoint is outbound-only. Use REST for control actions like stepping, pausing, injecting events, or approving plans.
 - Analytics, replay, and usage endpoints are assembled from persisted state and logs rather than from a separate reporting system.
+- Usage totals and traces for `role=agent` include both decision prompts and memory-classification / consolidation prompts.
 
 ## Where To Change What
 

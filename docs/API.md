@@ -222,6 +222,7 @@ Common event types:
 
 - grouped totals by role, model, agent, and round
 - prompt-level traces with pagination and optional `round_number`, `agent_id`, and `role` filters
+- `role=agent` includes both agent decision prompts and the memory-classification / consolidation prompts introduced by the memory system
 
 ## WebSocket Stream
 
