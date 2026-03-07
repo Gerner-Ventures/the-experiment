@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import random
+from typing import cast
 
+from app.agents.brain import AgentBrain
 from app.agents.models import (
     ACTION_TYPES,
     AgentContext,
@@ -13,7 +15,7 @@ from app.agents.models import (
 )
 from app.agents.memory import add_key_memory, append_recent_event
 from app.agents.suspicion import apply_suspicion_trigger
-from app.schemas.agent_decision import AgentDecision, DecisionAction, Dialogue
+from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType, Dialogue
 
 # Weighted by personality
 COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
@@ -41,7 +43,7 @@ DIALOGUE_TEMPLATES = [
 ]
 
 
-class MockAgentBrain:
+class MockAgentBrain(AgentBrain):
     """Returns plausible decisions based on personality axes without calling any LLM."""
 
     async def decide(self, context: AgentContext) -> AgentTurnResult:
@@ -53,9 +55,9 @@ class MockAgentBrain:
         selfish_weight = (axes.dominance + axes.ambition + axes.impulsiveness) / 300
 
         if rng.random() < coop_weight * 0.7:
-            action_type = rng.choice(COOPERATIVE_ACTIONS)
+            action_type = cast(DecisionActionType, rng.choice(COOPERATIVE_ACTIONS))
         elif rng.random() < selfish_weight * 0.5:
-            action_type = rng.choice(SELFISH_ACTIONS)
+            action_type = cast(DecisionActionType, rng.choice(SELFISH_ACTIONS))
         else:
             action_type = rng.choice(ACTION_TYPES)
 

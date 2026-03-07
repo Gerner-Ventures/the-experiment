@@ -47,7 +47,7 @@ class ExperimentRunner:
             power=round(10.0 * resource_factor, 1),
         )
 
-        engine_agents = []
+        engine_agents: list[EngineAgentState] = []
         for agent_data in agents:
             axes_data = agent_data.get("personalityAxes", {})
             axes = PersonalityAxes(
@@ -162,11 +162,11 @@ class ExperimentRunner:
             state.status = "running"
 
         round_number = state.current_round + 1
-        _, gm_plan = engine._gm_plan_phase(state, round_number)
+        _, gm_plan = await engine._gm_plan_phase(state, round_number)
 
         self._pending_plans[experiment_id] = gm_plan
 
-        plan_data = gm_plan.plan.model_dump(mode="json")
+        plan_data: dict[str, Any] = gm_plan.plan.model_dump(mode="json")
         await self.ws_manager.send_event(
             experiment_id,
             "gm_plan",
@@ -242,7 +242,7 @@ class ExperimentRunner:
 
                 if phase_result.phase == "dawn":
                     crisis_data = event.data.get("crisis_event")
-                    if crisis_data:
+                    if crisis_data and isinstance(crisis_data, dict):
                         await self.ws_manager.send_event(
                             eid,
                             "crisis_event",
@@ -259,7 +259,7 @@ class ExperimentRunner:
                     )
 
                 if phase_result.phase == "midday":
-                    meeting_data = event.data
+                    meeting_data: dict[str, Any] = dict(event.data)
                     if "proposal" in meeting_data:
                         await self.ws_manager.send_event(
                             eid,
@@ -268,13 +268,16 @@ class ExperimentRunner:
                             {"proposal": meeting_data.get("proposal", "")},
                             phase="midday",
                         )
-                        votes = meeting_data.get("votes", {})
-                        for agent_id, vote in votes.items():
+                        raw_votes = meeting_data.get("votes", {})
+                        votes: dict[str, Any] = (
+                            dict(raw_votes) if isinstance(raw_votes, dict) else {}
+                        )
+                        for agent_id_v, vote in votes.items():
                             await self.ws_manager.send_event(
                                 eid,
                                 "meeting_vote",
                                 rn,
-                                {"agent_id": agent_id, "vote": vote},
+                                {"agent_id": agent_id_v, "vote": vote},
                                 phase="midday",
                             )
                         await self.ws_manager.send_event(

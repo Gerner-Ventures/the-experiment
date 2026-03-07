@@ -14,8 +14,8 @@ from app.agents.models import (
 
 
 class AgentService:
-    def __init__(self, brain: AgentBrain | object | None = None) -> None:
-        self.brain = brain or AgentBrain()
+    def __init__(self, brain: AgentBrain | None = None) -> None:
+        self.brain: AgentBrain = brain or AgentBrain()
 
     def initialize_memory(self) -> AgentMemoryState:
         return AgentMemoryState()

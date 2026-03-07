@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import WebSocket
 from starlette.websockets import WebSocketState
 
-from app.schemas.ws_message import WSMessage
+from app.schemas.ws_message import WSMessage, WSMessageType
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,7 @@ class ConnectionManager:
     async def send_event(
         self,
         experiment_id: str,
-        msg_type: str,
+        msg_type: WSMessageType,
         round_number: int,
         data: dict[str, Any],
         phase: str | None = None,
