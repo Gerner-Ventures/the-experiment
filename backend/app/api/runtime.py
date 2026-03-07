@@ -92,7 +92,9 @@ class ExperimentRuntime:
         state = await self.get_state(experiment_id)
         state.status = "running"
         await self.store.save_state(state)
-        await self._log(experiment_id, event_type="experiment_started", summary="Experiment started.")
+        await self._log(
+            experiment_id, event_type="experiment_started", summary="Experiment started."
+        )
         return state
 
     async def pause(self, experiment_id: str) -> SimulationState:
