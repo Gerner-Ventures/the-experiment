@@ -1,4 +1,4 @@
-.PHONY: dev stop build test lint migrate seed clean
+.PHONY: dev stop build test lint migrate seed clean helm-lint docker-build
 
 # Local development
 dev:
@@ -39,3 +39,13 @@ seed:
 # Cleanup
 clean:
 	docker compose down -v --remove-orphans
+
+# Helm
+helm-lint:
+	helm lint chart/the-experiment/
+	helm lint chart/the-experiment/ -f chart/the-experiment/values-production.yaml
+
+# Docker build (local)
+docker-build:
+	docker build -t the-experiment-backend:local ./backend
+	docker build -t the-experiment-frontend:local ./frontend
