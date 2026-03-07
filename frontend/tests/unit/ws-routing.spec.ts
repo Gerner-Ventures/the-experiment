@@ -53,8 +53,8 @@ function routeMessage(msg: WSMessage) {
   }
 }
 
-function makeMsg(type: WSMessageType, data: Record<string, unknown> = {}): WSMessage {
-  return { type, round: 1, timestamp: '2026-03-07T00:00:00Z', data }
+function makeMsg(type: WSMessageType, data: Record<string, unknown> = {}, phase?: string, round = 1): WSMessage {
+  return { type, round, phase, timestamp: '2026-03-07T00:00:00Z', data }
 }
 
 describe('WebSocket message routing', () => {
@@ -76,20 +76,22 @@ describe('WebSocket message routing', () => {
 
   it('routes round_start to experimentStore', () => {
     const experimentStore = useExperimentStore()
-    routeMessage(makeMsg('round_start', { round: 3, total_rounds: 15 }))
+    routeMessage(makeMsg('round_start', { total_rounds: 15 }, undefined, 3))
     expect(experimentStore.currentRound).toBe(3)
     expect(experimentStore.status).toBe('running')
   })
 
   it('routes round_end to experimentStore', () => {
     const experimentStore = useExperimentStore()
-    routeMessage(makeMsg('round_end', { cooperation_ratio: 0.7, threat_level: 25 }))
-    expect(experimentStore.cooperationRatio).toBe(0.7)
+    const worldStore = useWorldStore()
+    routeMessage(makeMsg('round_end', { status: 'running', current_round: 3, total_rounds: 15, threat_level: 25, resources: { food: 20, water: 25, materials: 10, power: 8 }, agents: [] }))
+    expect(experimentStore.currentRound).toBe(3)
+    expect(worldStore.threatLevel).toBe(25)
   })
 
   it('routes phase_change to experimentStore', () => {
     const experimentStore = useExperimentStore()
-    routeMessage(makeMsg('phase_change', { phase: 'morning' }))
+    routeMessage(makeMsg('phase_change', {}, 'morning'))
     expect(experimentStore.currentPhase).toBe('morning')
   })
 
@@ -244,12 +246,12 @@ describe('WebSocket message routing', () => {
     ])
 
     // Round 1 begins
-    routeMessage(makeMsg('round_start', { round: 1, total_rounds: 10 }))
+    routeMessage(makeMsg('round_start', { total_rounds: 10 }, undefined, 1))
     expect(experimentStore.currentRound).toBe(1)
     expect(experimentStore.isRunning).toBe(true)
 
     // Phase changes
-    routeMessage(makeMsg('phase_change', { phase: 'dawn' }))
+    routeMessage(makeMsg('phase_change', {}, 'dawn'))
     expect(experimentStore.currentPhase).toBe('dawn')
 
     // Agent actions
@@ -263,8 +265,7 @@ describe('WebSocket message routing', () => {
     expect(worldStore.resources.food).toBe(20)
 
     // Round ends
-    routeMessage(makeMsg('round_end', { cooperation_ratio: 0.9, threat_level: 15 }))
-    expect(experimentStore.cooperationRatio).toBe(0.9)
+    routeMessage(makeMsg('round_end', { status: 'running', current_round: 5, total_rounds: 15, threat_level: 15, resources: { food: 20, water: 25, materials: 10, power: 8 }, agents: [] }))
 
     // Eventually the game ends
     routeMessage(makeMsg('experiment_end', { summary: 'Society thrived' }))

@@ -100,9 +100,12 @@ async function initExperiment() {
 async function handleStep() {
   if (!experimentStore.id) return
   try {
+    uiStore.startStepping(locale.hud.steppingRunning)
     await api.stepRound(experimentStore.id)
   } catch (err) {
     console.error('Step failed:', err)
+    uiStore.clearStepping()
+    waitingForRound = false
   }
 }
 
@@ -136,16 +139,35 @@ async function handleApprovePlan() {
   }
 }
 
-// Auto-play mode
+// Auto-play mode: watch for round completion via store updates
 let autoPlayTimer: ReturnType<typeof setTimeout> | null = null
+let waitingForRound = false
 
 watch(() => uiStore.isPlaying, (playing) => {
   if (playing) {
     autoStep()
-  } else if (autoPlayTimer) {
-    clearTimeout(autoPlayTimer)
-    autoPlayTimer = null
+  } else {
+    if (autoPlayTimer) {
+      clearTimeout(autoPlayTimer)
+      autoPlayTimer = null
+    }
+    waitingForRound = false
   }
+})
+
+// When currentRound changes (from WS round_end), schedule next step if auto-playing
+watch(() => experimentStore.currentRound, () => {
+  if (!waitingForRound || !uiStore.isPlaying) return
+  waitingForRound = false
+
+  if (experimentStore.isComplete) {
+    uiStore.isPlaying = false
+    router.push({ name: 'report', params: { id: experimentStore.id! } })
+    return
+  }
+
+  const delay = 3000 / uiStore.playbackSpeed
+  autoPlayTimer = setTimeout(autoStep, delay)
 })
 
 function autoStep() {
@@ -153,10 +175,8 @@ function autoStep() {
     uiStore.isPlaying = false
     return
   }
-  handleStep().then(() => {
-    const delay = 3000 / uiStore.playbackSpeed
-    autoPlayTimer = setTimeout(autoStep, delay)
-  })
+  waitingForRound = true
+  handleStep()
 }
 
 function handleAgentClick(agentId: string) {
@@ -178,9 +198,23 @@ onUnmounted(() => {
   socialStore.$reset()
 })
 
-// Redirect to report when experiment completes
+// Clear stepping and auto-play state if WebSocket disconnects mid-round
+watch(() => ws.state.value, (state) => {
+  if (state === 'disconnected') {
+    if (uiStore.isStepping) {
+      uiStore.clearStepping()
+      waitingForRound = false
+    }
+    if (uiStore.isPlaying) {
+      uiStore.isPlaying = false
+    }
+  }
+})
+
+// Redirect to report when experiment completes (only when not auto-playing,
+// since the currentRound watcher handles navigation during auto-play)
 watch(() => experimentStore.isComplete, (complete) => {
-  if (complete && experimentStore.id) {
+  if (complete && experimentStore.id && !uiStore.isPlaying) {
     router.push({ name: 'report', params: { id: experimentStore.id } })
   }
 })
@@ -250,6 +284,8 @@ function goBack() {
       <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10">
         <ControlBar
           :is-playing="uiStore.isPlaying"
+          :is-stepping="uiStore.isStepping"
+          :stepping-status="uiStore.steppingStatus"
           :speed="uiStore.playbackSpeed"
           :is-complete="experimentStore.isComplete"
           :has-experiment="experimentCreated"
