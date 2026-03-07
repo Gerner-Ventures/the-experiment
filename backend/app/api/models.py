@@ -126,6 +126,12 @@ class StepResponse(APIRequestModel):
     experiment: ExperimentDetail
 
 
+class StepStartedResponse(APIRequestModel):
+    status: str = "step_started"
+    round_number: int
+    experiment_id: str
+
+
 class UsageGroup(APIRequestModel):
     key: str
     label: str
