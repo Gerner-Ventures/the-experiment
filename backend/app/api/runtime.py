@@ -122,7 +122,7 @@ class ExperimentRuntime:
         self._log(experiment_id, event_type="arc_updated", summary=f"Arc updated to '{arc.name}'.")
         return state
 
-    def get_or_generate_gm_plan(self, experiment_id: str) -> GMPlanRecord:
+    async def get_or_generate_gm_plan(self, experiment_id: str) -> GMPlanRecord:
         state = self.get_state(experiment_id)
         next_round = state.current_round + 1
         if state.gm_plan and state.gm_plan.plan.round == next_round:
@@ -139,7 +139,7 @@ class ExperimentRuntime:
             recent_events=state.recent_events[-5:],
             auto_approve=state.auto_approve,
         )
-        plan = self.gm_service.generate_plan(context)
+        plan = await self.gm_service.generate_plan(context)
         state.gm_plan = plan
         self._log(
             experiment_id,
@@ -149,11 +149,11 @@ class ExperimentRuntime:
         )
         return plan
 
-    def approve_gm_plan(
+    async def approve_gm_plan(
         self, experiment_id: str, modified_plan: GMPlanData | None = None
     ) -> GMPlanRecord:
         state = self.get_state(experiment_id)
-        record = self.get_or_generate_gm_plan(experiment_id)
+        record = await self.get_or_generate_gm_plan(experiment_id)
         approved = self.gm_service.approve_plan(record, modified_plan=modified_plan)
         applied = self.gm_service.apply_plan(approved)
         state.gm_plan = applied
@@ -170,7 +170,7 @@ class ExperimentRuntime:
         if state.status == "setup":
             state.status = "running"
         if not state.auto_approve:
-            self.approve_gm_plan(experiment_id)
+            await self.approve_gm_plan(experiment_id)
         round_result = await self.engine.run_round(state)
         self._log_round_result(experiment_id, round_result)
         await self.broadcast_round(experiment_id, round_result)

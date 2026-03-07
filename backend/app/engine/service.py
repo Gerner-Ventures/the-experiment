@@ -56,7 +56,7 @@ class SimulationEngine:
                 ],
             )
         else:
-            gm_result, gm_plan = self._gm_plan_phase(state, round_number)
+            gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
         morning_result, morning_turns = await self._action_phase(
             state, phase="morning", actions_per_agent=2
@@ -107,7 +107,7 @@ class SimulationEngine:
             created_at=datetime.now(UTC),
         )
 
-    def _gm_plan_phase(
+    async def _gm_plan_phase(
         self, state: SimulationState, round_number: int
     ) -> tuple[PhaseResult, GMPlanRecord]:
         context = GMPlanningContext(
@@ -122,7 +122,7 @@ class SimulationEngine:
             recent_events=state.recent_events[-5:],
             auto_approve=state.auto_approve,
         )
-        plan = self.gm_service.generate_plan(context)
+        plan = await self.gm_service.generate_plan(context)
         if not state.auto_approve:
             plan = self.gm_service.approve_plan(plan)
         plan = self.gm_service.apply_plan(plan)
