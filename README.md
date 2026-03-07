@@ -14,6 +14,7 @@ A **Layered Game Master** system controls the narrative:
 - You can approve, modify, or override the GM's plans each round
 
 See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full game loop and mechanics.
+API usage and endpoint details live in [docs/API.md](docs/API.md).
 
 Infrastructure and persistence notes live in [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
 
@@ -59,8 +60,10 @@ make dev
 ```
 
 - Frontend: http://localhost:5173
-- Backend API: http://localhost:8000
+- Backend API: http://localhost:8000/api
 - Health check: http://localhost:8000/api/health
+- Swagger UI: http://localhost:8000/docs
+- ReDoc: http://localhost:8000/redoc
 
 ## Work Streams
 
