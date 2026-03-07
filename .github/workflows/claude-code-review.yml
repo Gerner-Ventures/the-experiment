@@ -16,7 +16,7 @@ jobs:
     if: >-
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.user.login != 'canonhq[bot]' &&
-      github.event.pull_request.user.login != 'specwright[bot]'
+      github.event.pull_request.user.login != 'gv-specwright'
 
     # Optional: Filter by PR author
     # if: |
