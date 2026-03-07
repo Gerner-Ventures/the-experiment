@@ -3,6 +3,7 @@ name = "the-experiment"
 version = "0.1.0"
 description = "AI agent simulation engine — Lord of the Flies meets The Truman Show"
 authors = []
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
