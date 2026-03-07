@@ -102,12 +102,13 @@ If you want to inspect round-by-round backend behavior without FastAPI, Postgres
 websockets, run the headless runner from `backend/`:
 
 ```bash
-poetry run python -m app.headless.cli --rounds 3 --seed 11 --json-out /tmp/headless-report.json
+make headless HEADLESS_ROUNDS=3 HEADLESS_SEED=11 HEADLESS_JSON_OUT=/tmp/headless-report.json
 ```
 
 Behavior:
 
 - default mode is `mock`
+- `make help` lists both `headless` and `headless-live`
 - `mock` mode uses `ExperimentRuntime` with the in-memory store, a rule-based GM, seeded mock
   agents, and disabled memory-LLM consolidation
 - `live` mode uses the LLM-backed GM and agent services against the same in-memory runtime path;

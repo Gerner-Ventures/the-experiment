@@ -102,6 +102,26 @@ test-frontend: ## Run frontend type-check
 	cd frontend && npm run type-check
 
 # ============================================================================
+# Backend Workflow
+# ============================================================================
+
+##@ Backend Workflow
+
+HEADLESS_ROUNDS ?= 3
+HEADLESS_SEED ?= 11
+HEADLESS_JSON_OUT ?=
+HEADLESS_CONFIG ?=
+HEADLESS_ARGS = --rounds $(HEADLESS_ROUNDS) --seed $(HEADLESS_SEED) $(if $(HEADLESS_JSON_OUT),--json-out $(HEADLESS_JSON_OUT),) $(if $(HEADLESS_CONFIG),--config $(HEADLESS_CONFIG),)
+
+.PHONY: headless headless-live
+
+headless: ## Run the mock headless backend simulation
+	cd backend && poetry run python -m app.headless.cli --mode mock $(HEADLESS_ARGS)
+
+headless-live: ## Run the live-LLM headless backend simulation
+	cd backend && poetry run python -m app.headless.cli --mode live $(HEADLESS_ARGS)
+
+# ============================================================================
 # Linting & Formatting
 # ============================================================================
 

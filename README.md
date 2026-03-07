@@ -77,13 +77,13 @@ To enable local Ruff autofixes before each commit, run `pre-commit install`.
 You can run the backend round loop without starting the backend stack:
 
 ```bash
-cd backend
-poetry run python -m app.headless.cli --rounds 2 --seed 11
+make headless HEADLESS_ROUNDS=2 HEADLESS_SEED=11
 ```
 
 This uses the in-memory runtime path and prints a round-by-round summary. `mock` mode is the
 default no-setup path; add `--mode live` only when the relevant provider API keys are available in
-your shell environment.
+your shell environment. If you want the raw report too, add
+`HEADLESS_JSON_OUT=/tmp/headless-report.json`.
 
 ## Work Streams
 
