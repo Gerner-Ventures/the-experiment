@@ -44,3 +44,7 @@ strict = true
 [[tool.mypy.overrides]]
 module = "structlog"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "langfuse"
+ignore_missing_imports = true
