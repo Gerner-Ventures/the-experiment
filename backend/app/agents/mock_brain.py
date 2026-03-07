@@ -20,7 +20,7 @@ from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionAc
 # Weighted by personality
 COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
 SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
-NON_TERMINAL_ACTIONS = tuple(action for action in ACTION_TYPES if action != "self_sacrifice")
+NON_TERMINAL_ACTIONS = ACTION_TYPES
 
 LOCATIONS = (
     "town_square",

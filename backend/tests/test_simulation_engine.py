@@ -11,7 +11,6 @@ from app.agents.models import (
     SecretGoal,
 )
 from app.agents.service import AgentService
-from app.db.models import AgentStatus
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
 from app.gm import get_preset_arc
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
@@ -203,38 +202,6 @@ async def test_engine_generates_social_events_and_relationship_updates() -> None
     assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
     assert state.agents[0].relationships
     assert state.agents[1].relationships
-
-
-@pytest.mark.asyncio
-async def test_self_sacrifice_kills_agent_and_stops_future_turns() -> None:
-    service = _StubAgentService(
-        {
-            "a1": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
-            "a2": [("gather", "well"), ("observe", "town_hall"), ("repair", "workshop")],
-            "a3": [("repair", "workshop"), ("talk", "bar"), ("repair", "workshop")],
-        }
-    )
-    state = _state()
-    state.agents[0].location = "town_hall"
-    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
-    engine = SimulationEngine(agent_service=service, random_seed=6)
-
-    result = await engine.run_round(state)
-
-    sacrifice_events = [
-        event for event in result.phases[2].events if event.data.get("kind") == "self_sacrifice"
-    ]
-    assert len(sacrifice_events) == 1
-    assert service.calls["a1"] == 1
-    assert state.agents[0].status == AgentStatus.DEAD
-    assert state.agents[0].death_round == 1
-    assert state.agents[0].death_cause == "self_sacrifice"
-    assert state.sacrifice_history
-    assert state.sacrifice_history[0].agent_id == "a1"
-    assert state.agents[1].suspicion_level > 0
-    assert "a1" not in state.world_state.location_occupancy.get("workshop", [])
-
-
 @pytest.mark.asyncio
 async def test_engine_caps_movement_and_converts_far_actions_into_travel() -> None:
     service = _StubAgentService(

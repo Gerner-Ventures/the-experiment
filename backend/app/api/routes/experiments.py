@@ -226,5 +226,4 @@ def _detail(state: SimulationState) -> ExperimentDetail:
         unresolved_plotlines=state.unresolved_plotlines,
         factions=state.factions,
         exile_history=state.exile_history,
-        sacrifice_history=state.sacrifice_history,
     )

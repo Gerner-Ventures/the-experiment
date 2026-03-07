@@ -18,8 +18,6 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.execute("ALTER TYPE agent_status ADD VALUE IF NOT EXISTS 'dead'")
-
     op.add_column(
         "experiments",
         sa.Column("factions", sa.JSON(), nullable=False, server_default=sa.text("'[]'::json")),
@@ -28,18 +26,8 @@ def upgrade() -> None:
         "experiments",
         sa.Column("exile_history", sa.JSON(), nullable=False, server_default=sa.text("'[]'::json")),
     )
-    op.add_column(
-        "experiments",
-        sa.Column(
-            "sacrifice_history",
-            sa.JSON(),
-            nullable=False,
-            server_default=sa.text("'[]'::json"),
-        ),
-    )
     op.alter_column("experiments", "factions", server_default=None)
     op.alter_column("experiments", "exile_history", server_default=None)
-    op.alter_column("experiments", "sacrifice_history", server_default=None)
 
     op.add_column("agents", sa.Column("faction_id", sa.String(length=255), nullable=True))
     op.add_column("agents", sa.Column("faction_role", sa.String(length=32), nullable=True))
@@ -47,17 +35,12 @@ def upgrade() -> None:
         "agents",
         sa.Column("influence", sa.Float(), nullable=False, server_default=sa.text("0")),
     )
-    op.add_column("agents", sa.Column("death_round", sa.Integer(), nullable=True))
-    op.add_column("agents", sa.Column("death_cause", sa.String(length=100), nullable=True))
     op.alter_column("agents", "influence", server_default=None)
 
 
 def downgrade() -> None:
-    op.drop_column("agents", "death_cause")
-    op.drop_column("agents", "death_round")
     op.drop_column("agents", "influence")
     op.drop_column("agents", "faction_role")
     op.drop_column("agents", "faction_id")
-    op.drop_column("experiments", "sacrifice_history")
     op.drop_column("experiments", "exile_history")
     op.drop_column("experiments", "factions")

@@ -11,7 +11,7 @@
       "properties": {
         "type": {
           "type": "string",
-          "enum": ["move", "gather", "repair", "trade", "talk", "hoard", "sabotage", "explore", "accuse", "vote", "rest", "observe", "attack", "threaten", "stab", "shoot", "poison", "dance", "pray", "rally", "mourn", "celebrate", "argue", "pee", "poop", "vomit", "sleep", "eat", "drink", "investigate", "monologue", "panic", "breakdown", "self_sacrifice"]
+          "enum": ["move", "gather", "repair", "trade", "talk", "hoard", "sabotage", "explore", "accuse", "vote", "rest", "observe", "attack", "threaten", "stab", "shoot", "poison", "dance", "pray", "rally", "mourn", "celebrate", "argue", "pee", "poop", "vomit", "sleep", "eat", "drink", "investigate", "monologue", "panic", "breakdown"]
         },
         "target": { "type": "string" },
         "location": { "type": "string" }

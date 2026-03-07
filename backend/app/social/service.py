@@ -229,5 +229,5 @@ class SocialService:
         return [
             agent
             for agent in state.agents
-            if agent.status not in {AgentStatus.EXILED, AgentStatus.DEAD}
+            if agent.status != AgentStatus.EXILED
         ]

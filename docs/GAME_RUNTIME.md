@@ -17,7 +17,7 @@ That object is the source of truth for:
 - agent runtime state
 - GM plan for the current or next round
 - unresolved plotlines and recent events
-- faction, exile, and sacrifice history
+- faction and exile history
 
 ## State Model
 
@@ -38,7 +38,6 @@ Key fields:
 - `gm_plan`
 - `factions`
 - `exile_history`
-- `sacrifice_history`
 
 Code reference:
 
@@ -84,7 +83,6 @@ Important runtime fields:
 - `suspicion_level`
 - `faction_id`, `faction_role`
 - `influence`
-- `death_round`, `death_cause`
 
 Suspicion is per-agent, not global.
 
@@ -108,7 +106,6 @@ Current state is stored primarily in the `experiments` row:
 - `recent_events`
 - `factions`
 - `exile_history`
-- `sacrifice_history`
 
 Agent runtime state is stored in `agents` rows, including:
 
@@ -252,7 +249,6 @@ Agent actions can also modify shared resources:
 - `repair`: decreases materials, increases power
 - `hoard`: decreases shared food
 - `sabotage`: decreases power
-- `self_sacrifice`: increases food and materials, decreases threat
 
 Conflicts on the same action/location can produce winner-based resolution with a small chaotic bonus for winners.
 
@@ -338,7 +334,6 @@ It can increase from:
 - agent decisions returned by the agent service
 - losing conflicts
 - observer events injected by the player
-- witnessing self-sacrifice
 
 Relationship state is stored per agent in `relationships` and is updated through:
 

@@ -36,7 +36,6 @@ DecisionActionType = Literal[
     "monologue",
     "panic",
     "breakdown",
-    "self_sacrifice",
 ]
 CooperationIntent = Literal["high", "medium", "low", "none"]
 
