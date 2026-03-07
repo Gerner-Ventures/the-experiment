@@ -575,7 +575,9 @@ class ExperimentRuntime:
     async def _cooperation_score(self, experiment_id: str) -> float:
         logs = await self.store.list_logs(experiment_id)
         agent_actions = [
-            item for item in logs if item.type == "agent_action" and isinstance(item.data.get("action"), dict)
+            item
+            for item in logs
+            if item.type == "agent_action" and isinstance(item.data.get("action"), dict)
         ]
         if not agent_actions:
             return 0.0
@@ -591,9 +593,7 @@ class ExperimentRuntime:
             "mourn",
         }
         cooperative = sum(
-            1
-            for item in agent_actions
-            if item.data["action"].get("type") in cooperative_actions
+            1 for item in agent_actions if item.data["action"].get("type") in cooperative_actions
         )
         return round(cooperative / len(agent_actions), 2)
 

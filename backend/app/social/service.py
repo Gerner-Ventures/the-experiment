@@ -288,7 +288,9 @@ class SocialService:
             cult_leaders = [
                 agent
                 for agent in active_agents
-                if agent.faction_role == "leader" and agent.faction_id and agent.suspicion_level >= 45
+                if agent.faction_role == "leader"
+                and agent.faction_id
+                and agent.suspicion_level >= 45
             ]
             candidates = cult_leaders
         if not candidates:
@@ -315,7 +317,10 @@ class SocialService:
         elif agent.personality.axes.paranoia >= 65 or target.suspicion_level >= 70:
             vote = "banish"
             rationale = f"{agent.name} sees exile as the only way to contain {target.name}."
-        elif agent.goal.archetype == "belief_transformation" and target.faction_id != agent.faction_id:
+        elif (
+            agent.goal.archetype == "belief_transformation"
+            and target.faction_id != agent.faction_id
+        ):
             vote = "banish"
             rationale = f"{agent.name} treats dissent around {target.name} as a threat to belief."
         else:

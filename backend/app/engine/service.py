@@ -493,7 +493,9 @@ class SimulationEngine:
                 hall.append(agent_id)
         self._refresh_factions(state)
 
-    def _apply_exile_outcome(self, state: SimulationState, outcome: MeetingOutcome) -> list[RoundEvent]:
+    def _apply_exile_outcome(
+        self, state: SimulationState, outcome: MeetingOutcome
+    ) -> list[RoundEvent]:
         if outcome.exile is None:
             return []
 
@@ -566,8 +568,7 @@ class SimulationEngine:
             members = [
                 agent.agent_id
                 for agent in active_agents
-                if agent.agent_id not in assigned
-                and self._supports_leader(agent, leader)
+                if agent.agent_id not in assigned and self._supports_leader(agent, leader)
             ]
             if len(members) < 2:
                 continue
@@ -578,7 +579,18 @@ class SimulationEngine:
                 leader_id=leader.agent_id,
                 member_ids=members,
                 doctrine=leader.goal.text,
-                influence=min(100.0, round(sum(self._influence_score(agent) for agent in active_agents if agent.agent_id in members) / len(members), 2)),
+                influence=min(
+                    100.0,
+                    round(
+                        sum(
+                            self._influence_score(agent)
+                            for agent in active_agents
+                            if agent.agent_id in members
+                        )
+                        / len(members),
+                        2,
+                    ),
+                ),
                 formed_round=state.world_state.round_number,
                 pressure=min(100.0, round(leader.suspicion_level + len(members) * 6, 2)),
             )
@@ -598,7 +610,9 @@ class SimulationEngine:
             member_ids = [member.agent_id for member in component]
             influence = min(
                 100.0,
-                round(sum(self._influence_score(member) for member in component) / len(component), 2),
+                round(
+                    sum(self._influence_score(member) for member in component) / len(component), 2
+                ),
             )
             factions.append(
                 FactionState(
@@ -630,7 +644,10 @@ class SimulationEngine:
             agent.faction_role = "leader" if agent.agent_id == faction.leader_id else "member"
 
     def _is_cult_candidate(self, agent: EngineAgentState) -> bool:
-        return agent.goal.archetype == "belief_transformation" or "devout" in agent.personality.trait_tags
+        return (
+            agent.goal.archetype == "belief_transformation"
+            or "devout" in agent.personality.trait_tags
+        )
 
     def _supports_leader(self, agent: EngineAgentState, leader: EngineAgentState) -> bool:
         if agent.agent_id == leader.agent_id:
@@ -668,9 +685,8 @@ class SimulationEngine:
         right_trust = right.relationships.get(left.agent_id)
         if left.goal.archetype == right.goal.archetype:
             return True
-        return (
-            (left_trust is not None and left_trust.trust >= 1.0)
-            or (right_trust is not None and right_trust.trust >= 1.0)
+        return (left_trust is not None and left_trust.trust >= 1.0) or (
+            right_trust is not None and right_trust.trust >= 1.0
         )
 
     def _influence_score(self, agent: EngineAgentState) -> float:
