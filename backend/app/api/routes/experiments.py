@@ -51,6 +51,7 @@ async def get_experiment(experiment_id: str) -> ExperimentDetail:
     description="Transition an experiment from setup or pause into the running state.",
 )
 async def start_experiment(experiment_id: str) -> ExperimentSummary:
+    await _get_state(experiment_id)
     state = await runtime.start(experiment_id)
     return _summary(state)
 
@@ -195,7 +196,7 @@ async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
 async def _get_state(experiment_id: str) -> SimulationState:
     try:
         return await runtime.get_state(experiment_id)
-    except KeyError as exc:
+    except (KeyError, ValueError) as exc:
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
 

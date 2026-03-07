@@ -302,9 +302,12 @@ class TestConnectionManager:
 
 @pytest.fixture()
 def client() -> TestClient:  # type: ignore[misc]
-    """Provide a TestClient wired to the real app."""
+    """Provide a TestClient wired to the real app with in-memory store."""
+    from app.api.runtime import runtime
+    from app.api.store import InMemoryExperimentStore
     from app.main import app
 
+    runtime.store = InMemoryExperimentStore()
     with TestClient(app) as c:
         yield c  # type: ignore[misc]
 
