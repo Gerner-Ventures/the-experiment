@@ -7,6 +7,10 @@ from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast, get_args
 
+from fastapi import WebSocket
+from fastapi.encoders import jsonable_encoder
+from starlette.websockets import WebSocketState
+
 from app.agents.models import AgentMemoryState
 from app.api.models import (
     AnalyticsSummary,
@@ -34,7 +38,6 @@ from app.api.models import (
     UsageReport,
 )
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
-from app.api.ws_manager import ConnectionManager
 from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
@@ -71,6 +74,50 @@ class CooperationMetrics(TypedDict):
 
 
 GoalOutcome = Literal["achieved", "partial", "failed", "unknown"]
+
+
+class ConnectionManager:
+    def __init__(self) -> None:
+        self.connections: defaultdict[str, set[WebSocket]] = defaultdict(set)
+
+    async def connect(self, experiment_id: str, websocket: WebSocket) -> None:
+        await websocket.accept()
+        self.connections[experiment_id].add(websocket)
+        logger.info(
+            "WS connected: experiment=%s total=%d",
+            experiment_id,
+            len(self.connections[experiment_id]),
+        )
+
+    def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
+        sockets = self.connections.get(experiment_id)
+        if sockets is None:
+            return
+        sockets.discard(websocket)
+        if not sockets:
+            self.connections.pop(experiment_id, None)
+        logger.info(
+            "WS disconnected: experiment=%s remaining=%d",
+            experiment_id,
+            len(self.connections.get(experiment_id, ())),
+        )
+
+    async def broadcast(self, experiment_id: str, payload: dict[str, Any]) -> None:
+        sockets = list(self.connections.get(experiment_id, ()))
+        if not sockets:
+            return
+        encoded_payload = jsonable_encoder(payload)
+        dead_sockets: list[WebSocket] = []
+        for socket in sockets:
+            try:
+                if socket.client_state == WebSocketState.CONNECTED:
+                    await socket.send_json(encoded_payload)
+                else:
+                    dead_sockets.append(socket)
+            except Exception:
+                dead_sockets.append(socket)
+        for socket in dead_sockets:
+            self.disconnect(experiment_id, socket)
 
 
 class ExperimentRuntime:
@@ -1115,7 +1162,6 @@ class ExperimentRuntime:
             "exile_vote": "exile_vote",
             "exile_enacted": "exile_enacted",
         }
-        agent_names = {agent.agent_id: agent.name for agent in state.agents}
         for phase in round_result.phases:
             for event in phase.events:
                 kind = str(event.data.get("kind"))

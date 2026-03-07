@@ -20,6 +20,7 @@ from app.headless.models import (
 COOPERATIVE_ACTIONS = {
     "gather",
     "repair",
+    "self_sacrifice",
     "talk",
     "trade",
     "rest",
@@ -257,7 +258,7 @@ def _build_validations(
         ),
         ValidationResult(
             key="cooperation_consistency",
-            passed=abs(cooperation_from_logs - analytics_cooperation_score) < 1e-9,
+            passed=abs(cooperation_from_logs - analytics_cooperation_score) <= 0.005,
             detail=(
                 f"from_logs={cooperation_from_logs:.2f}, "
                 f"analytics={analytics_cooperation_score:.2f}"

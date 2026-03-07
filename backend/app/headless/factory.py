@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 
-from app.agents.mock_brain import MockAgentBrain
+from app.agents.mock_brain import MockAgentBrain, NoOpMemoryLLMService
 from app.agents.service import AgentService
 from app.api.runtime import ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
@@ -12,12 +12,6 @@ from app.gm import GMPlanningContext, GMService, generate_rule_based_plan
 from app.gm.models import GMPlanRecord
 from app.headless.models import HeadlessMode
 from app.llm.config import get_default_model_configs
-from app.llm.models import (
-    MemoryConsolidationDecision,
-    MemoryPromotionDecision,
-    RelationshipConsolidationDecision,
-)
-
 PROVIDER_ENV_VARS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GOOGLE_API_KEY",
@@ -35,21 +29,6 @@ class RuleBasedGMService(GMService):
         if context.auto_approve:
             return self.apply_plan(self.approve_plan(record))
         return record
-
-
-class NoOpMemoryLLMService:
-    async def classify_memory_event(self, **_: object) -> MemoryPromotionDecision:
-        return MemoryPromotionDecision(promote_to_key_memory=False)
-
-    async def consolidate_memory_events(self, **_: object) -> MemoryConsolidationDecision:
-        return MemoryConsolidationDecision(create_summary=False)
-
-    async def consolidate_relationship_memory(
-        self, **_: object
-    ) -> RelationshipConsolidationDecision:
-        return RelationshipConsolidationDecision(update_notes=False)
-
-
 def build_headless_runtime(*, mode: HeadlessMode, seed: int) -> ExperimentRuntime:
     store = InMemoryExperimentStore()
     gm_service: GMService

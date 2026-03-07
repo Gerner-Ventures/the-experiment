@@ -58,7 +58,7 @@ class MockAgentBrain(AgentBrain):
 
     def __init__(self, *, seed: int = 0) -> None:
         self.seed = seed
-        self.llm_service = cast(Any, _MockMemoryLLMService())
+        self.llm_service = cast(Any, NoOpMemoryLLMService())
 
     async def decide(self, context: AgentContext) -> AgentTurnResult:
         axes = context.personality.axes
@@ -170,7 +170,7 @@ class MockAgentBrain(AgentBrain):
         return int(digest[:16], 16)
 
 
-class _MockMemoryLLMService:
+class NoOpMemoryLLMService:
     async def classify_memory_event(self, **_: object) -> MemoryPromotionDecision:
         return MemoryPromotionDecision(promote_to_key_memory=False)
 

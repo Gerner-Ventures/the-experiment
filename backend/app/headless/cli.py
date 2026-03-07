@@ -70,7 +70,12 @@ async def run_headless_experiment(
     round_results = []
 
     while state.status not in {"collapsed", "completed"} and state.current_round < request.total_rounds:
+        previous_round = state.current_round
         round_result, state = await runtime.step(state.experiment_id)
+        if state.current_round <= previous_round:
+            raise RuntimeError(
+                "Headless run stalled because the experiment did not advance to the next round."
+            )
         round_results.append(round_result)
 
     completed_at = datetime.now(UTC)
@@ -98,7 +103,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 rounds=args.rounds,
             )
         )
-    except (FileNotFoundError, ValueError, ValidationError, json.JSONDecodeError) as exc:
+    except (FileNotFoundError, RuntimeError, ValueError, ValidationError, json.JSONDecodeError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 
