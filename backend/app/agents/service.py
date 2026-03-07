@@ -4,8 +4,8 @@ from app.agents.brain import AgentBrain
 from app.agents.memory import add_key_memory, append_recent_event, update_relationship_memory
 from app.agents.models import (
     AgentContext,
-    MemoryConsolidationDecision,
     AgentMemoryState,
+    MemoryConsolidationDecision,
     MemoryPromotionDecision,
     AgentTurnResult,
     KeyMemory,
@@ -16,6 +16,7 @@ from app.agents.models import (
 from app.llm import LLMService
 
 MEMORY_CONSOLIDATION_MIN_EVENTS = 3
+RELATIONSHIP_CONSOLIDATION_MIN_HISTORY = 3
 
 
 class AgentService:
@@ -108,7 +109,7 @@ class AgentService:
                 recent_key_memories=memory.key_memories,
             )
         except Exception:
-            decision = None
+            return memory
 
         updated = memory.model_copy(
             update={"last_consolidated_round": unconsolidated_events[-1].round_number}
@@ -118,6 +119,41 @@ class AgentService:
 
         key_memory = self._build_consolidated_key_memory(unconsolidated_events, decision)
         return add_key_memory(updated, key_memory)
+
+    async def consolidate_relationship_memory(
+        self,
+        memory: AgentMemoryState,
+        *,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+    ) -> AgentMemoryState:
+        relationships = dict(memory.relationship_memory)
+        changed = False
+
+        for other_agent_id, relationship in relationships.items():
+            if len(relationship.history) < RELATIONSHIP_CONSOLIDATION_MIN_HISTORY:
+                continue
+            try:
+                decision = await self.memory_llm_service.consolidate_relationship_memory(
+                    other_agent_id=other_agent_id,
+                    relationship=relationship,
+                    goal=goal,
+                    suspicion_level=suspicion_level,
+                )
+            except Exception:
+                decision = None
+
+            if decision is None or not decision.update_notes or not decision.notes:
+                continue
+
+            relationships[other_agent_id] = relationship.model_copy(
+                update={"notes": decision.notes}
+            )
+            changed = True
+
+        if not changed:
+            return memory
+        return memory.model_copy(update={"relationship_memory": relationships})
 
     def _build_key_memory(
         self,

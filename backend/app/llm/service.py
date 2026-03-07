@@ -9,6 +9,8 @@ from app.agents.models import (
     MemoryConsolidationDecision,
     MemoryEvent,
     MemoryPromotionDecision,
+    RelationshipConsolidationDecision,
+    RelationshipMemory,
     SecretGoal,
 )
 from app.core.config import get_settings
@@ -100,7 +102,8 @@ class LLMService:
                                 "goal": goal.model_dump(mode="json") if goal is not None else None,
                                 "suspicion_level": suspicion_level,
                                 "recent_key_memories": [
-                                    memory.model_dump(mode="json") for memory in recent_key_memories[-3:]
+                                    memory.model_dump(mode="json")
+                                    for memory in recent_key_memories[-3:]
                                 ],
                             }
                         ),
@@ -143,7 +146,8 @@ class LLMService:
                                 "goal": goal.model_dump(mode="json") if goal is not None else None,
                                 "suspicion_level": suspicion_level,
                                 "recent_key_memories": [
-                                    memory.model_dump(mode="json") for memory in recent_key_memories[-3:]
+                                    memory.model_dump(mode="json")
+                                    for memory in recent_key_memories[-3:]
                                 ],
                             }
                         ),
@@ -158,3 +162,44 @@ class LLMService:
         )
         parsed = result.parsed or {}
         return MemoryConsolidationDecision.model_validate(parsed)
+
+    async def consolidate_relationship_memory(
+        self,
+        *,
+        other_agent_id: str,
+        relationship: RelationshipMemory,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+    ) -> RelationshipConsolidationDecision | None:
+        result = await self.client.generate_structured(
+            LLMRequest(
+                role="agent",
+                model_override=self.settings.memory_model,
+                temperature=0,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You compress an agent's recent interpersonal history into one stable impression. "
+                            "Return JSON only. Update notes only when the interaction history supports a durable "
+                            "relationship pattern that should influence future behavior."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": json.dumps(
+                            {
+                                "other_agent_id": other_agent_id,
+                                "relationship": relationship.model_dump(mode="json"),
+                                "goal": goal.model_dump(mode="json") if goal is not None else None,
+                                "suspicion_level": suspicion_level,
+                            }
+                        ),
+                    },
+                ],
+                response_format=RelationshipConsolidationDecision,
+                metadata={"relationship_consolidator": True},
+            )
+        )
+        parsed = result.parsed or {}
+        return RelationshipConsolidationDecision.model_validate(parsed)

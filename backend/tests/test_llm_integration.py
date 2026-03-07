@@ -56,6 +56,15 @@ async def test_defaults_include_gm_and_agent_configs() -> None:
     assert configs["agent"].fallback_models
 
 
+def test_router_model_list_includes_memory_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = LLMClient()
+    monkeypatch.setattr(client.settings, "memory_model", "anthropic/claude-3-5-sonnet-20241022")
+
+    model_names = {entry["model_name"] for entry in client._build_model_list()}
+
+    assert "anthropic/claude-3-5-sonnet-20241022" in model_names
+
+
 @pytest.mark.asyncio
 async def test_structured_generation_parses_schema_output() -> None:
     content = json.dumps(

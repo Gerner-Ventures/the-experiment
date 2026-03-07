@@ -283,6 +283,12 @@ class SimulationEngine:
                 goal=agent.goal,
                 suspicion_level=agent.suspicion_level,
             )
+            agent.memory = await self.agent_service.consolidate_relationship_memory(
+                agent.memory,
+                goal=agent.goal,
+                suspicion_level=agent.suspicion_level,
+            )
+            agent.relationships = dict(agent.memory.relationship_memory)
             reflections.append(reflection)
         return PhaseResult(
             phase="night",

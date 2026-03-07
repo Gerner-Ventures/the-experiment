@@ -239,3 +239,9 @@ class MemoryConsolidationDecision(AgentModel):
     meaning: str | None = None
     salience_type: MemorySalienceType = "other"
     confidence: int = Field(ge=0, le=100, default=65)
+
+
+class RelationshipConsolidationDecision(AgentModel):
+    update_notes: bool = False
+    notes: str | None = None
+    confidence: int = Field(ge=0, le=100, default=65)
