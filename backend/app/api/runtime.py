@@ -11,6 +11,8 @@ from fastapi.encoders import jsonable_encoder
 
 from app.agents.models import AgentMemoryState
 from app.api.models import CreateExperimentRequest, EventLogItem, EventLogType
+from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
+from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
@@ -38,12 +40,11 @@ class ConnectionManager:
 
 
 class ExperimentRuntime:
-    def __init__(self) -> None:
+    def __init__(self, *, store: ExperimentStore | None = None) -> None:
         self.engine = SimulationEngine()
         self.gm_service = GMService()
         self.connection_manager = ConnectionManager()
-        self.states: dict[str, SimulationState] = {}
-        self.logs: defaultdict[str, list[EventLogItem]] = defaultdict(list)
+        self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.lock = asyncio.Lock()
 
     async def create_experiment(self, request: CreateExperimentRequest) -> SimulationState:
@@ -76,36 +77,41 @@ class ExperimentRuntime:
                     for agent in request.agents
                 ],
             )
-            self.states[experiment_id] = state
-            self._log(
+            await self.store.save_state(state)
+            await self._log(
                 experiment_id,
                 event_type="experiment_created",
                 summary=f"Experiment '{request.name}' created.",
             )
             return state
 
-    def get_state(self, experiment_id: str) -> SimulationState:
-        return self.states[experiment_id]
+    async def get_state(self, experiment_id: str) -> SimulationState:
+        return await self.store.load_state(experiment_id)
 
-    def start(self, experiment_id: str) -> SimulationState:
-        state = self.get_state(experiment_id)
+    async def start(self, experiment_id: str) -> SimulationState:
+        state = await self.get_state(experiment_id)
         state.status = "running"
-        self._log(experiment_id, event_type="experiment_started", summary="Experiment started.")
+        await self.store.save_state(state)
+        await self._log(
+            experiment_id, event_type="experiment_started", summary="Experiment started."
+        )
         return state
 
-    def pause(self, experiment_id: str) -> SimulationState:
-        state = self.get_state(experiment_id)
+    async def pause(self, experiment_id: str) -> SimulationState:
+        state = await self.get_state(experiment_id)
         state.status = "paused"
-        self._log(experiment_id, event_type="experiment_paused", summary="Experiment paused.")
+        await self.store.save_state(state)
+        await self._log(experiment_id, event_type="experiment_paused", summary="Experiment paused.")
         return state
 
-    def inject_observer_event(self, experiment_id: str, description: str) -> SimulationState:
-        state = self.get_state(experiment_id)
+    async def inject_observer_event(self, experiment_id: str, description: str) -> SimulationState:
+        state = await self.get_state(experiment_id)
         state.unresolved_plotlines.append(description)
         state.unresolved_plotlines = state.unresolved_plotlines[-10:]
         for agent in state.agents:
             agent.suspicion_level = min(100.0, agent.suspicion_level + 6.0)
-        self._log(experiment_id, event_type="observer_event", summary=description)
+        await self.store.save_state(state)
+        await self._log(experiment_id, event_type="observer_event", summary=description)
         self._schedule_broadcast(
             experiment_id,
             self._message(
@@ -116,14 +122,17 @@ class ExperimentRuntime:
         )
         return state
 
-    def update_arc(self, experiment_id: str, arc: DirectorArc) -> SimulationState:
-        state = self.get_state(experiment_id)
+    async def update_arc(self, experiment_id: str, arc: DirectorArc) -> SimulationState:
+        state = await self.get_state(experiment_id)
         state.arc = arc
-        self._log(experiment_id, event_type="arc_updated", summary=f"Arc updated to '{arc.name}'.")
+        await self.store.save_state(state)
+        await self._log(
+            experiment_id, event_type="arc_updated", summary=f"Arc updated to '{arc.name}'."
+        )
         return state
 
     async def get_or_generate_gm_plan(self, experiment_id: str) -> GMPlanRecord:
-        state = self.get_state(experiment_id)
+        state = await self.get_state(experiment_id)
         next_round = state.current_round + 1
         if state.gm_plan and state.gm_plan.plan.round == next_round:
             return state.gm_plan
@@ -141,7 +150,8 @@ class ExperimentRuntime:
         )
         plan = await self.gm_service.generate_plan(context)
         state.gm_plan = plan
-        self._log(
+        await self.store.save_state(state)
+        await self._log(
             experiment_id,
             event_type="gm_plan_generated",
             summary=plan.plan.round_theme,
@@ -152,12 +162,13 @@ class ExperimentRuntime:
     async def approve_gm_plan(
         self, experiment_id: str, modified_plan: GMPlanData | None = None
     ) -> GMPlanRecord:
-        state = self.get_state(experiment_id)
+        state = await self.get_state(experiment_id)
         record = await self.get_or_generate_gm_plan(experiment_id)
         approved = self.gm_service.approve_plan(record, modified_plan=modified_plan)
         applied = self.gm_service.apply_plan(approved)
         state.gm_plan = applied
-        self._log(
+        await self.store.save_state(state)
+        await self._log(
             experiment_id,
             event_type="gm_plan_approved",
             summary=applied.plan.round_theme,
@@ -166,26 +177,38 @@ class ExperimentRuntime:
         return applied
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
-        state = self.get_state(experiment_id)
-        if state.status == "setup":
-            state.status = "running"
-        if not state.auto_approve:
-            await self.approve_gm_plan(experiment_id)
-        round_result = await self.engine.run_round(state)
-        self._log_round_result(experiment_id, round_result)
+        async with self.lock:
+            state = await self.get_state(experiment_id)
+            if state.status == "setup":
+                state.status = "running"
+            if not state.auto_approve:
+                record = await self.get_or_generate_gm_plan(experiment_id)
+                approved = self.gm_service.approve_plan(record)
+                state.gm_plan = self.gm_service.apply_plan(approved)
+                await self.store.save_state(state)
+                await self._log(
+                    experiment_id,
+                    event_type="gm_plan_approved",
+                    summary=state.gm_plan.plan.round_theme,
+                    round_number=state.gm_plan.plan.round,
+                )
+            round_result = await self.engine.run_round(state)
+            await self.store.save_state(state)
+            await self.store.record_round_result(experiment_id, round_result)
+            await self._log_round_result(experiment_id, round_result)
         await self.broadcast_round(experiment_id, round_result)
         return round_result, state
 
-    def list_agents(self, experiment_id: str) -> list[EngineAgentState]:
-        return self.get_state(experiment_id).agents
+    async def list_agents(self, experiment_id: str) -> list[EngineAgentState]:
+        return (await self.get_state(experiment_id)).agents
 
-    def get_agent(self, experiment_id: str, agent_id: str) -> EngineAgentState:
-        for agent in self.get_state(experiment_id).agents:
+    async def get_agent(self, experiment_id: str, agent_id: str) -> EngineAgentState:
+        for agent in (await self.get_state(experiment_id)).agents:
             if agent.agent_id == agent_id:
                 return agent
         raise KeyError(agent_id)
 
-    def get_log(
+    async def get_log(
         self,
         experiment_id: str,
         *,
@@ -196,7 +219,7 @@ class ExperimentRuntime:
         agent_id: str | None = None,
         round_number: int | None = None,
     ) -> tuple[list[EventLogItem], int]:
-        items = self.logs[experiment_id]
+        items = await self.store.list_logs(experiment_id)
         filtered = [
             item
             for item in items
@@ -243,6 +266,58 @@ class ExperimentRuntime:
                     data={"events": [event.model_dump(mode="json") for event in phase.events]},
                 ),
             )
+            for event in phase.events:
+                kind = event.data.get("kind")
+                if kind == "agent_speak":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "agent_speak",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_start":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_start",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_speech":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_speech",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_vote":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_vote",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
+                elif kind == "meeting_result":
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "meeting_result",
+                            round_number=round_result.round_number,
+                            phase=phase.phase,
+                            data=event.data,
+                        ),
+                    )
         for agent_id, turns in round_result.agent_turns.items():
             for turn in turns:
                 await self.connection_manager.broadcast(
@@ -297,7 +372,7 @@ class ExperimentRuntime:
                 },
             ),
         )
-        state = self.get_state(experiment_id)
+        state = await self.get_state(experiment_id)
         if round_result.round_number >= state.total_rounds:
             await self.connection_manager.broadcast(
                 experiment_id,
@@ -338,7 +413,7 @@ class ExperimentRuntime:
             return
         loop.create_task(self.connection_manager.broadcast(experiment_id, payload))
 
-    def _log(
+    async def _log(
         self,
         experiment_id: str,
         *,
@@ -349,7 +424,7 @@ class ExperimentRuntime:
         agent_id: str | None = None,
         data: dict[str, Any] | None = None,
     ) -> None:
-        self.logs[experiment_id].append(
+        await self.store.append_log(
             EventLogItem(
                 id=str(uuid.uuid4()),
                 experiment_id=experiment_id,
@@ -363,10 +438,10 @@ class ExperimentRuntime:
             )
         )
 
-    def _log_round_result(self, experiment_id: str, round_result: RoundResult) -> None:
+    async def _log_round_result(self, experiment_id: str, round_result: RoundResult) -> None:
         for phase in round_result.phases:
             for event in phase.events:
-                self._log(
+                await self._log(
                     experiment_id,
                     event_type=event.phase,
                     summary=event.summary,

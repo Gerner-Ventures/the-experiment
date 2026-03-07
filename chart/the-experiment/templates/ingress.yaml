@@ -33,13 +33,6 @@ spec:
                 name: {{ include "the-experiment.fullname" . }}-backend
                 port:
                   name: http
-          - path: /ws
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "the-experiment.fullname" . }}-backend
-                port:
-                  name: http
           - path: /
             pathType: Prefix
             backend:

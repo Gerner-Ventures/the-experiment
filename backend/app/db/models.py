@@ -5,7 +5,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -69,10 +69,14 @@ class Experiment(TimestampMixin, Base):
         default=ExperimentStatus.SETUP,
         nullable=False,
     )
+    auto_approve: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     current_round: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     total_rounds: Mapped[int] = mapped_column(Integer, nullable=False)
     threat_level: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
     resources: Mapped[dict[str, float]] = mapped_column(JSON, nullable=False, default=dict)
+    world_state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    unresolved_plotlines: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    recent_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
 
     arc: Mapped[Arc | None] = relationship(
         back_populates="experiment",
@@ -153,6 +157,7 @@ class Agent(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     character_id: Mapped[str | None] = mapped_column(String(255))
     personality: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    goal: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     goal_archetype: Mapped[str | None] = mapped_column(String(100))
     secret_goal: Mapped[str] = mapped_column(Text, nullable=False)
     llm_model: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -234,6 +239,7 @@ class GMPlan(TimestampMixin, Base):
         nullable=False,
     )
     round_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
     round_theme: Mapped[str] = mapped_column(String(255), nullable=False)
     reasoning: Mapped[str] = mapped_column(Text, nullable=False)
     crisis_event: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
@@ -241,5 +247,7 @@ class GMPlan(TimestampMixin, Base):
     environmental: Mapped[str | None] = mapped_column(Text)
     narration: Mapped[str] = mapped_column(Text, nullable=False)
     meta_hint: Mapped[str | None] = mapped_column(Text)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     experiment: Mapped[Experiment] = relationship(back_populates="gm_plans")

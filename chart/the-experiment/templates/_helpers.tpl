@@ -143,3 +143,15 @@ Secret name helpers
 {{ include "the-experiment.fullname" . }}-posthog
 {{- end -}}
 {{- end }}
+
+{{- define "the-experiment.postgresSelectorLabels" -}}
+{{ include "the-experiment.selectorLabels" . }}
+app.kubernetes.io/component: postgres
+{{- end }}
+
+{{/*
+Postgres URL — auto-generates when local postgres is enabled
+*/}}
+{{- define "the-experiment.postgresUrl" -}}
+postgresql+asyncpg://{{ .Values.postgres.user }}:{{ .Values.postgres.password }}@{{ include "the-experiment.fullname" . }}-postgres:5432/{{ .Values.postgres.database }}
+{{- end }}

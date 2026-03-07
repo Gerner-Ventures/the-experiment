@@ -12,3 +12,6 @@ data:
   {{- if .Values.config.platformUrl }}
   PLATFORM_URL: {{ .Values.config.platformUrl | quote }}
   {{- end }}
+  {{- if .Values.postgres.enabled }}
+  DATABASE_URL: {{ include "the-experiment.postgresUrl" . | quote }}
+  {{- end }}

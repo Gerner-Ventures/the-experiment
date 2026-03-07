@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.models import AgentTurnResult
 from app.api.runtime import runtime
+from app.api.store import InMemoryExperimentStore
 from app.agents.service import AgentService
 from app.main import app
 from app.schemas.agent_decision import AgentDecision, DecisionAction
 
 client = TestClient(app)
+API_PREFIX = "/api"
 
 
 class _StubAgentService(AgentService):
@@ -36,6 +39,11 @@ class _StubAgentService(AgentService):
 
 
 runtime.engine.agent_service = _StubAgentService()
+
+
+@pytest.fixture(autouse=True)
+def reset_runtime_store() -> None:
+    runtime.store = InMemoryExperimentStore()
 
 
 def _payload() -> dict[str, Any]:
@@ -91,21 +99,21 @@ def _payload() -> dict[str, Any]:
 
 
 def test_create_get_and_step_experiment_flow() -> None:
-    created = client.post("/experiments", json=_payload())
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     assert created.status_code == 200
     experiment_id = created.json()["experiment_id"]
     assert created.json()["agents"][0]["character_id"] == "undertaker_01"
     assert created.json()["agents"][0]["status"] == "idle"
 
-    gm_plan = client.get(f"/experiments/{experiment_id}/gm/plan")
+    gm_plan = client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
     assert gm_plan.status_code == 200
     assert gm_plan.json()["status"] == "pending"
 
-    approved = client.post(f"/experiments/{experiment_id}/gm/approve", json={})
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     assert approved.status_code == 200
     assert approved.json()["status"] == "applied"
 
-    stepped = client.post(f"/experiments/{experiment_id}/step")
+    stepped = client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
     assert stepped.status_code == 200
     assert stepped.json()["round_result"]["round_number"] == 1
     assert (
@@ -113,19 +121,19 @@ def test_create_get_and_step_experiment_flow() -> None:
         == approved.json()["plan"]["round_theme"]
     )
 
-    fetched = client.get(f"/experiments/{experiment_id}")
+    fetched = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
     assert fetched.status_code == 200
     assert fetched.json()["current_round"] == 1
 
 
 def test_log_endpoint_filters_and_paginates() -> None:
-    created = client.post("/experiments", json=_payload())
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
-    client.post(f"/experiments/{experiment_id}/gm/approve", json={})
-    client.post(f"/experiments/{experiment_id}/step")
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
 
     log_response = client.get(
-        f"/experiments/{experiment_id}/log", params={"limit": 5, "phase": "dawn"}
+        f"{API_PREFIX}/experiments/{experiment_id}/log", params={"limit": 5, "phase": "dawn"}
     )
     assert log_response.status_code == 200
     body = log_response.json()
@@ -135,23 +143,23 @@ def test_log_endpoint_filters_and_paginates() -> None:
 
 
 def test_websocket_connects_and_receives_initial_message() -> None:
-    created = client.post("/experiments", json=_payload())
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
 
-    with client.websocket_connect(f"/experiments/{experiment_id}/ws") as websocket:
+    with client.websocket_connect(f"{API_PREFIX}/experiments/{experiment_id}/ws") as websocket:
         message = websocket.receive_json()
         assert message["type"] == "connected"
         assert message["data"]["experiment_id"] == experiment_id
 
 
 def test_websocket_emits_granular_round_messages() -> None:
-    created = client.post("/experiments", json=_payload())
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
-    client.post(f"/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
 
-    with client.websocket_connect(f"/experiments/{experiment_id}/ws") as websocket:
+    with client.websocket_connect(f"{API_PREFIX}/experiments/{experiment_id}/ws") as websocket:
         websocket.receive_json()
-        stepped = client.post(f"/experiments/{experiment_id}/step")
+        stepped = client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
         assert stepped.status_code == 200
 
         seen_types: set[str] = set()
@@ -160,11 +168,15 @@ def test_websocket_emits_granular_round_messages() -> None:
             "gm_plan",
             "crisis_event",
             "agent_action",
+            "meeting_start",
+            "meeting_speech",
+            "meeting_vote",
+            "meeting_result",
             "resource_update",
             "threat_update",
             "round_end",
         }
-        for _ in range(24):
+        for _ in range(40):
             message = websocket.receive_json()
             seen_types.add(message["type"])
             if required <= seen_types:

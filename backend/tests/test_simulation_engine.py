@@ -155,3 +155,34 @@ async def test_engine_updates_threat_and_cooperation() -> None:
     assert 0 <= result.cooperation_ratio <= 1
     assert 0 <= result.threat_level <= 100
     assert result.world_state.resources.power >= 0
+
+
+@pytest.mark.asyncio
+async def test_engine_generates_social_events_and_relationship_updates() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("talk", "bar"), ("talk", "bar"), ("repair", "workshop")],
+            "a2": [("talk", "bar"), ("talk", "bar"), ("gather", "well")],
+            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    engine = SimulationEngine(agent_service=service, random_seed=5)
+
+    result = await engine.run_round(state)
+
+    morning_kinds = {
+        event.data.get("kind")
+        for event in result.phases[2].events
+        if isinstance(event.data.get("kind"), str)
+    }
+    midday_kinds = {
+        event.data.get("kind")
+        for event in result.phases[3].events
+        if isinstance(event.data.get("kind"), str)
+    }
+
+    assert "agent_speak" in morning_kinds
+    assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
+    assert state.agents[0].relationships
+    assert state.agents[1].relationships

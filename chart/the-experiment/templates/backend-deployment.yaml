@@ -32,6 +32,23 @@ spec:
       serviceAccountName: {{ include "the-experiment.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.postgres.enabled }}
+      initContainers:
+        - name: migrate
+          image: {{ include "the-experiment.backendImage" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "the-experiment.fullname" . }}
+          {{- if or .Values.secrets.neon.databaseUrl .Values.secrets.neon.existingSecret }}
+            - secretRef:
+                name: {{ include "the-experiment.neonSecretName" . }}
+          {{- end }}
+          env:
+            - name: DATABASE_URL
+              value: {{ include "the-experiment.postgresUrl" . | replace "+asyncpg" "+psycopg" | quote }}
+      {{- end }}
       containers:
         - name: backend
           image: {{ include "the-experiment.backendImage" . }}
@@ -63,7 +80,7 @@ spec:
           {{- end }}
           livenessProbe:
             httpGet:
-              path: /health
+              path: /api/health
               port: http
             initialDelaySeconds: 5
             periodSeconds: 15
@@ -71,7 +88,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              path: /health
+              path: /api/health
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
