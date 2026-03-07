@@ -184,3 +184,204 @@ class TestLitellmCallbackIntegration:
 
         assert "langfuse" not in litellm.success_callback
         assert "langfuse" not in litellm.failure_callback
+
+
+# --- Section 2: Trace Hierarchy ---
+
+
+class TestLangfuseSpanHelper:
+    def test_span_returns_none_when_no_client(self) -> None:
+        from app.core import langfuse
+
+        langfuse._client = None
+        result = langfuse.span(name="test", trace_id="t1")
+        assert result is None
+
+    def test_span_delegates_to_trace_span(self) -> None:
+        from app.core import langfuse
+
+        mock_trace = MagicMock()
+        mock_trace.span.return_value = MagicMock(id="span-1")
+
+        result = langfuse.span(
+            name="gm_plan",
+            trace_id="t1",
+            trace=mock_trace,
+            metadata={"round": 1},
+        )
+
+        mock_trace.span.assert_called_once_with(
+            name="gm_plan",
+            metadata={"round": 1},
+        )
+        assert result is not None
+
+    def test_span_errors_do_not_propagate(self) -> None:
+        from app.core import langfuse
+
+        mock_trace = MagicMock()
+        mock_trace.span.side_effect = RuntimeError("boom")
+
+        result = langfuse.span(name="test", trace_id="t1", trace=mock_trace)
+        assert result is None
+
+
+class TestTraceHierarchyInEngine:
+    @pytest.mark.asyncio
+    async def test_run_round_creates_langfuse_trace(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-123"
+        mock_trace_obj.span.return_value = MagicMock(id="span-456")
+
+        original_trace = lf_module.trace
+        calls: list[dict[str, object]] = []
+
+        def fake_trace(*, name: str, session_id: str, **kwargs: object) -> object:
+            calls.append({"name": name, "session_id": session_id, **kwargs})
+            return mock_trace_obj
+
+        lf_module.trace = fake_trace  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(calls) == 1
+            assert calls[0]["name"] == "round-1"
+            assert calls[0]["session_id"] == "exp-1"
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+    @pytest.mark.asyncio
+    async def test_run_round_creates_phase_spans(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-123"
+        span_names: list[str] = []
+        mock_span = MagicMock(id="span-456")
+
+        def capture_span(name: str, **kwargs: object) -> MagicMock:
+            span_names.append(name)
+            return mock_span
+
+        mock_trace_obj.span.side_effect = capture_span
+
+        original_trace = lf_module.trace
+
+        def fake_trace(*, name: str, session_id: str, **kwargs: object) -> object:
+            return mock_trace_obj
+
+        lf_module.trace = fake_trace  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert "gm_plan" in span_names
+            assert "morning" in span_names
+            assert "midday" in span_names
+            assert "afternoon" in span_names
+            assert "night" in span_names
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+
+def _build_engine_and_state() -> tuple["SimulationEngine", "SimulationState"]:
+    from app.agents.models import (
+        AgentMemoryState,
+        AgentTurnResult,
+        PersonalityAxes,
+        PersonalityProfile,
+        SecretGoal,
+    )
+    from app.engine import EngineAgentState, SimulationEngine, SimulationState
+    from app.gm import get_preset_arc
+    from app.gm.models import GMPlanData, GMPlanRecord, GMPlanningContext
+    from app.gm.planner import generate_rule_based_plan
+    from app.gm.service import GMService
+    from app.schemas.agent_decision import AgentDecision, DecisionAction
+    from app.world import build_default_world_state, resolve_spawn_tile
+    from typing import cast
+
+    class StubGMService(GMService):
+        def __init__(self) -> None:
+            pass
+
+        async def generate_plan(self, context: GMPlanningContext) -> GMPlanRecord:
+            plan = generate_rule_based_plan(context)
+            return self.apply_plan(self.approve_plan(GMPlanRecord(plan=plan)))
+
+    class StubAgentService:
+        async def decide(self, context: object) -> AgentTurnResult:
+            from app.agents.models import AgentContext
+
+            ctx = cast(AgentContext, context)
+            return AgentTurnResult(
+                decision=AgentDecision(
+                    inner_thought="stub",
+                    suspicion=None,
+                    action=DecisionAction(type="observe", target="well", location="well"),
+                    dialogue=None,
+                    goal_progress="none",
+                    cooperation_intent="medium",
+                ),
+                updated_memory=ctx.memory,
+                suspicion_level=ctx.suspicion_level,
+                prompt="stub",
+            )
+
+        async def register_observation(self, memory: object, **kwargs: object) -> object:
+            return memory
+
+        def update_relationship(self, memory: object, **kwargs: object) -> object:
+            return memory
+
+        async def consolidate_memory(self, memory: object, **kwargs: object) -> object:
+            return memory
+
+        async def consolidate_relationship_memory(self, memory: object, **kwargs: object) -> object:
+            return memory
+
+    def make_agent(agent_id: str, name: str, loc: str) -> EngineAgentState:
+        tx, ty = resolve_spawn_tile(loc)
+        return EngineAgentState(
+            agent_id=agent_id,
+            name=name,
+            personality=PersonalityProfile(
+                axes=PersonalityAxes(
+                    paranoia=50, empathy=50, dominance=50,
+                    impulsiveness=50, loyalty=50, ambition=50,
+                ),
+                trait_tags=["guarded", "curious"],
+                self_concept="I am here.",
+            ),
+            goal=SecretGoal(archetype="truth_revelation", text="Find the truth."),
+            memory=AgentMemoryState(),
+            location=loc,
+            tile_x=tx,
+            tile_y=ty,
+            relationships={},
+            llm_model="openai/gpt-4o-mini",
+        )
+
+    state = SimulationState(
+        experiment_id="exp-1",
+        experiment_name="Test",
+        total_rounds=15,
+        current_round=0,
+        status="running",
+        auto_approve=True,
+        arc=get_preset_arc("slow_burn"),
+        world_state=build_default_world_state(),
+        agents=[
+            make_agent("a1", "Mara", "well"),
+            make_agent("a2", "Jon", "well"),
+        ],
+    )
+    engine = SimulationEngine(
+        gm_service=StubGMService(),
+        agent_service=StubAgentService(),  # type: ignore[arg-type]
+        random_seed=42,
+    )
+    return engine, state

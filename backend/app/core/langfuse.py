@@ -42,3 +42,13 @@ def trace(*, name: str, session_id: str, **kwargs: Any) -> Any:
     except Exception:
         logger.warning("langfuse trace failed", exc_info=True)
         return None
+
+
+def span(*, name: str, trace_id: str, trace: Any = None, **kwargs: Any) -> Any:
+    if trace is None:
+        return None
+    try:
+        return trace.span(name=name, **kwargs)
+    except Exception:
+        logger.warning("langfuse span failed", exc_info=True)
+        return None

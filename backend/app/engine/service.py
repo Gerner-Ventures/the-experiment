@@ -10,6 +10,7 @@ from app.agents.memory import append_recent_event
 from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
 from app.agents.suspicion import apply_suspicion_trigger
 from app.agents.service import AgentService
+from app.core import langfuse as lf
 from app.db.models import AgentStatus
 from app.engine.models import (
     ConflictRecord,
@@ -91,6 +92,16 @@ class SimulationEngine:
         state.world_state.round_number = round_number
         self._refresh_factions(state)
 
+        trace = lf.trace(
+            name=f"round-{round_number}",
+            session_id=state.experiment_id,
+            metadata={
+                "experiment_id": state.experiment_id,
+                "round_number": round_number,
+                "total_rounds": state.total_rounds,
+            },
+        )
+
         if (
             state.gm_plan
             and state.gm_plan.plan.round == round_number
@@ -108,18 +119,23 @@ class SimulationEngine:
                 ],
             )
         else:
+            lf.span(name="gm_plan", trace_id=getattr(trace, "id", ""), trace=trace)
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
+        lf.span(name="morning", trace_id=getattr(trace, "id", ""), trace=trace)
         morning_result, morning_turns = await self._action_phase(
             state, phase="morning", actions_per_agent=2
         )
+        lf.span(name="midday", trace_id=getattr(trace, "id", ""), trace=trace)
         midday_result = self._midday_phase(state)
+        lf.span(name="afternoon", trace_id=getattr(trace, "id", ""), trace=trace)
         afternoon_result, afternoon_turns = await self._action_phase(
             state, phase="afternoon", actions_per_agent=1
         )
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
+        lf.span(name="night", trace_id=getattr(trace, "id", ""), trace=trace)
         night_result = await self._night_phase(state, cooperation_ratio)
 
         state.current_round = round_number
