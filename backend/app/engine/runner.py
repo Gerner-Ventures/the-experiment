@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import uuid
 from typing import Any
@@ -9,9 +8,9 @@ from app.agents.mock_brain import MockAgentBrain
 from app.agents.models import AgentMemoryState, PersonalityAxes, PersonalityProfile, SecretGoal
 from app.agents.service import AgentService
 from app.api.ws_manager import ConnectionManager
-from app.engine.models import EngineAgentState, PhaseResult, RoundResult, SimulationState
+from app.engine.models import EngineAgentState, RoundResult, SimulationState
 from app.engine.service import SimulationEngine
-from app.gm.models import DirectorArc, GMPlanRecord, ResourceDelta
+from app.gm.models import GMPlanRecord
 from app.gm.presets import get_preset_arc
 from app.world.models import ResourceState, WorldState
 
@@ -65,7 +64,8 @@ class ExperimentRunner:
             )
             goal_text = agent_data.get("secretGoal", "Survive and observe.")
             goal = SecretGoal(
-                archetype=agent_data.get("goalArchetype", "communal_survival") or "communal_survival",
+                archetype=agent_data.get("goalArchetype", "communal_survival")
+                or "communal_survival",
                 text=goal_text,
             )
             engine_agents.append(
@@ -133,7 +133,9 @@ class ExperimentRunner:
         round_number = state.current_round + 1
 
         await self.ws_manager.send_event(
-            experiment_id, "round_start", round_number,
+            experiment_id,
+            "round_start",
+            round_number,
             {"round": round_number, "total_rounds": state.total_rounds},
         )
 
@@ -144,7 +146,9 @@ class ExperimentRunner:
         if state.current_round >= state.total_rounds:
             state.status = "completed"
             await self.ws_manager.send_event(
-                experiment_id, "experiment_end", result.round_number,
+                experiment_id,
+                "experiment_end",
+                result.round_number,
                 {"reason": "all_rounds_complete", "final_threat": result.threat_level},
             )
 
@@ -164,8 +168,11 @@ class ExperimentRunner:
 
         plan_data = gm_plan.plan.model_dump(mode="json")
         await self.ws_manager.send_event(
-            experiment_id, "gm_plan", round_number,
-            plan_data, phase="gm_plan",
+            experiment_id,
+            "gm_plan",
+            round_number,
+            plan_data,
+            phase="gm_plan",
         )
 
         return plan_data
@@ -180,6 +187,7 @@ class ExperimentRunner:
         if pending:
             if modified_plan:
                 from app.gm.models import GMPlanData
+
                 pending = GMPlanRecord(
                     status="modified",
                     plan=GMPlanData.model_validate(modified_plan),
@@ -194,21 +202,23 @@ class ExperimentRunner:
         if state.current_round >= state.total_rounds:
             state.status = "completed"
             await self.ws_manager.send_event(
-                experiment_id, "experiment_end", result.round_number,
+                experiment_id,
+                "experiment_end",
+                result.round_number,
                 {"reason": "all_rounds_complete", "final_threat": result.threat_level},
             )
 
         return result
 
-    async def _broadcast_round_results(
-        self, experiment_id: str, result: RoundResult
-    ) -> None:
+    async def _broadcast_round_results(self, experiment_id: str, result: RoundResult) -> None:
         eid = experiment_id
         rn = result.round_number
 
         for phase_result in result.phases:
             await self.ws_manager.send_event(
-                eid, "phase_change", rn,
+                eid,
+                "phase_change",
+                rn,
                 {"phase": phase_result.phase},
                 phase=phase_result.phase,
             )
@@ -219,7 +229,9 @@ class ExperimentRunner:
                     action_type = event.data.get("action_type")
                     if agent_id and action_type:
                         await self.ws_manager.send_event(
-                            eid, "agent_action", rn,
+                            eid,
+                            "agent_action",
+                            rn,
                             {
                                 "agent_id": agent_id,
                                 "action": action_type,
@@ -232,30 +244,43 @@ class ExperimentRunner:
                     crisis_data = event.data.get("crisis_event")
                     if crisis_data:
                         await self.ws_manager.send_event(
-                            eid, "crisis_event", rn, crisis_data, phase="dawn",
+                            eid,
+                            "crisis_event",
+                            rn,
+                            crisis_data,
+                            phase="dawn",
                         )
                     await self.ws_manager.send_event(
-                        eid, "gm_narration", rn,
-                        {"text": event.summary}, phase="dawn",
+                        eid,
+                        "gm_narration",
+                        rn,
+                        {"text": event.summary},
+                        phase="dawn",
                     )
 
                 if phase_result.phase == "midday":
                     meeting_data = event.data
                     if "proposal" in meeting_data:
                         await self.ws_manager.send_event(
-                            eid, "meeting_start", rn,
+                            eid,
+                            "meeting_start",
+                            rn,
                             {"proposal": meeting_data.get("proposal", "")},
                             phase="midday",
                         )
                         votes = meeting_data.get("votes", {})
                         for agent_id, vote in votes.items():
                             await self.ws_manager.send_event(
-                                eid, "meeting_vote", rn,
+                                eid,
+                                "meeting_vote",
+                                rn,
                                 {"agent_id": agent_id, "vote": vote},
                                 phase="midday",
                             )
                         await self.ws_manager.send_event(
-                            eid, "meeting_result", rn,
+                            eid,
+                            "meeting_result",
+                            rn,
                             {"summary": meeting_data.get("summary", ""), "votes": votes},
                             phase="midday",
                         )
@@ -265,7 +290,9 @@ class ExperimentRunner:
             for turn in turns:
                 if turn.decision.dialogue:
                     await self.ws_manager.send_event(
-                        eid, "agent_speak", rn,
+                        eid,
+                        "agent_speak",
+                        rn,
                         {
                             "agent_id": agent_id,
                             "agent_name": agent.name if agent else agent_id,
@@ -275,7 +302,9 @@ class ExperimentRunner:
                     )
                 if turn.decision.action.location:
                     await self.ws_manager.send_event(
-                        eid, "agent_move", rn,
+                        eid,
+                        "agent_move",
+                        rn,
                         {
                             "agent_id": agent_id,
                             "location": turn.decision.action.location,
@@ -284,16 +313,23 @@ class ExperimentRunner:
 
         resources = result.world_state.resources.model_dump()
         await self.ws_manager.send_event(
-            eid, "resource_update", rn, resources,
+            eid,
+            "resource_update",
+            rn,
+            resources,
         )
 
         await self.ws_manager.send_event(
-            eid, "threat_update", rn,
+            eid,
+            "threat_update",
+            rn,
             {"threat_level": result.threat_level},
         )
 
         await self.ws_manager.send_event(
-            eid, "round_end", rn,
+            eid,
+            "round_end",
+            rn,
             {
                 "round": rn,
                 "cooperation_ratio": result.cooperation_ratio,

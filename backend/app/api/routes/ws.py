@@ -10,11 +10,13 @@ logger = logging.getLogger(__name__)
 
 def _get_ws_manager():
     from app.main import ws_manager
+
     return ws_manager
 
 
 def _get_runner():
     from app.main import experiment_runner
+
     return experiment_runner
 
 
@@ -33,10 +35,13 @@ async def experiment_websocket(websocket: WebSocket, experiment_id: str) -> None
     try:
         # Send initial state snapshot
         from app.api.routes.experiments import _state_to_full
-        await websocket.send_json({
-            "type": "snapshot",
-            "data": _state_to_full(state),
-        })
+
+        await websocket.send_json(
+            {
+                "type": "snapshot",
+                "data": _state_to_full(state),
+            }
+        )
 
         # Keep connection alive, listen for client messages
         while True:

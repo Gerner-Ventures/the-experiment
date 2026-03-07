@@ -1,4 +1,5 @@
 """Rule-based mock agent brain for testing without LLM keys."""
+
 from __future__ import annotations
 
 import random
@@ -6,7 +7,6 @@ import random
 from app.agents.models import (
     ACTION_TYPES,
     AgentContext,
-    AgentMemoryState,
     AgentTurnResult,
     KeyMemory,
     MemoryEvent,
@@ -20,8 +20,13 @@ COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
 SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
 
 LOCATIONS = (
-    "town_square", "general_store", "water_well", "workshop",
-    "farm_field", "meeting_hall", "perimeter_fence",
+    "town_square",
+    "general_store",
+    "water_well",
+    "workshop",
+    "farm_field",
+    "meeting_hall",
+    "perimeter_fence",
 )
 
 DIALOGUE_TEMPLATES = [

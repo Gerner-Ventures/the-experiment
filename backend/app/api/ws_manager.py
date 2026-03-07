@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import UTC, datetime
 from typing import Any
@@ -20,7 +19,11 @@ class ConnectionManager:
     async def connect(self, experiment_id: str, ws: WebSocket) -> None:
         await ws.accept()
         self._connections.setdefault(experiment_id, []).append(ws)
-        logger.info("WS connected: experiment=%s (total=%d)", experiment_id, len(self._connections[experiment_id]))
+        logger.info(
+            "WS connected: experiment=%s (total=%d)",
+            experiment_id,
+            len(self._connections[experiment_id]),
+        )
 
     def disconnect(self, experiment_id: str, ws: WebSocket) -> None:
         conns = self._connections.get(experiment_id, [])
