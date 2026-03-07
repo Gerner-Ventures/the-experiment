@@ -20,6 +20,7 @@ from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionAc
 # Weighted by personality
 COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
 SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
+NON_TERMINAL_ACTIONS = tuple(action for action in ACTION_TYPES if action != "self_sacrifice")
 
 LOCATIONS = (
     "town_square",
@@ -59,7 +60,7 @@ class MockAgentBrain(AgentBrain):
         elif rng.random() < selfish_weight * 0.5:
             action_type = cast(DecisionActionType, rng.choice(SELFISH_ACTIONS))
         else:
-            action_type = rng.choice(ACTION_TYPES)
+            action_type = rng.choice(NON_TERMINAL_ACTIONS)
 
         location = rng.choice(LOCATIONS)
 

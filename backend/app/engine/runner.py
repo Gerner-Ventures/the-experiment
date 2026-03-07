@@ -12,6 +12,7 @@ from app.engine.models import EngineAgentState, RoundResult, SimulationState
 from app.engine.service import SimulationEngine
 from app.gm.models import GMPlanRecord
 from app.gm.presets import get_preset_arc
+from app.world import resolve_spawn_tile
 from app.world.models import ResourceState, WorldState
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,8 @@ class ExperimentRunner:
                     goal=goal,
                     memory=AgentMemoryState(),
                     location="town_square",
+                    tile_x=resolve_spawn_tile("town_square")[0],
+                    tile_y=resolve_spawn_tile("town_square")[1],
                     llm_model=agent_data.get("llmModel", "openai/gpt-4o-mini"),
                 )
             )

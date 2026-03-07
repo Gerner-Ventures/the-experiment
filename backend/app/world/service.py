@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+from collections import deque
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +17,135 @@ def load_default_world_map() -> WorldMap:
 
 
 DEFAULT_WORLD_MAP = load_default_world_map()
+DEFAULT_SPAWN_TILE = (10, 9)
+
+
+@lru_cache(maxsize=1)
+def _walkable_tiles() -> set[tuple[int, int]]:
+    return {
+        (tile.x, tile.y)
+        for tile in DEFAULT_WORLD_MAP.tiles
+        if tile.walkable
+    }
+
+
+@lru_cache(maxsize=1)
+def _tile_location_ids() -> dict[tuple[int, int], str]:
+    return {
+        (tile.x, tile.y): tile.location_id
+        for tile in DEFAULT_WORLD_MAP.tiles
+        if tile.location_id is not None
+    }
+
+
+@lru_cache(maxsize=1)
+def _locations_by_id() -> dict[str, object]:
+    return {location.id: location for location in DEFAULT_WORLD_MAP.locations}
+
+
+def _location_entry_tiles(location_id: str) -> set[tuple[int, int]]:
+    if location_id == "town_square":
+        return {DEFAULT_SPAWN_TILE}
+    if location_id == "perimeter_fence":
+        return {
+            (tile.x, tile.y)
+            for tile in DEFAULT_WORLD_MAP.tiles
+            if tile.walkable
+            and (
+                tile.x in {1, DEFAULT_WORLD_MAP.width - 2}
+                or tile.y in {1, DEFAULT_WORLD_MAP.height - 2}
+            )
+        }
+    return {
+        (tile.x, tile.y)
+        for tile in DEFAULT_WORLD_MAP.tiles
+        if tile.walkable and tile.location_id == location_id
+    }
+
+
+def resolve_spawn_tile(location_id: str | None) -> tuple[int, int]:
+    candidate_location = location_id or "town_square"
+    tiles = _location_entry_tiles(candidate_location)
+    if not tiles:
+        return DEFAULT_SPAWN_TILE
+    return min(tiles, key=lambda tile: (tile[1], tile[0]))
+
+
+def resolve_location_target(location_id: str | None) -> set[tuple[int, int]]:
+    if location_id is None:
+        return set()
+    return _location_entry_tiles(location_id)
+
+
+def get_location_type(location_id: str | None) -> str | None:
+    if location_id is None:
+        return None
+    location = _locations_by_id().get(location_id)
+    return getattr(location, "type", None)
+
+
+def tile_distance(a: tuple[int, int], b: tuple[int, int]) -> int:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def step_toward(
+    start: tuple[int, int],
+    goals: set[tuple[int, int]],
+    *,
+    max_steps: int,
+) -> list[tuple[int, int]]:
+    if start in goals or max_steps <= 0:
+        return [start]
+
+    walkable = _walkable_tiles()
+    frontier: deque[tuple[int, int]] = deque([start])
+    came_from: dict[tuple[int, int], tuple[int, int] | None] = {start: None}
+    found_goal: tuple[int, int] | None = None
+
+    while frontier:
+        current = frontier.popleft()
+        if current in goals:
+            found_goal = current
+            break
+        for neighbor in get_adjacent_walkable_tiles(current):
+            if neighbor not in walkable or neighbor in came_from:
+                continue
+            came_from[neighbor] = current
+            frontier.append(neighbor)
+
+    if found_goal is None:
+        return [start]
+
+    path: list[tuple[int, int]] = []
+    cursor: tuple[int, int] | None = found_goal
+    while cursor is not None:
+        path.append(cursor)
+        cursor = came_from[cursor]
+    path.reverse()
+    capped = path[: max_steps + 1]
+    return capped or [start]
+
+
+def get_adjacent_walkable_tiles(tile: tuple[int, int]) -> list[tuple[int, int]]:
+    x, y = tile
+    neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
+    walkable = _walkable_tiles()
+    return [neighbor for neighbor in neighbors if neighbor in walkable]
+
+
+def location_label_for_tile(tile: tuple[int, int]) -> str:
+    location_id = _tile_location_ids().get(tile)
+    if location_id is not None:
+        return location_id
+    if tile_distance(tile, DEFAULT_SPAWN_TILE) <= 2:
+        return "town_square"
+
+    locations = [
+        (location.id, resolve_spawn_tile(location.id))
+        for location in DEFAULT_WORLD_MAP.locations
+        if location.id != "perimeter_fence"
+    ]
+    return min(locations, key=lambda item: tile_distance(tile, item[1]))[0]
 
 
 def build_default_world_state(round_number: int = 0) -> WorldState:

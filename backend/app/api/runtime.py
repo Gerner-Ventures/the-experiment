@@ -17,7 +17,7 @@ from app.engine import EngineAgentState, RoundResult, SimulationEngine, Simulati
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.schemas.ws_message import WSMessage, WSMessageType
-from app.world import build_default_world_state
+from app.world import build_default_world_state, resolve_spawn_tile
 
 
 class ConnectionManager:
@@ -66,12 +66,14 @@ class ExperimentRuntime:
                         name=agent.name,
                         character_id=agent.character_id,
                         personality=agent.personality,
-                        goal=agent.goal,
-                        memory=AgentMemoryState(),
-                        location=agent.location,
-                        inventory=agent.inventory,
-                        relationships={},
-                        suspicion_level=0,
+                    goal=agent.goal,
+                    memory=AgentMemoryState(),
+                    location=agent.location,
+                    tile_x=resolve_spawn_tile(agent.location)[0],
+                    tile_y=resolve_spawn_tile(agent.location)[1],
+                    inventory=agent.inventory,
+                    relationships={},
+                    suspicion_level=0,
                         llm_model=agent.llm_model,
                     )
                     for agent in request.agents

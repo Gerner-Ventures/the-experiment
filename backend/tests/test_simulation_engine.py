@@ -11,10 +11,11 @@ from app.agents.models import (
     SecretGoal,
 )
 from app.agents.service import AgentService
+from app.db.models import AgentStatus
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
 from app.gm import get_preset_arc
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
-from app.world import build_default_world_state
+from app.world import build_default_world_state, resolve_spawn_tile, tile_distance
 
 
 class _StubAgentService(AgentService):
@@ -52,6 +53,7 @@ class _StubAgentService(AgentService):
 
 
 def _agent(agent_id: str, name: str, location: str) -> EngineAgentState:
+    tile_x, tile_y = resolve_spawn_tile(location)
     return EngineAgentState(
         agent_id=agent_id,
         name=name,
@@ -70,6 +72,8 @@ def _agent(agent_id: str, name: str, location: str) -> EngineAgentState:
         goal=SecretGoal(archetype="truth_revelation", text="Figure out what this place is."),
         memory=AgentMemoryState(),
         location=location,
+        tile_x=tile_x,
+        tile_y=tile_y,
         relationships={},
         llm_model="openai/gpt-4o-mini",
     )
@@ -97,9 +101,9 @@ def _state() -> SimulationState:
 async def test_engine_runs_all_six_phases() -> None:
     service = _StubAgentService(
         {
-            "a1": [("gather", "well"), ("talk", "bar"), ("repair", "workshop")],
-            "a2": [("gather", "well"), ("observe", "town_hall"), ("hoard", "well")],
-            "a3": [("repair", "workshop"), ("explore", "perimeter_fence"), ("repair", "workshop")],
+            "a1": [("gather", "well"), ("talk", "well"), ("hoard", "well")],
+            "a2": [("gather", "well"), ("observe", "well"), ("hoard", "well")],
+            "a3": [("repair", "workshop"), ("observe", "workshop"), ("repair", "workshop")],
         }
     )
     engine = SimulationEngine(agent_service=service, random_seed=3)
@@ -143,14 +147,21 @@ async def test_engine_creates_conflicts_under_simultaneous_pressure() -> None:
 async def test_engine_updates_threat_and_cooperation() -> None:
     service = _StubAgentService(
         {
-            "a1": [("repair", "workshop"), ("talk", "bar"), ("repair", "workshop")],
-            "a2": [("gather", "farm"), ("observe", "town_hall"), ("hoard", "well")],
-            "a3": [("repair", "workshop"), ("talk", "town_hall"), ("repair", "workshop")],
+            "a1": [("repair", "workshop"), ("observe", "workshop"), ("repair", "workshop")],
+            "a2": [("gather", "farm"), ("observe", "farm"), ("hoard", "farm")],
+            "a3": [("repair", "workshop"), ("observe", "workshop"), ("repair", "workshop")],
         }
     )
+    state = _state()
+    state.agents[0].location = "workshop"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("workshop")
+    state.agents[1].location = "farm"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("farm")
+    state.agents[2].location = "workshop"
+    state.agents[2].tile_x, state.agents[2].tile_y = resolve_spawn_tile("workshop")
     engine = SimulationEngine(agent_service=service, random_seed=4)
 
-    result = await engine.run_round(_state())
+    result = await engine.run_round(state)
 
     assert 0 <= result.cooperation_ratio <= 1
     assert 0 <= result.threat_level <= 100
@@ -161,12 +172,18 @@ async def test_engine_updates_threat_and_cooperation() -> None:
 async def test_engine_generates_social_events_and_relationship_updates() -> None:
     service = _StubAgentService(
         {
-            "a1": [("talk", "bar"), ("talk", "bar"), ("repair", "workshop")],
-            "a2": [("talk", "bar"), ("talk", "bar"), ("gather", "well")],
-            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("repair", "workshop")],
+            "a1": [("talk", "town_hall"), ("talk", "town_hall"), ("observe", "town_hall")],
+            "a2": [("talk", "town_hall"), ("talk", "town_hall"), ("observe", "town_hall")],
+            "a3": [("observe", "town_hall"), ("observe", "town_hall"), ("observe", "town_hall")],
         }
     )
     state = _state()
+    state.agents[0].location = "town_hall"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
+    state.agents[1].location = "town_hall"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("town_hall")
+    state.agents[2].location = "town_hall"
+    state.agents[2].tile_x, state.agents[2].tile_y = resolve_spawn_tile("town_hall")
     engine = SimulationEngine(agent_service=service, random_seed=5)
 
     result = await engine.run_round(state)
@@ -186,3 +203,118 @@ async def test_engine_generates_social_events_and_relationship_updates() -> None
     assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
     assert state.agents[0].relationships
     assert state.agents[1].relationships
+
+
+@pytest.mark.asyncio
+async def test_self_sacrifice_kills_agent_and_stops_future_turns() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
+            "a2": [("gather", "well"), ("observe", "town_hall"), ("repair", "workshop")],
+            "a3": [("repair", "workshop"), ("talk", "bar"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].location = "town_hall"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
+    engine = SimulationEngine(agent_service=service, random_seed=6)
+
+    result = await engine.run_round(state)
+
+    sacrifice_events = [
+        event for event in result.phases[2].events if event.data.get("kind") == "self_sacrifice"
+    ]
+    assert len(sacrifice_events) == 1
+    assert service.calls["a1"] == 1
+    assert state.agents[0].status == AgentStatus.DEAD
+    assert state.agents[0].death_round == 1
+    assert state.agents[0].death_cause == "self_sacrifice"
+    assert state.sacrifice_history
+    assert state.sacrifice_history[0].agent_id == "a1"
+    assert state.agents[1].suspicion_level > 0
+    assert "a1" not in state.world_state.location_occupancy.get("workshop", [])
+
+
+@pytest.mark.asyncio
+async def test_engine_caps_movement_and_converts_far_actions_into_travel() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("repair", "workshop"), ("observe", None), ("observe", None)],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    state = _state()
+    start_tile = resolve_spawn_tile("well")
+    state.agents[0].location = "well"
+    state.agents[0].tile_x, state.agents[0].tile_y = start_tile
+
+    engine = SimulationEngine(agent_service=service, random_seed=7)
+    result = await engine.run_round(state)
+
+    first_action = next(
+        event for event in result.phases[2].events if event.data.get("agent_id") == "a1"
+    )
+    end_tile = (state.agents[0].tile_x, state.agents[0].tile_y)
+
+    assert first_action.data["action_type"] == "move"
+    assert "traveling" in first_action.summary
+    assert tile_distance(start_tile, end_tile) <= engine.MAX_MOVE_TILES_PER_ACTION
+    assert state.agents[0].location != "workshop"
+
+
+@pytest.mark.asyncio
+async def test_engine_blocks_agent_interactions_without_proximity() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("attack", "well"), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "town_hall"), ("observe", "town_hall"), ("observe", "town_hall")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].location = "well"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("well")
+    state.agents[1].location = "town_hall"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("town_hall")
+    state.agents[2].location = "workshop"
+    state.agents[2].tile_x, state.agents[2].tile_y = resolve_spawn_tile("workshop")
+
+    engine = SimulationEngine(agent_service=service, random_seed=8)
+    result = await engine.run_round(state)
+
+    first_action = next(
+        event for event in result.phases[2].events if event.data.get("agent_id") == "a1"
+    )
+
+    assert first_action.data["action_type"] == "observe"
+    assert "close enough" in first_action.summary
+    assert state.agents[0].suspicion_level >= 5
+
+
+@pytest.mark.asyncio
+async def test_engine_blocks_resource_actions_at_invalid_locations() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("repair", "bar"), ("observe", "bar"), ("observe", "bar")],
+            "a2": [("observe", "bar"), ("observe", "bar"), ("observe", "bar")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    state = _state()
+    state.agents[0].location = "bar"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("bar")
+    state.agents[1].location = "bar"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("bar")
+
+    materials_before = state.world_state.resources.materials
+    engine = SimulationEngine(agent_service=service, random_seed=9)
+    result = await engine.run_round(state)
+
+    first_action = next(
+        event for event in result.phases[2].events if event.data.get("agent_id") == "a1"
+    )
+
+    assert first_action.data["action_type"] == "observe"
+    assert "requires one of" in first_action.summary
+    assert state.world_state.resources.materials <= materials_before

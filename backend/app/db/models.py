@@ -27,6 +27,7 @@ class AgentStatus(str, enum.Enum):
     MOVING = "moving"
     WORKING = "working"
     SNEAKING = "sneaking"
+    DEAD = "dead"
     EXILED = "exiled"
 
 
@@ -77,6 +78,9 @@ class Experiment(TimestampMixin, Base):
     world_state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     unresolved_plotlines: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     recent_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    factions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    exile_history: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    sacrifice_history: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
 
     arc: Mapped[Arc | None] = relationship(
         back_populates="experiment",
@@ -162,6 +166,8 @@ class Agent(TimestampMixin, Base):
     secret_goal: Mapped[str] = mapped_column(Text, nullable=False)
     llm_model: Mapped[str] = mapped_column(String(255), nullable=False)
     location: Mapped[str | None] = mapped_column(String(255))
+    tile_x: Mapped[int | None] = mapped_column(Integer)
+    tile_y: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[AgentStatus] = mapped_column(
         Enum(AgentStatus, name="agent_status"),
         default=AgentStatus.IDLE,
@@ -171,6 +177,11 @@ class Agent(TimestampMixin, Base):
     inventory: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     memory: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     relationships: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    faction_id: Mapped[str | None] = mapped_column(String(255))
+    faction_role: Mapped[str | None] = mapped_column(String(32))
+    influence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    death_round: Mapped[int | None] = mapped_column(Integer)
+    death_cause: Mapped[str | None] = mapped_column(String(100))
 
     experiment: Mapped[Experiment] = relationship(back_populates="agents")
 

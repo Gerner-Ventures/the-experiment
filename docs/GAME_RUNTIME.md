@@ -78,6 +78,7 @@ Important runtime fields:
 - `goal`
 - `memory`
 - `location`
+- `tile_x`, `tile_y`
 - `inventory`
 - `relationships`
 - `suspicion_level`
@@ -254,6 +255,64 @@ Agent actions can also modify shared resources:
 - `self_sacrifice`: increases food and materials, decreases threat
 
 Conflicts on the same action/location can produce winner-based resolution with a small chaotic bonus for winners.
+
+## Action Hardening Rules
+
+The engine now applies a validation and normalization pass before action resolution.
+
+### Tile-Based Position
+
+Agents track both:
+
+- a coarse `location` label for events and UI
+- an exact tile position with `tile_x` / `tile_y` for movement and range checks
+
+### Movement Cap
+
+Movement is capped per action. If an agent chooses a distant location, the engine moves the agent only partway toward that destination.
+
+If the destination is too far away to reach this turn:
+
+- the original action does not fire yet
+- the turn resolves as `move`
+- the event summary describes the agent as traveling toward the destination
+
+### Proximity Checks
+
+Agent-to-agent actions require another active agent within range.
+
+Examples:
+
+- `talk`
+- `trade`
+- `accuse`
+- `attack`
+- `threaten`
+- `stab`
+- `shoot`
+- `poison`
+- `argue`
+- `investigate`
+
+Most of these use a short contact range. `shoot` is treated as a longer-range interaction.
+
+### Location Sanity Checks
+
+Some actions are restricted to compatible location types.
+
+Current examples:
+
+- `gather` requires resource-oriented locations such as farms, water sources, or stores
+- `repair` requires infrastructure-oriented locations such as workshops, meeting halls, boundary areas, or mystery structures
+- `vote` requires a meeting hall
+
+### Failed Action Fallback
+
+If an action fails hardening checks:
+
+- the action resolves as `observe`
+- the agent gains a `failed_action` suspicion bump
+- the failure is appended to recent memory
 
 ## Threat Calculation
 

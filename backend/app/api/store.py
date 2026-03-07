@@ -22,7 +22,14 @@ from app.db.models import (
     Round,
     WorldSnapshot,
 )
-from app.engine.models import EngineAgentState, RoundResult, SimulationState
+from app.engine.models import (
+    EngineAgentState,
+    ExileOutcome,
+    FactionState,
+    RoundResult,
+    SacrificeOutcome,
+    SimulationState,
+)
 from app.gm.models import DirectorAct, DirectorArc, GMPlanRecord
 from app.world import build_default_world_state
 from app.world.models import ResourceState, WorldState
@@ -153,6 +160,13 @@ class SqlAlchemyExperimentStore:
         experiment.world_state = state.world_state.model_dump(mode="json")
         experiment.unresolved_plotlines = list(state.unresolved_plotlines)
         experiment.recent_events = list(state.recent_events)
+        experiment.factions = [faction.model_dump(mode="json") for faction in state.factions]
+        experiment.exile_history = [
+            record.model_dump(mode="json") for record in state.exile_history
+        ]
+        experiment.sacrifice_history = [
+            record.model_dump(mode="json") for record in state.sacrifice_history
+        ]
 
         if experiment.arc is None:
             experiment.arc = Arc(name=state.arc.name, description=state.arc.description)
@@ -202,6 +216,8 @@ class SqlAlchemyExperimentStore:
         agent.secret_goal = agent_state.goal.text
         agent.llm_model = agent_state.llm_model
         agent.location = agent_state.location
+        agent.tile_x = agent_state.tile_x
+        agent.tile_y = agent_state.tile_y
         agent.status = agent_state.status
         agent.suspicion_level = agent_state.suspicion_level
         agent.inventory = list(agent_state.inventory)
@@ -209,6 +225,11 @@ class SqlAlchemyExperimentStore:
         agent.relationships = {
             key: value.model_dump(mode="json") for key, value in agent_state.relationships.items()
         }
+        agent.faction_id = agent_state.faction_id
+        agent.faction_role = agent_state.faction_role
+        agent.influence = agent_state.influence
+        agent.death_round = agent_state.death_round
+        agent.death_cause = agent_state.death_cause
         return agent
 
     def _apply_gm_plan(self, row: GMPlan, plan: GMPlanRecord) -> None:
@@ -259,6 +280,13 @@ class SqlAlchemyExperimentStore:
                     "relationships": agent.relationships,
                     "suspicion_level": agent.suspicion_level,
                     "llm_model": agent.llm_model,
+                    "faction_id": agent.faction_id,
+                    "faction_role": agent.faction_role,
+                    "influence": agent.influence,
+                    "tile_x": agent.tile_x,
+                    "tile_y": agent.tile_y,
+                    "death_round": agent.death_round,
+                    "death_cause": agent.death_cause,
                 }
             )
             for agent in experiment.agents
@@ -288,6 +316,11 @@ class SqlAlchemyExperimentStore:
             unresolved_plotlines=list(experiment.unresolved_plotlines),
             recent_events=list(experiment.recent_events),
             gm_plan=gm_plan,
+            factions=[FactionState.model_validate(item) for item in experiment.factions],
+            exile_history=[ExileOutcome.model_validate(item) for item in experiment.exile_history],
+            sacrifice_history=[
+                SacrificeOutcome.model_validate(item) for item in experiment.sacrifice_history
+            ],
         )
 
     def _to_gm_plan_record(self, row: GMPlan) -> GMPlanRecord:

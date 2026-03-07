@@ -50,6 +50,42 @@ Useful backend entry points:
 - `backend/app/api/store.py`: save/load logic for runtime state
 - `backend/app/db/models.py`: database schema
 
+## Backend Dev Workflow Without Docker
+
+If Docker is unavailable on the machine, use a two-lane backend workflow:
+
+1. fast local iteration with no infrastructure
+2. real persistence checks with Postgres only
+
+Daily backend loop:
+
+- Run backend work from `backend/` with local Python 3.12 and Poetry.
+- Install dependencies with `poetry install`.
+- For engine, GM, agent, and API contract changes, use the existing test suite first.
+- Prefer targeted pytest runs during development, then run the full backend suite before handing off.
+- For manual API testing, run `poetry run uvicorn app.main:app --reload` and exercise `/docs`.
+
+Infra expectations:
+
+- Most backend tests already use the in-memory store, so they do not require Docker, Postgres, or Redis.
+- Redis is currently not in the backend critical path for normal day-to-day development.
+- Real persistence validation still requires Postgres because the live runtime uses the SQLAlchemy store.
+- If Postgres cannot be installed locally, use a hosted dev Postgres instance via `DATABASE_URL`.
+
+When real Postgres is required:
+
+- any change under `backend/app/api/store.py`
+- any change under `backend/app/db/`
+- Alembic migrations
+- persistence, restart/recovery, or event-log durability behavior
+
+Postgres verification loop:
+
+- Set `DATABASE_URL` in `backend/.env` using the same format as `backend/.env.example`.
+- Run `poetry run alembic upgrade head`.
+- Run the backend locally with `poetry run uvicorn app.main:app --reload`.
+- Do not consider persistence-related work done until it has been exercised against a real Postgres database.
+
 ## Change Expectations
 
 - If you touch the round loop, game state, persistence, or websocket events, check `docs/GAME_RUNTIME.md`.
