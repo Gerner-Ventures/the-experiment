@@ -52,19 +52,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class ExceptionCaptureMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # type: ignore[override]
         try:
             response = await call_next(request)
             return response
         except Exception as exc:
-            ph.capture("backend_exception", {
-                "error": str(exc),
-                "traceback": traceback.format_exc(),
-                "path": request.url.path,
-                "method": request.method,
-            })
+            ph.capture(
+                "backend_exception",
+                {
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                    "path": request.url.path,
+                    "method": request.method,
+                },
+            )
             raise
+
 
 app.add_middleware(ExceptionCaptureMiddleware)
 app.include_router(api_router)
