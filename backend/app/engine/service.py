@@ -17,9 +17,11 @@ from app.engine.models import (
     EngineAgentState,
     FactionState,
     MeetingOutcome,
+    NullHook,
     PhaseName,
     PhaseResult,
     RoundEvent,
+    RoundHook,
     RoundResult,
     SimulationState,
     build_agent_context,
@@ -86,11 +88,16 @@ class SimulationEngine:
         self.social_service = social_service or SocialService(random_seed=random_seed + 10)
         self.random = Random(random_seed)
 
-    async def run_round(self, state: SimulationState) -> RoundResult:
+    async def run_round(
+        self, state: SimulationState, *, hook: RoundHook | None = None
+    ) -> RoundResult:
+        h = hook or NullHook()
         round_number = state.current_round + 1
         state.world_state.round_number = round_number
         self._refresh_factions(state)
 
+        # --- GM Plan phase ---
+        await h.on_phase_start(round_number, "gm_plan")
         if (
             state.gm_plan
             and state.gm_plan.plan.round == round_number
@@ -109,19 +116,42 @@ class SimulationEngine:
             )
         else:
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
+        await h.on_round_start(round_number, gm_plan)
+        await h.on_phase_complete(round_number, gm_result)
+
+        # --- Dawn phase ---
+        await h.on_phase_start(round_number, "dawn")
         dawn_result = self._dawn_phase(state, gm_plan.plan)
+        await h.on_phase_complete(round_number, dawn_result)
+
+        # --- Morning actions ---
+        await h.on_phase_start(round_number, "morning")
         morning_result, morning_turns = await self._action_phase(
-            state, phase="morning", actions_per_agent=2
+            state, phase="morning", actions_per_agent=2, hook=h
         )
+        await h.on_phase_complete(round_number, morning_result)
+
+        # --- Midday (town meeting) ---
+        await h.on_phase_start(round_number, "midday")
         midday_result = self._midday_phase(state)
+        await h.on_phase_complete(round_number, midday_result)
+
+        # --- Afternoon actions ---
+        await h.on_phase_start(round_number, "afternoon")
         afternoon_result, afternoon_turns = await self._action_phase(
-            state, phase="afternoon", actions_per_agent=1
+            state, phase="afternoon", actions_per_agent=1, hook=h
         )
+        await h.on_phase_complete(round_number, afternoon_result)
+
+        # --- Night phase ---
+        await h.on_phase_start(round_number, "night")
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
         night_result = await self._night_phase(state, cooperation_ratio)
+        await h.on_phase_complete(round_number, night_result)
 
+        # --- Finalize state ---
         state.current_round = round_number
         state.world_state.threat_level = (
             night_result.cooperation_ratio or state.world_state.threat_level
@@ -129,7 +159,7 @@ class SimulationEngine:
         self._update_experiment_status(state)
         state.recent_events.extend(
             event.summary
-            for phase in [
+            for phase_result in [
                 gm_result,
                 dawn_result,
                 morning_result,
@@ -137,10 +167,17 @@ class SimulationEngine:
                 afternoon_result,
                 night_result,
             ]
-            for event in phase.events
+            for event in phase_result.events
         )
         state.recent_events = state.recent_events[-20:]
         state.gm_plan = gm_plan
+
+        # Merge per-agent turn lists (morning + afternoon) instead of overwriting
+        merged_turns: dict[str, list[AgentTurnResult]] = {}
+        for agent_id, turns in morning_turns.items():
+            merged_turns.setdefault(agent_id, []).extend(turns)
+        for agent_id, turns in afternoon_turns.items():
+            merged_turns.setdefault(agent_id, []).extend(turns)
 
         return RoundResult(
             round_number=round_number,
@@ -156,7 +193,7 @@ class SimulationEngine:
             cooperation_ratio=cooperation_ratio,
             threat_level=state.world_state.threat_level,
             world_state=state.world_state.model_copy(deep=True),
-            agent_turns={**morning_turns, **afternoon_turns},
+            agent_turns=merged_turns,
             created_at=datetime.now(UTC),
         )
 
@@ -227,6 +264,7 @@ class SimulationEngine:
         *,
         phase: PhaseName,
         actions_per_agent: int,
+        hook: RoundHook,
     ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
         actions: list[PreparedAction] = []
@@ -253,6 +291,7 @@ class SimulationEngine:
                 agent.suspicion_level = turn.suspicion_level
                 prepared = self._prepare_action(state, agent, turn)
                 actions.append(prepared)
+                await hook.on_agent_action(state.world_state.round_number, phase, agent, turn)
             all_turns[agent.agent_id] = turns
 
         result = await self._resolve_actions(state, phase=phase, actions=actions)
