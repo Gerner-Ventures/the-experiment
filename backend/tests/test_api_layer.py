@@ -195,6 +195,8 @@ def test_start_and_pause_routes_update_experiment_status(client: TestClient) -> 
     fetched = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
     assert fetched.status_code == 200
     assert fetched.json()["status"] == "paused"
+
+
 def test_log_endpoint_filters_and_paginates(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
@@ -396,6 +398,8 @@ def test_report_grade_analytics_use_resolved_action_outcomes(
     assert gm.json()["items"][0]["round_number"] == 1
     assert gm.json()["items"][0]["round_theme"]
     assert gm.json()["items"][0]["narration"]
+
+
 def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents(
     client: TestClient, runtime: ExperimentRuntime
 ) -> None:
@@ -438,6 +442,8 @@ def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents
     mara = next(item for item in goals.json()["items"] if item["agent_name"] == "Mara")
     assert mara["progress_history"][0]["requested_action_type"] == "accuse"
     assert mara["progress_history"][0]["summary"]
+
+
 def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal(
     client: TestClient, runtime: ExperimentRuntime
 ) -> None:
@@ -467,6 +473,8 @@ def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal(
     goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
     assert goals.status_code == 200
     assert all(item["outcome"] == "unknown" for item in goals.json()["items"])
+
+
 def test_betrayal_and_faction_analytics_expose_timeline_data(
     client: TestClient, runtime: ExperimentRuntime
 ) -> None:
@@ -505,6 +513,8 @@ def test_betrayal_and_faction_analytics_expose_timeline_data(
     assert factions.status_code == 200
     assert "timeline" in factions.json()
     assert "membership_changes" in factions.json()
+
+
 def test_usage_and_prompt_trace_endpoints_group_records(
     client: TestClient, runtime: ExperimentRuntime
 ) -> None:
