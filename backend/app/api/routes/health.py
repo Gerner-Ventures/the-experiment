@@ -28,7 +28,7 @@ async def health() -> dict[str, str]:
     description="Deep readiness probe — checks DB and Redis connectivity.",
     response_model=None,
 )
-async def readiness() -> JSONResponse | dict:
+async def readiness() -> JSONResponse | dict[str, object]:
     checks: dict[str, str] = {}
 
     # Check database using the app's shared connection pool
@@ -41,7 +41,7 @@ async def readiness() -> JSONResponse | dict:
 
     # Check Redis
     try:
-        r = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)
+        r: aioredis.Redis = aioredis.from_url(settings.redis_url, socket_connect_timeout=2)  # type: ignore[no-untyped-call]
         await r.ping()
         await r.aclose()
         checks["redis"] = "ok"

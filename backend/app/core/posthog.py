@@ -22,7 +22,7 @@ def init() -> None:
     _client = _posthog
 
 
-def capture(event: str, properties: dict | None = None) -> None:
+def capture(event: str, properties: dict[str, object] | None = None) -> None:
     if _client is None:
         return
     _client.capture(SYSTEM_ID, event, properties or {})
