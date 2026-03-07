@@ -6,6 +6,7 @@
   "properties": {
     "id": { "type": "string", "format": "uuid" },
     "name": { "type": "string" },
+    "character_id": { "type": ["string", "null"] },
     "personality": {
       "type": "object",
       "properties": {

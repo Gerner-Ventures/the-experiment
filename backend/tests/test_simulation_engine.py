@@ -13,7 +13,7 @@ from app.agents.models import (
 from app.agents.service import AgentService
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
 from app.gm import get_preset_arc
-from app.schemas.agent_decision import AgentDecision, DecisionAction
+from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
 from app.world import build_default_world_state
 
 
@@ -35,7 +35,9 @@ class _StubAgentService(AgentService):
                 inner_thought="A choice is made.",
                 suspicion="The town is slightly off." if action_type == "explore" else None,
                 action=DecisionAction(
-                    type=action_type, target=location or "well", location=location
+                    type=cast(DecisionActionType, action_type),
+                    target=location or "well",
+                    location=location,
                 ),
                 dialogue=None,
                 goal_progress="Incremental movement.",
