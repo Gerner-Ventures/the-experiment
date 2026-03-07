@@ -19,8 +19,9 @@ def test_docs_and_openapi_endpoints_are_available() -> None:
 
     body = openapi.json()
     assert body["info"]["title"]
-    assert body["paths"]["/experiments"]["post"]["summary"] == "Create an experiment"
+    assert body["paths"]["/api/experiments"]["post"]["summary"] == "Create an experiment"
     assert (
-        body["paths"]["/experiments/{experiment_id}/log"]["get"]["summary"] == "Query the event log"
+        body["paths"]["/api/experiments/{experiment_id}/log"]["get"]["summary"]
+        == "Query the event log"
     )
-    assert body["paths"]["/health"]["get"]["summary"] == "Check backend health"
+    assert body["paths"]["/api/health"]["get"]["summary"] == "Check backend health"
