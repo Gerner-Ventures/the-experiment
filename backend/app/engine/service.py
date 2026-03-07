@@ -124,6 +124,7 @@ class SimulationEngine:
             and state.gm_plan.status == "applied"
         ):
             gm_plan = state.gm_plan
+            lf.span(name="gm_plan", parent=trace, metadata={"pre_approved": True})
             gm_result = PhaseResult(
                 phase="gm_plan",
                 events=[
@@ -135,11 +136,13 @@ class SimulationEngine:
                 ],
             )
         else:
-            gm_span = lf.span(name="gm_plan", trace=trace)
+            gm_span = lf.span(name="gm_plan", parent=trace)
             self._set_phase_context(trace, gm_span)
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
+        dawn_span = lf.span(name="dawn", parent=trace)
+        self._set_phase_context(trace, dawn_span)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
-        morning_span = lf.span(name="morning", trace=trace)
+        morning_span = lf.span(name="morning", parent=trace)
         self._set_phase_context(trace, morning_span)
         morning_result, morning_turns, morning_actions = await self._action_phase(
             state,
@@ -149,7 +152,7 @@ class SimulationEngine:
             phase_span=morning_span,
         )
         midday_result = self._midday_phase(state)
-        afternoon_span = lf.span(name="afternoon", trace=trace)
+        afternoon_span = lf.span(name="afternoon", parent=trace)
         self._set_phase_context(trace, afternoon_span)
         afternoon_result, afternoon_turns, afternoon_actions = await self._action_phase(
             state,
@@ -161,7 +164,7 @@ class SimulationEngine:
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
-        night_span = lf.span(name="night", trace=trace)
+        night_span = lf.span(name="night", parent=trace)
         self._set_phase_context(trace, night_span)
         night_result = await self._night_phase(
             state,
@@ -207,6 +210,7 @@ class SimulationEngine:
                 *afternoon_turns.get(agent_id, []),
             ]
 
+        lf.reset_trace_context()
         return RoundResult(
             round_number=round_number,
             gm_plan=gm_plan,
@@ -306,7 +310,7 @@ class SimulationEngine:
         for agent in self._active_agents(state):
             agent_span = lf.span(
                 name=f"agent:{agent.name}",
-                trace=phase_span or trace,
+                parent=phase_span or trace,
                 metadata={"agent_id": agent.agent_id, "agent_name": agent.name},
             )
             if agent_span:
@@ -452,7 +456,7 @@ class SimulationEngine:
     ) -> tuple[str, AgentMemoryState]:
         memory_span = lf.span(
             name=f"memory:{agent.name}",
-            trace=night_span or trace,
+            parent=night_span or trace,
             metadata={"agent_id": agent.agent_id, "agent_name": agent.name},
         )
         if memory_span:

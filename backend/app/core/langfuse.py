@@ -56,11 +56,15 @@ def get_trace_context() -> dict[str, str]:
     return _trace_context.get() or {}
 
 
-def span(*, name: str, trace: Any = None, **kwargs: Any) -> Any:
-    if trace is None:
+def reset_trace_context() -> None:
+    _trace_context.set(None)
+
+
+def span(*, name: str, parent: Any = None, **kwargs: Any) -> Any:
+    if parent is None:
         return None
     try:
-        return trace.span(name=name, **kwargs)
+        return parent.span(name=name, **kwargs)
     except Exception:
         logger.warning("langfuse span failed", exc_info=True)
         return None

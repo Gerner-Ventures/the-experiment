@@ -40,7 +40,7 @@ class Settings(BaseSettings):
 
     @property
     def langfuse_enabled(self) -> bool:
-        return self.langfuse_public_key is not None and self.langfuse_secret_key is not None
+        return bool(self.langfuse_public_key) and bool(self.langfuse_secret_key)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

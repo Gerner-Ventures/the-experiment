@@ -176,7 +176,12 @@ class LLMClient:
             messages=cast(Any, repair_messages),
             temperature=0,
             timeout=model_config.timeout_seconds,
-            metadata={**request.metadata, "repair_pass": True},
+            metadata={
+                **request.metadata,
+                **get_trace_context(),
+                "generation_name": f"{request.role}:repair",
+                "repair_pass": True,
+            },
         )
         repaired_result = self._build_result(repair_response)
         response_format = request.response_format

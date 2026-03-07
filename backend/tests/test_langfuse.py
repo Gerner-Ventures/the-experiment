@@ -43,6 +43,11 @@ class TestLangfuseSettings:
 
         assert settings.langfuse_enabled is False
 
+    def test_langfuse_disabled_when_keys_are_empty_strings(self) -> None:
+        settings = Settings(langfuse_public_key="", langfuse_secret_key="")
+
+        assert settings.langfuse_enabled is False
+
     def test_langfuse_host_configurable(self) -> None:
         settings = Settings(
             langfuse_public_key="pk-lf-test",
@@ -205,7 +210,7 @@ class TestLangfuseSpanHelper:
 
         result = langfuse.span(
             name="gm_plan",
-            trace=mock_trace,
+            parent=mock_trace,
             metadata={"round": 1},
         )
 
@@ -221,7 +226,7 @@ class TestLangfuseSpanHelper:
         mock_trace = MagicMock()
         mock_trace.span.side_effect = RuntimeError("boom")
 
-        result = langfuse.span(name="test", trace=mock_trace)
+        result = langfuse.span(name="test", parent=mock_trace)
         assert result is None
 
 
@@ -278,6 +283,7 @@ class TestTraceHierarchyInEngine:
             await engine.run_round(state)
 
             assert "gm_plan" in span_names
+            assert "dawn" in span_names
             assert "morning" in span_names
             assert "afternoon" in span_names
             assert "night" in span_names
@@ -303,6 +309,18 @@ class TestTraceContextPropagation:
 
         ctx = get_trace_context()
         assert ctx == {}
+
+    def test_reset_trace_context_clears_state(self) -> None:
+        from app.core.langfuse import (
+            get_trace_context,
+            reset_trace_context,
+            set_trace_context,
+        )
+
+        set_trace_context(trace_id="t-1", span_id="s-1")
+        assert get_trace_context() != {}
+        reset_trace_context()
+        assert get_trace_context() == {}
 
     @pytest.mark.asyncio
     async def test_llm_client_merges_trace_context_into_metadata(self) -> None:
