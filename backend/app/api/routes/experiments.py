@@ -65,13 +65,13 @@ async def inject_observer_event(
 @router.get("/{experiment_id}/gm/plan")
 async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
     _get_state(experiment_id)
-    return runtime.get_or_generate_gm_plan(experiment_id)
+    return await runtime.get_or_generate_gm_plan(experiment_id)
 
 
 @router.post("/{experiment_id}/gm/approve")
 async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> GMPlanRecord:
     _get_state(experiment_id)
-    return runtime.approve_gm_plan(experiment_id, request.modified_plan)
+    return await runtime.approve_gm_plan(experiment_id, request.modified_plan)
 
 
 @router.put("/{experiment_id}/arc", response_model=ExperimentDetail)

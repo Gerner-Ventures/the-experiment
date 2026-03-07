@@ -2,14 +2,30 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from app.llm import LLMService
 from app.gm.models import GMPlanData, GMPlanRecord, GMPlanningContext
 from app.gm.planner import build_prompt_package, generate_rule_based_plan
 
 
 class GMService:
-    def generate_plan(self, context: GMPlanningContext) -> GMPlanRecord:
-        _ = build_prompt_package(context)
-        plan = generate_rule_based_plan(context)
+    def __init__(self, llm_service: LLMService | None = None) -> None:
+        self.llm_service = llm_service or LLMService()
+
+    async def generate_plan(self, context: GMPlanningContext) -> GMPlanRecord:
+        prompt = build_prompt_package(context)
+        try:
+            result = await self.llm_service.generate_gm_plan(
+                messages=[
+                    {"role": "system", "content": prompt.system_prompt},
+                    {"role": "user", "content": prompt.user_prompt},
+                ],
+                response_format=GMPlanData,
+                metadata={"round_number": context.round_number},
+                model_override=None,
+            )
+            plan = GMPlanData.model_validate(result.parsed or {})
+        except Exception:
+            plan = generate_rule_based_plan(context)
         record = GMPlanRecord(plan=plan)
         if context.auto_approve:
             return self.apply_plan(self.approve_plan(record))
