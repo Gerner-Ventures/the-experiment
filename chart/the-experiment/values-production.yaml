@@ -1,0 +1,38 @@
+## Production overrides for DigitalOcean K8s deployment
+
+backend:
+  image:
+    registry: registry.digitalocean.com
+    repository: gv-shared/the-experiment-backend
+    tag: ""
+
+frontend:
+  image:
+    registry: registry.digitalocean.com
+    repository: gv-shared/the-experiment-frontend
+    tag: ""
+
+imagePullSecrets:
+  - name: registry-gv-shared
+
+ingress:
+  enabled: true
+  className: nginx
+  hostname: the-experiment.gernerventures.com
+  tls: true
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-production
+
+secrets:
+  neon:
+    existingSecret: the-experiment-neon
+  auth0:
+    existingSecret: the-experiment-auth0
+  litellm:
+    existingSecret: the-experiment-litellm
+  posthog:
+    existingSecret: the-experiment-posthog
+
+config:
+  posthogEnabled: "true"
+  platformUrl: "https://the-experiment.gernerventures.com"

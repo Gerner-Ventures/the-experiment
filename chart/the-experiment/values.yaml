@@ -1,0 +1,127 @@
+## @section Global parameters
+replicaCount: 1
+
+## @section Backend image parameters
+backend:
+  image:
+    registry: ""
+    repository: the-experiment-backend
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      cpu: 200m
+      memory: 256Mi
+
+## @section Frontend image parameters
+frontend:
+  image:
+    registry: ""
+    repository: the-experiment-frontend
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+## @section Redis parameters
+redis:
+  enabled: true
+  image: redis:7-alpine
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+## @param imagePullSecrets Docker registry pull secret names
+imagePullSecrets: []
+
+## @param nameOverride Override chart name
+nameOverride: ""
+## @param fullnameOverride Override full resource name
+fullnameOverride: ""
+
+## @section Service account
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+## @section Secrets
+secrets:
+  ## @section Neon DB secrets
+  neon:
+    databaseUrl: ""
+    existingSecret: ""
+
+  ## @section Auth0 secrets
+  auth0:
+    domain: ""
+    clientId: ""
+    clientSecret: ""
+    audience: ""
+    existingSecret: ""
+
+  ## @section LiteLLM secrets (LLM API keys)
+  litellm:
+    anthropicApiKey: ""
+    openaiApiKey: ""
+    existingSecret: ""
+
+  ## @section PostHog secrets
+  posthog:
+    apiKey: ""
+    existingSecret: ""
+
+## @section Application configuration
+config:
+  backendPort: 8000
+  logLevel: "info"
+  redisUrl: ""
+  posthogEnabled: "false"
+  platformUrl: ""
+
+## @section Service parameters
+service:
+  type: ClusterIP
+  backendPort: 8000
+  frontendPort: 80
+
+## @section Ingress parameters
+ingress:
+  enabled: false
+  className: "nginx"
+  annotations: {}
+  hostname: ""
+  tls: false
+  tlsSecret: ""
+
+## @section Pod parameters
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+  runAsGroup: 1001
+  fsGroup: 1001
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+## @section Autoscaling
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80

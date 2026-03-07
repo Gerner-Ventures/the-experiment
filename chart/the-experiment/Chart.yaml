@@ -1,0 +1,13 @@
+apiVersion: v2
+name: the-experiment
+description: "AI agent simulation engine — Lord of the Flies meets The Truman Show"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: Gerner Ventures
+keywords:
+  - ai
+  - simulation
+  - agents
+  - game
