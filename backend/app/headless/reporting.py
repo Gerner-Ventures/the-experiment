@@ -236,7 +236,9 @@ def _build_validations(
         ),
         ValidationResult(
             key="resource_bounds",
-            passed=all(value >= 0 for value in final_state.world_state.resources.model_dump().values()),
+            passed=all(
+                value >= 0 for value in final_state.world_state.resources.model_dump().values()
+            ),
             detail=_format_resources(final_state.world_state.resources.model_dump(mode="json")),
         ),
         ValidationResult(
@@ -276,9 +278,7 @@ def _cooperation_from_logs(logs: list[EventLogItem]) -> float:
     if not agent_actions:
         return 0.0
     cooperative_count = sum(
-        1
-        for item in agent_actions
-        if str(item.data["action"].get("type")) in COOPERATIVE_ACTIONS
+        1 for item in agent_actions if str(item.data["action"].get("type")) in COOPERATIVE_ACTIONS
     )
     return round(cooperative_count / len(agent_actions), 2)
 
@@ -289,8 +289,7 @@ def _render_agent_actions(actions: list[AgentActionSummary]) -> str:
         location = f"@{action.location}" if action.location else ""
         grouped[action.agent_name].append(f"{action.action_type}{location}")
     return "; ".join(
-        f"{agent_name}[{', '.join(grouped[agent_name])}]"
-        for agent_name in sorted(grouped)
+        f"{agent_name}[{', '.join(grouped[agent_name])}]" for agent_name in sorted(grouped)
     )
 
 

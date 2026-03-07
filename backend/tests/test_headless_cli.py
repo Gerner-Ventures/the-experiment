@@ -21,7 +21,9 @@ def _report_signature(report: object) -> tuple[object, ...]:
     from app.headless.models import HeadlessRunReport
 
     headless_report = (
-        report if isinstance(report, HeadlessRunReport) else HeadlessRunReport.model_validate(report)
+        report
+        if isinstance(report, HeadlessRunReport)
+        else HeadlessRunReport.model_validate(report)
     )
     rounds = []
     for round_summary in headless_report.rounds:

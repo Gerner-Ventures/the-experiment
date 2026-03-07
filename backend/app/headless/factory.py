@@ -12,6 +12,7 @@ from app.gm import GMPlanningContext, GMService, generate_rule_based_plan
 from app.gm.models import GMPlanRecord
 from app.headless.models import HeadlessMode
 from app.llm.config import get_default_model_configs
+
 PROVIDER_ENV_VARS = {
     "anthropic": "ANTHROPIC_API_KEY",
     "google": "GOOGLE_API_KEY",
@@ -29,6 +30,8 @@ class RuleBasedGMService(GMService):
         if context.auto_approve:
             return self.apply_plan(self.approve_plan(record))
         return record
+
+
 def build_headless_runtime(*, mode: HeadlessMode, seed: int) -> ExperimentRuntime:
     store = InMemoryExperimentStore()
     gm_service: GMService
