@@ -28,7 +28,8 @@ ingress:
     nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
     nginx.ingress.kubernetes.io/limit-rps: "10"
     nginx.ingress.kubernetes.io/limit-burst-multiplier: "3"
-    nginx.ingress.kubernetes.io/limit-connections: "5"
+    # Raised from 5 to accommodate long-lived WebSocket connections per user
+    nginx.ingress.kubernetes.io/limit-connections: "20"
 
 secrets:
   neon:
@@ -41,5 +42,4 @@ secrets:
     existingSecret: the-experiment-posthog
 
 config:
-  posthogEnabled: "true"
   platformUrl: "https://the-experiment.gernerventures.com"

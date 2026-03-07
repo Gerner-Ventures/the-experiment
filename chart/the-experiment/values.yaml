@@ -32,6 +32,8 @@ frontend:
       memory: 64Mi
 
 ## @section Redis parameters
+## Redis uses emptyDir — data is lost on pod restart.
+## This is fine for caching/pubsub; do not add persistence-dependent logic.
 redis:
   enabled: true
   image: redis:7-alpine
@@ -104,7 +106,6 @@ config:
   backendPort: 8000
   logLevel: "info"
   redisUrl: ""
-  posthogEnabled: "false"
   platformUrl: ""
 
 ## @section Service parameters

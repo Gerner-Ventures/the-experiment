@@ -6,6 +6,8 @@ COPY package.json ./
 RUN npm install --legacy-peer-deps
 COPY . .
 
+# Analytics-only key, acceptable in image layer history.
+# Rotation requires an image rebuild.
 ARG VITE_POSTHOG_KEY=""
 ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
 

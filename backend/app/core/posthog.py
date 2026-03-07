@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import types
+
 import posthog as _posthog
 
 from app.core.config import get_settings
 
-_client: _posthog.Client | None = None
+_client: types.ModuleType | None = None
 
 SYSTEM_ID = "backend-production"
 
@@ -12,7 +14,7 @@ SYSTEM_ID = "backend-production"
 def init() -> None:
     global _client
     settings = get_settings()
-    if not settings.posthog_key or not settings.posthog_enabled:
+    if not settings.posthog_key:
         return
     _posthog.api_key = settings.posthog_key
     _posthog.host = settings.posthog_host

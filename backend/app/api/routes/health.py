@@ -4,9 +4,9 @@ import redis.asyncio as aioredis
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings
+from app.db import engine
 
 router = APIRouter(tags=["health"])
 
@@ -31,12 +31,10 @@ async def health() -> dict[str, str]:
 async def readiness() -> JSONResponse | dict:
     checks: dict[str, str] = {}
 
-    # Check database
+    # Check database using the app's shared connection pool
     try:
-        engine = create_async_engine(settings.database_url, pool_size=1, max_overflow=0)
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        await engine.dispose()
         checks["database"] = "ok"
     except Exception:
         checks["database"] = "unreachable"
