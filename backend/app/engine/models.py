@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -18,6 +18,59 @@ from app.gm.models import DirectorArc, GMPlanRecord
 from app.world.models import WorldState
 
 PhaseName = Literal["gm_plan", "dawn", "morning", "midday", "afternoon", "night"]
+
+
+@runtime_checkable
+class RoundHook(Protocol):
+    """Callback interface for streaming round progress out of the engine.
+
+    The engine calls these methods at phase boundaries and per-agent-action,
+    allowing the runtime to broadcast WS messages without duplicating round logic.
+    """
+
+    async def on_round_start(
+        self, round_number: int, gm_plan: GMPlanRecord
+    ) -> None: ...
+
+    async def on_phase_start(self, round_number: int, phase: PhaseName) -> None: ...
+
+    async def on_phase_complete(
+        self, round_number: int, phase_result: PhaseResult
+    ) -> None: ...
+
+    async def on_agent_action(
+        self,
+        round_number: int,
+        phase: PhaseName,
+        agent: EngineAgentState,
+        turn: AgentTurnResult,
+    ) -> None: ...
+
+
+class NullHook:
+    """No-op hook for non-streaming callers."""
+
+    async def on_round_start(self, round_number: int, gm_plan: GMPlanRecord) -> None:
+        pass
+
+    async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:
+        pass
+
+    async def on_phase_complete(
+        self, round_number: int, phase_result: PhaseResult
+    ) -> None:
+        pass
+
+    async def on_agent_action(
+        self,
+        round_number: int,
+        phase: PhaseName,
+        agent: EngineAgentState,
+        turn: AgentTurnResult,
+    ) -> None:
+        pass
+
+
 ConversationTone = Literal["supportive", "suspicious", "manipulative", "guarded"]
 MeetingStance = Literal["support", "oppose", "hesitant"]
 MeetingVoteChoice = Literal["support", "oppose", "abstain"]
