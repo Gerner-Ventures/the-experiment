@@ -1,8 +1,12 @@
 ---
-title: "Optimize WS broadcast concurrency at scale"
-status: todo
 priority: P3
-tags: [stream-2, backend, performance]
+review_status: approved
+status: todo
+tags:
+- stream-2
+- backend
+- performance
+title: Optimize WS broadcast concurrency at scale
 ---
 
 # Optimize WS Broadcast Concurrency
