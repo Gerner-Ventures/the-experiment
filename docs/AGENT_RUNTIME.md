@@ -35,16 +35,17 @@ flowchart TD
   C --> D[AgentDecision]
   D --> E[AgentTurnResult]
   E --> F[Engine action resolution]
-  F --> G[Memory updates]
+  F --> G[Observation and memory updates]
   F --> H[Relationship updates]
   F --> I[Suspicion updates]
-  G --> J[Faction refresh]
-  H --> J
-  I --> J
-  J --> K[Persist state]
-  K --> L[Event log]
-  K --> M[WebSocket messages]
-  K --> N[Replay and analytics APIs]
+  G --> J[Night consolidation]
+  J --> K[Faction refresh]
+  H --> K
+  I --> K
+  K --> L[Persist state]
+  L --> M[Event log]
+  L --> N[WebSocket messages]
+  L --> O[Replay and analytics APIs]
 ```
 
 ## Runtime Objects
@@ -181,6 +182,11 @@ After the decision returns, the backend applies some direct updates immediately:
 
 These updates happen before broader world resolution.
 
+Important distinction:
+
+- these direct updates are deterministic and happen inside `AgentBrain.decide`
+- LLM-based memory classification and consolidation happen later through `AgentService.register_observation()` and the night phase
+
 ## 4. Action resolution
 
 The engine then resolves actions across agents.
@@ -198,8 +204,8 @@ Important: the agent may intend one thing, but the resolved outcome can still ch
 
 When agents converse or participate in meetings, additional state changes occur:
 
-- new memory entries are created
-- relationship trust changes
+- new memory entries are created for both sides of a conversation
+- relationship trust changes for both sides of a conversation
 - faction alignment may shift
 - exile pressure may emerge
 
@@ -236,7 +242,21 @@ At night, agents receive reflective memory updates based on:
 - cooperation ratio
 - overall emotional state of the round
 
-This is how a round leaves long-lived emotional residue in memory.
+This is now the main consolidation pass for long-lived memory.
+
+Per active agent, the backend:
+
+- creates a reflective observation
+- records it in `recent_events`
+- may consolidate enough unconsolidated recent events into one higher-level key memory
+- may consolidate relationship history into stable relationship notes
+
+The night pass runs asynchronously across active agents before the round is persisted.
+
+Current implementation note:
+
+- the night reflection itself is recorded with `classify=False`
+- the long-lived change comes from the consolidation passes that run immediately after it
 
 ## Mutation Map
 
@@ -245,8 +265,10 @@ This section answers: “what code path mutates what field?”
 | Field | Main mutation source |
 |------|-----------------------|
 | `memory.recent_events` | decision recording, observations, conversations, night reflection |
-| `memory.key_memories` | selfish or important moments |
-| `relationships` | conversation trust deltas, meeting vote deltas |
+| `memory.key_memories` | selfish decisions and night-time consolidation |
+| `memory.last_consolidated_round` | night-time memory consolidation |
+| `memory.relationship_consolidation_signatures` | relationship consolidation bookkeeping |
+| `relationships` | conversation trust deltas, meeting vote deltas, relationship consolidation |
 | `suspicion_level` | edge-of-map exploration, suspicious thoughts, failed or pressured social outcomes |
 | `location` | chosen action location, exile relocation |
 | `status` | runtime transitions like exile |
@@ -266,6 +288,8 @@ These primarily come from model output:
 - self-reported suspicion text
 - cooperation intent
 - goal progress text
+- key-memory consolidation summaries
+- relationship-note consolidation
 
 ## Deterministic backend-driven
 
@@ -391,7 +415,7 @@ Relevant event families:
 - `faction_update`
 - `cult_activity`
 - `exile_vote`
-- `exile_result`
+- `exile_enacted`
 
 ## Replay and analytics
 
@@ -416,12 +440,14 @@ Check:
 - `AgentDecision`
 - current crisis and observations
 - recent memory and key memories
+- whether memory consolidation already summarized the pattern into a key memory
 
 ## “Why did the agent distrust someone?”
 
 Check:
 
 - relationship history
+- consolidated relationship notes
 - recent conversation content
 - meeting vote deltas
 - suspicion level and paranoia-heavy goals
