@@ -23,6 +23,9 @@ GoalArchetype = Literal[
     "personal_redemption",
     "obsession_desire",
 ]
+MemorySalienceType = Literal[
+    "threat", "betrayal", "goal_clue", "relationship", "resource", "identity", "other"
+]
 ActionType = Literal[
     "move",
     "gather",
@@ -164,6 +167,7 @@ class KeyMemory(AgentModel):
     meaning: str
     round_number: int = Field(ge=0)
     confidence: int = Field(ge=0, le=100, default=70)
+    salience_type: MemorySalienceType = "other"
 
 
 class RelationshipMemory(AgentModel):
@@ -219,3 +223,12 @@ class AgentTurnResult(AgentModel):
     updated_memory: AgentMemoryState
     suspicion_level: float = Field(ge=0, le=100)
     prompt: str
+
+
+class MemoryPromotionDecision(AgentModel):
+    promote_to_key_memory: bool = False
+    create_summary: bool = False
+    summary: str | None = None
+    meaning: str | None = None
+    salience_type: MemorySalienceType = "other"
+    confidence: int = Field(ge=0, le=100, default=65)

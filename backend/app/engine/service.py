@@ -72,7 +72,7 @@ class SimulationEngine:
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
-        night_result = self._night_phase(state, cooperation_ratio)
+        night_result = await self._night_phase(state, cooperation_ratio)
 
         state.current_round = round_number
         state.world_state.threat_level = (
@@ -200,7 +200,7 @@ class SimulationEngine:
                     agent.location = turn.decision.action.location
             all_turns[agent.agent_id] = turns
 
-        result = self._resolve_actions(state, phase=phase, actions=actions)
+        result = await self._resolve_actions(state, phase=phase, actions=actions)
         return result, all_turns
 
     def _midday_phase(self, state: SimulationState) -> PhaseResult:
@@ -257,7 +257,7 @@ class SimulationEngine:
             events=events,
         )
 
-    def _night_phase(self, state: SimulationState, cooperation_ratio: float) -> PhaseResult:
+    async def _night_phase(self, state: SimulationState, cooperation_ratio: float) -> PhaseResult:
         crisis_severity = (
             _severity_to_float(state.gm_plan.plan.crisis_event.severity) if state.gm_plan else 0.2
         )
@@ -269,12 +269,19 @@ class SimulationEngine:
         reflections = []
         for agent in state.agents:
             reflection = f"{agent.name} ends the night feeling {self._night_mood(agent.suspicion_level, cooperation_ratio)}."
-            agent.memory = self.agent_service.register_observation(
+            agent.memory = await self.agent_service.register_observation(
                 agent.memory,
                 round_number=state.world_state.round_number,
                 summary=reflection,
                 emotional_charge=10,
                 important=agent.suspicion_level > 40,
+                goal=agent.goal,
+                suspicion_level=agent.suspicion_level,
+            )
+            agent.memory = await self.agent_service.consolidate_memory(
+                agent.memory,
+                goal=agent.goal,
+                suspicion_level=agent.suspicion_level,
             )
             reflections.append(reflection)
         return PhaseResult(
@@ -289,7 +296,7 @@ class SimulationEngine:
             cooperation_ratio=state.world_state.threat_level,
         )
 
-    def _resolve_actions(
+    async def _resolve_actions(
         self,
         state: SimulationState,
         *,
@@ -312,7 +319,7 @@ class SimulationEngine:
                     location=location,
                     participants=[agent for agent, _ in group],
                 )
-                self._apply_conversation_outcomes(state, outcomes)
+                await self._apply_conversation_outcomes(state, outcomes)
                 for outcome in outcomes:
                     events.extend(self._conversation_events(phase, outcome))
                 continue
@@ -416,7 +423,7 @@ class SimulationEngine:
             return "Investigate whoever is spreading lies"
         return "Share watch duty at the fence tonight"
 
-    def _apply_conversation_outcomes(
+    async def _apply_conversation_outcomes(
         self, state: SimulationState, outcomes: list[ConversationOutcome]
     ) -> None:
         agents = {agent.agent_id: agent for agent in state.agents}
@@ -424,17 +431,21 @@ class SimulationEngine:
             for turn in outcome.turns:
                 speaker = agents[turn.speaker_id]
                 listener = agents[turn.listener_id]
-                speaker.memory = self.agent_service.register_observation(
+                speaker.memory = await self.agent_service.register_observation(
                     speaker.memory,
                     round_number=state.world_state.round_number,
                     summary=turn.content,
                     emotional_charge=8,
+                    goal=speaker.goal,
+                    suspicion_level=speaker.suspicion_level,
                 )
-                listener.memory = self.agent_service.register_observation(
+                listener.memory = await self.agent_service.register_observation(
                     listener.memory,
                     round_number=state.world_state.round_number,
                     summary=turn.content,
                     emotional_charge=6,
+                    goal=listener.goal,
+                    suspicion_level=listener.suspicion_level,
                 )
                 speaker.memory = self.agent_service.update_relationship(
                     speaker.memory,

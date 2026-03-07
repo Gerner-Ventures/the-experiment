@@ -8,6 +8,9 @@ from app.agents.brain import build_agent_prompt
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
+    MemoryConsolidationDecision,
+    MemoryEvent,
+    MemoryPromotionDecision,
     Observation,
     PersonalityAxes,
     PersonalityProfile,
@@ -46,6 +49,47 @@ class _StubLLMService(LLMService):
                 "cooperation_intent": "low",
             },
         )
+
+
+class _StubMemoryLLMService(LLMService):
+    def __init__(
+        self,
+        decision: MemoryPromotionDecision | None = None,
+        consolidation: MemoryConsolidationDecision | None = None,
+    ) -> None:
+        self._decision = decision or MemoryPromotionDecision(
+            promote_to_key_memory=True,
+            meaning="This felt like a pattern that could not be ignored.",
+            salience_type="threat",
+            confidence=84,
+        )
+        self._consolidation = consolidation or MemoryConsolidationDecision(
+            create_summary=True,
+            summary="The town keeps emitting signals that feel staged.",
+            meaning="Repeated anomalies have hardened into the belief that the environment is artificial.",
+            salience_type="identity",
+            confidence=81,
+        )
+
+    async def classify_memory_event(
+        self,
+        *,
+        event: MemoryEvent,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+        recent_key_memories: list[object],
+    ) -> MemoryPromotionDecision | None:
+        return self._decision
+
+    async def consolidate_memory_events(
+        self,
+        *,
+        events: list[MemoryEvent],
+        goal: SecretGoal | None,
+        suspicion_level: float,
+        recent_key_memories: list[object],
+    ) -> MemoryConsolidationDecision | None:
+        return self._consolidation
 
 
 def _context() -> AgentContext:
@@ -92,10 +136,11 @@ def test_prompt_includes_hybrid_personality_and_goal() -> None:
     assert "attack" in prompt
 
 
-def test_memory_registers_recent_and_key_observations() -> None:
-    service = AgentService()
+@pytest.mark.asyncio
+async def test_memory_registers_recent_and_key_observations() -> None:
+    service = AgentService(memory_llm_service=_StubMemoryLLMService())
     memory = service.initialize_memory()
-    memory = service.register_observation(
+    memory = await service.register_observation(
         memory,
         round_number=2,
         summary="Jon lied about where he found the batteries.",
@@ -105,6 +150,101 @@ def test_memory_registers_recent_and_key_observations() -> None:
 
     assert memory.recent_events[-1].summary.startswith("Jon lied")
     assert memory.key_memories[-1].summary.startswith("Jon lied")
+
+
+@pytest.mark.asyncio
+async def test_memory_uses_llm_classifier_for_key_memory_promotion() -> None:
+    service = AgentService(memory_llm_service=_StubMemoryLLMService())
+    memory = service.initialize_memory()
+
+    memory = await service.register_observation(
+        memory,
+        round_number=3,
+        summary="The flood siren screamed through the square.",
+        emotional_charge=4,
+        goal=_context().goal,
+        suspicion_level=18,
+    )
+
+    assert memory.key_memories[-1].summary.startswith("The flood siren")
+    assert memory.key_memories[-1].meaning.startswith("This felt like a pattern")
+    assert memory.key_memories[-1].salience_type == "threat"
+
+@pytest.mark.asyncio
+async def test_memory_skips_auto_promotion_when_classifier_declines() -> None:
+    service = AgentService(
+        memory_llm_service=_StubMemoryLLMService(
+            MemoryPromotionDecision(
+                promote_to_key_memory=False,
+                meaning=None,
+                salience_type="other",
+                confidence=22,
+            )
+        )
+    )
+    memory = service.initialize_memory()
+
+    memory = await service.register_observation(
+        memory,
+        round_number=3,
+        summary="A quiet wind moved through the market.",
+        emotional_charge=4,
+    )
+
+    assert memory.key_memories == []
+
+
+@pytest.mark.asyncio
+async def test_memory_consolidates_new_events_into_key_memory() -> None:
+    service = AgentService(memory_llm_service=_StubMemoryLLMService())
+    memory = AgentMemoryState(
+        recent_events=[
+            MemoryEvent(round_number=1, summary="The fence hummed after curfew.", emotional_charge=5),
+            MemoryEvent(round_number=2, summary="The lights flickered in sequence.", emotional_charge=4),
+            MemoryEvent(round_number=3, summary="A voice echoed from the empty square.", emotional_charge=7),
+        ]
+    )
+
+    memory = await service.consolidate_memory(
+        memory,
+        goal=_context().goal,
+        suspicion_level=36,
+    )
+
+    assert memory.last_consolidated_round == 3
+    assert memory.key_memories[-1].summary.startswith("The town keeps emitting signals")
+    assert memory.key_memories[-1].salience_type == "identity"
+
+
+@pytest.mark.asyncio
+async def test_memory_consolidation_advances_cursor_when_declined() -> None:
+    service = AgentService(
+        memory_llm_service=_StubMemoryLLMService(
+            consolidation=MemoryConsolidationDecision(
+                create_summary=False,
+                summary=None,
+                meaning=None,
+                salience_type="other",
+                confidence=20,
+            )
+        )
+    )
+    memory = AgentMemoryState(
+        recent_events=[
+            MemoryEvent(round_number=2, summary="A rumor spread at breakfast.", emotional_charge=3),
+            MemoryEvent(round_number=3, summary="Jon denied hearing the signal.", emotional_charge=4),
+            MemoryEvent(round_number=4, summary="Nobody slept well after the storm.", emotional_charge=6),
+        ]
+    )
+
+    memory = await service.consolidate_memory(
+        memory,
+        goal=_context().goal,
+        suspicion_level=22,
+    )
+
+    assert memory.last_consolidated_round == 4
+    assert memory.key_memories == []
 
 
 def test_relationship_updates_are_biased_and_persisted() -> None:
