@@ -59,7 +59,7 @@ export const useAgentStore = defineStore('agent', () => {
       agent.status = actionToStatus(actionType)
     }
     const name = data.agent_name ?? agent?.name ?? 'Agent'
-    useUIStore().steppingStatus = `${name}: ${actionType}`
+    useUIStore().setSteppingStatus(`${name}: ${actionType}`)
   }
 
   function onMove(msg: WSMessage) {

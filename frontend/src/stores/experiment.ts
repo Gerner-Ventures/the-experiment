@@ -5,6 +5,7 @@ import type { RoundPhase, WSMessage } from '@/types/websocket'
 import { useWorldStore } from '@/stores/world'
 import { useAgentStore } from '@/stores/agent'
 import { useUIStore } from '@/stores/ui'
+import locale from '@/locales/en'
 
 export interface ExperimentEvent {
   id: number
@@ -25,7 +26,6 @@ export const useExperimentStore = defineStore('experiment', () => {
   const currentRound = ref(0)
   const totalRounds = ref(15)
   const currentPhase = ref<RoundPhase | null>(null)
-  const cooperationRatio = ref(0.5)
   const events = ref<ExperimentEvent[]>([])
 
   const isRunning = computed(() => status.value === 'running')
@@ -69,8 +69,7 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = msg.round ?? currentRound.value
     currentPhase.value = null
     status.value = 'running'
-    const ui = useUIStore()
-    ui.steppingStatus = `Round ${currentRound.value} started`
+    useUIStore().setSteppingStatus(`Round ${currentRound.value} started`)
     addEvent(msg)
   }
 
@@ -94,36 +93,39 @@ export const useExperimentStore = defineStore('experiment', () => {
     if (data.threat_level != null) worldStore.setThreatLevel(data.threat_level)
     if (data.resources) {
       worldStore.setResources({
-        food: data.resources.food ?? 0,
-        water: data.resources.water ?? 0,
-        materials: data.resources.materials ?? 0,
-        power: data.resources.power ?? 0,
+        food: data.resources.food ?? worldStore.resources.food,
+        water: data.resources.water ?? worldStore.resources.water,
+        materials: data.resources.materials ?? worldStore.resources.materials,
+        power: data.resources.power ?? worldStore.resources.power,
       })
     }
     if (data.agents) agentStore.setAgents(data.agents)
-    const ui = useUIStore()
-    ui.isStepping = false
-    ui.steppingStatus = ''
+    useUIStore().clearStepping()
     addEvent(msg)
   }
 
   function onPhaseChange(msg: WSMessage) {
     const phase = (msg.phase as RoundPhase) ?? null
     currentPhase.value = phase
-    const labels: Record<string, string> = {
-      gm_plan: 'GM planning…',
-      dawn: 'Dawn breaking…',
-      morning: 'Morning actions…',
-      midday: 'Town meeting…',
-      afternoon: 'Afternoon actions…',
-      night: 'Night falling…',
+    const worldStore = useWorldStore()
+    if (phase) {
+      worldStore.onPhaseChange(phase)
+      const phaseLabels: Record<string, string> = {
+        gm_plan: locale.hud.phaseGmPlan,
+        dawn: locale.hud.phaseDawn,
+        morning: locale.hud.phaseMorning,
+        midday: locale.hud.phaseMidday,
+        afternoon: locale.hud.phaseAfternoon,
+        night: locale.hud.phaseNight,
+      }
+      useUIStore().setSteppingStatus(phaseLabels[phase] ?? phase)
     }
-    if (phase) useUIStore().steppingStatus = labels[phase] ?? phase
     addEvent(msg)
   }
 
   function onEnd(msg: WSMessage) {
     status.value = 'completed'
+    useUIStore().clearStepping()
     addEvent(msg)
   }
 
@@ -134,14 +136,13 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = 0
     totalRounds.value = 15
     currentPhase.value = null
-    cooperationRatio.value = 0.5
     events.value = []
     eventCounter = 0
   }
 
   return {
     id, name, status, currentRound, totalRounds, currentPhase,
-    cooperationRatio, events,
+    events,
     isRunning, isComplete, progress,
     setExperiment, addEvent, onRoundStart, onRoundEnd, onPhaseChange, onEnd,
     $reset,
