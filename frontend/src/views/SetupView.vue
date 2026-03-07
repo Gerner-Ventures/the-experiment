@@ -10,10 +10,11 @@ import {
 import GlitchText from '@/components/ui/GlitchText.vue'
 import AgentConfigurator from '@/components/setup/AgentConfigurator.vue'
 import ArcSelector from '@/components/setup/ArcSelector.vue'
+import MapThemePicker from '@/components/setup/MapThemePicker.vue'
 import ParameterControls from '@/components/setup/ParameterControls.vue'
 import type { AgentConfig } from '@/types/agent'
 import { useLocale } from '@/locales'
-import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES } from '@/config/agent-options'
+import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES, GOAL_PRESET_KEYS, GOAL_ARCHETYPE_MAP } from '@/config/agent-options'
 import { CHARACTERS } from '@/config/character-options'
 
 const locale = useLocale()
@@ -43,18 +44,23 @@ function enterSetup() {
   bootPhase.value = 2
 }
 
-const defaultAgents: AgentConfig[] = CHARACTERS.slice(0, MIN_AGENTS).map((char, i) => ({
-  id: String(i + 1),
-  name: char.name,
-  characterId: char.id,
-  personality: [],
-  personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
-  secretGoal: '',
-  goalArchetype: '',
-  llmModel: i % 3 === 2 ? 'gpt-4o' : DEFAULT_LLM_MODEL,
-}))
+const defaultGoalKeys = GOAL_PRESET_KEYS.slice(0, MIN_AGENTS)
+const defaultAgents: AgentConfig[] = CHARACTERS.slice(0, MIN_AGENTS).map((char, i) => {
+  const goalKey = defaultGoalKeys[i % defaultGoalKeys.length]
+  return {
+    id: String(i + 1),
+    name: char.name,
+    characterId: char.id,
+    personality: [],
+    personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
+    secretGoal: locale.agents.goalPresets[goalKey].goal,
+    goalArchetype: GOAL_ARCHETYPE_MAP[goalKey],
+    llmModel: i % 3 === 2 ? 'gpt-4o' : DEFAULT_LLM_MODEL,
+  }
+})
 const agents = ref<AgentConfig[]>(defaultAgents)
 
+const selectedTheme = ref('lord-of-the-flies')
 const selectedArc = ref('lord-of-the-flies')
 const totalRounds = ref(15)
 const startingResources = ref(100)
@@ -69,6 +75,13 @@ const readyCount = computed(() =>
 )
 
 function beginExperiment() {
+  sessionStorage.setItem('experiment-config', JSON.stringify({
+    agents: agents.value,
+    themeId: selectedTheme.value,
+    arc: selectedArc.value,
+    rounds: totalRounds.value,
+    resources: startingResources.value,
+  }))
   router.push({ name: 'simulation', params: { id: 'demo' } })
 }
 </script>
@@ -161,6 +174,7 @@ function beginExperiment() {
             <Col :span="8">
               <Space direction="vertical" :size="16" class="w-full">
                 <ArcSelector v-model="selectedArc" />
+                <MapThemePicker v-model="selectedTheme" />
                 <ParameterControls
                   v-model:rounds="totalRounds"
                   v-model:resources="startingResources"

@@ -168,8 +168,14 @@ export default {
     threatDescription: 'Starts at 0. Town collapses at 100.',
   },
 
+  mapTheme: {
+    title: 'Map Theme',
+  },
+
   simulation: {
     placeholder: 'Simulation view — isometric world renders here',
+    loading: 'Initializing simulation environment...',
+    backToSetup: 'Back to Setup',
   },
 
   report: {
