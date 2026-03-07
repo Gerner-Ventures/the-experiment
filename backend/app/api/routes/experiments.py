@@ -1,150 +1,227 @@
 from __future__ import annotations
 
-from typing import Any
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
-from app.schemas.common import APIModel
+from app.api.models import (
+    ApproveGMPlanRequest,
+    CreateExperimentRequest,
+    EventLogPage,
+    ExperimentDetail,
+    ExperimentSummary,
+    ObserverEventRequest,
+    StepResponse,
+    UpdateArcRequest,
+)
+from app.api.runtime import runtime
+from app.engine import EngineAgentState, SimulationState
+from app.gm.models import GMPlanRecord
+from app.schemas.ws_message import WSMessage
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
 
-class CreateExperimentRequest(APIModel):
-    name: str = "Untitled Experiment"
-    agents: list[dict[str, Any]]
-    arc_id: str = "lord_of_the_flies"
-    total_rounds: int = 15
-    starting_resources: float = 100.0
-    auto_approve: bool = False
+@router.post(
+    "",
+    response_model=ExperimentDetail,
+    summary="Create an experiment",
+    description="Create a new in-memory experiment with agents, arc settings, and round limits.",
+)
+async def create_experiment(request: CreateExperimentRequest) -> ExperimentDetail:
+    state = await runtime.create_experiment(request)
+    return _detail(state)
 
 
-class ExperimentSummary(APIModel):
-    id: str
-    name: str
-    status: str
-    current_round: int
-    total_rounds: int
-    threat_level: float
-    agent_count: int
+@router.get(
+    "/{experiment_id}",
+    response_model=ExperimentDetail,
+    summary="Get experiment state",
+    description="Fetch the current experiment state, including agents, world state, and GM plan.",
+)
+async def get_experiment(experiment_id: str) -> ExperimentDetail:
+    state = await _get_state(experiment_id)
+    return _detail(state)
 
 
-def _get_runner():
-    from app.main import experiment_runner
-    return experiment_runner
+@router.post(
+    "/{experiment_id}/start",
+    response_model=ExperimentSummary,
+    summary="Start an experiment",
+    description="Transition an experiment from setup or pause into the running state.",
+)
+async def start_experiment(experiment_id: str) -> ExperimentSummary:
+    state = await runtime.start(experiment_id)
+    return _summary(state)
 
 
-def _state_to_summary(state) -> ExperimentSummary:
+@router.post(
+    "/{experiment_id}/pause",
+    response_model=ExperimentSummary,
+    summary="Pause an experiment",
+    description="Pause the active experiment without mutating the current round state.",
+)
+async def pause_experiment(experiment_id: str) -> ExperimentSummary:
+    state = await runtime.pause(experiment_id)
+    return _summary(state)
+
+
+@router.post(
+    "/{experiment_id}/step",
+    response_model=StepResponse,
+    summary="Advance one round",
+    description="Run exactly one simulation round and return both the round result and refreshed state.",
+)
+async def step_experiment(experiment_id: str) -> StepResponse:
+    await _get_state(experiment_id)
+    round_result, state = await runtime.step(experiment_id)
+    return StepResponse(round_result=round_result, experiment=_detail(state))
+
+
+@router.post(
+    "/{experiment_id}/inject",
+    response_model=ExperimentDetail,
+    summary="Inject an observer event",
+    description="Append an out-of-band observer event that raises tension inside the experiment.",
+)
+async def inject_observer_event(
+    experiment_id: str, request: ObserverEventRequest
+) -> ExperimentDetail:
+    state = await runtime.inject_observer_event(experiment_id, request.description)
+    return _detail(state)
+
+
+@router.get(
+    "/{experiment_id}/gm/plan",
+    summary="Get the next GM plan",
+    description="Generate the next pending GM plan if needed, or return the cached plan for the upcoming round.",
+)
+async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
+    await _get_state(experiment_id)
+    return await runtime.get_or_generate_gm_plan(experiment_id)
+
+
+@router.post(
+    "/{experiment_id}/gm/approve",
+    summary="Approve or modify a GM plan",
+    description="Approve the pending GM plan as-is, or submit a modified plan payload to apply instead.",
+)
+async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> GMPlanRecord:
+    await _get_state(experiment_id)
+    return await runtime.approve_gm_plan(experiment_id, request.modified_plan)
+
+
+@router.put(
+    "/{experiment_id}/arc",
+    response_model=ExperimentDetail,
+    summary="Replace the active narrative arc",
+    description="Swap the current director arc for a new one while the experiment is in progress.",
+)
+async def update_arc(experiment_id: str, request: UpdateArcRequest) -> ExperimentDetail:
+    state = await runtime.update_arc(experiment_id, request.arc)
+    return _detail(state)
+
+
+@router.get(
+    "/{experiment_id}/agents",
+    summary="List experiment agents",
+    description="Return the current state for every agent participating in the experiment.",
+)
+async def list_agents(experiment_id: str) -> list[EngineAgentState]:
+    await _get_state(experiment_id)
+    return await runtime.list_agents(experiment_id)
+
+
+@router.get(
+    "/{experiment_id}/agents/{agent_id}/dossier",
+    summary="Get an agent dossier",
+    description="Return the detailed state for a single agent, including memory, relationships, and status.",
+)
+async def get_agent_dossier(experiment_id: str, agent_id: str) -> EngineAgentState:
+    await _get_state(experiment_id)
+    try:
+        return await runtime.get_agent(experiment_id, agent_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Agent not found") from exc
+
+
+@router.get(
+    "/{experiment_id}/log",
+    response_model=EventLogPage,
+    summary="Query the event log",
+    description="Paginate and filter experiment events by phase, event type, agent, and round number.",
+)
+async def get_event_log(
+    experiment_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    phase: str | None = None,
+    event_type: str | None = None,
+    agent_id: str | None = None,
+    round_number: int | None = Query(default=None, ge=1),
+) -> EventLogPage:
+    await _get_state(experiment_id)
+    items, total = await runtime.get_log(
+        experiment_id,
+        limit=limit,
+        offset=offset,
+        phase=phase,
+        event_type=event_type,
+        agent_id=agent_id,
+        round_number=round_number,
+    )
+    return EventLogPage(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.websocket("/{experiment_id}/ws")
+async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
+    await _get_state(experiment_id)
+    await runtime.connection_manager.connect(experiment_id, websocket)
+    try:
+        await websocket.send_json(
+            WSMessage(
+                type="connected",
+                round=0,
+                timestamp=datetime.now(UTC),
+                data={"experiment_id": experiment_id},
+            ).model_dump(mode="json")
+        )
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        runtime.connection_manager.disconnect(experiment_id, websocket)
+
+
+async def _get_state(experiment_id: str) -> SimulationState:
+    try:
+        return await runtime.get_state(experiment_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
+
+
+def _summary(state: SimulationState) -> ExperimentSummary:
     return ExperimentSummary(
-        id=state.experiment_id,
-        name=state.experiment_name,
+        experiment_id=state.experiment_id,
+        experiment_name=state.experiment_name,
         status=state.status,
         current_round=state.current_round,
         total_rounds=state.total_rounds,
-        threat_level=state.world_state.threat_level,
-        agent_count=len(state.agents),
+        auto_approve=state.auto_approve,
+        world_state=state.world_state.model_dump(mode="json"),
     )
 
 
-def _state_to_full(state) -> dict[str, Any]:
-    return {
-        "id": state.experiment_id,
-        "name": state.experiment_name,
-        "status": state.status,
-        "currentRound": state.current_round,
-        "totalRounds": state.total_rounds,
-        "threatLevel": state.world_state.threat_level,
-        "resources": state.world_state.resources.model_dump(),
-        "agents": [
-            {
-                "id": a.agent_id,
-                "name": a.name,
-                "location": a.location,
-                "suspicionLevel": a.suspicion_level,
-                "personality": a.personality.model_dump(mode="json"),
-                "goal": a.goal.model_dump(mode="json"),
-                "inventory": a.inventory,
-                "relationships": a.relationships,
-                "memory": a.memory.model_dump(mode="json"),
-            }
-            for a in state.agents
-        ],
-        "arc": state.arc.model_dump(mode="json"),
-        "worldState": state.world_state.model_dump(mode="json"),
-    }
-
-
-@router.post("", status_code=201)
-async def create_experiment(req: CreateExperimentRequest) -> dict[str, Any]:
-    runner = _get_runner()
-    state = runner.create_experiment(
-        name=req.name,
-        agents=req.agents,
-        arc_id=req.arc_id,
-        total_rounds=req.total_rounds,
-        starting_resources=req.starting_resources,
-        auto_approve=req.auto_approve,
+def _detail(state: SimulationState) -> ExperimentDetail:
+    return ExperimentDetail(
+        experiment_id=state.experiment_id,
+        experiment_name=state.experiment_name,
+        status=state.status,
+        current_round=state.current_round,
+        total_rounds=state.total_rounds,
+        auto_approve=state.auto_approve,
+        arc=state.arc,
+        world_state=state.world_state.model_dump(mode="json"),
+        agents=state.agents,
+        gm_plan=state.gm_plan,
+        unresolved_plotlines=state.unresolved_plotlines,
     )
-    return _state_to_full(state)
-
-
-@router.get("/{experiment_id}")
-async def get_experiment(experiment_id: str) -> dict[str, Any]:
-    runner = _get_runner()
-    state = runner.get_experiment(experiment_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-    return _state_to_full(state)
-
-
-@router.post("/{experiment_id}/start")
-async def start_experiment(experiment_id: str) -> ExperimentSummary:
-    runner = _get_runner()
-    state = runner.get_experiment(experiment_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-    state = runner.start_experiment(experiment_id)
-    return _state_to_summary(state)
-
-
-@router.post("/{experiment_id}/pause")
-async def pause_experiment(experiment_id: str) -> ExperimentSummary:
-    runner = _get_runner()
-    state = runner.get_experiment(experiment_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-    state = runner.pause_experiment(experiment_id)
-    return _state_to_summary(state)
-
-
-@router.post("/{experiment_id}/step")
-async def step_round(experiment_id: str) -> dict[str, Any]:
-    runner = _get_runner()
-    state = runner.get_experiment(experiment_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-    result = await runner.step_round(experiment_id)
-    return {
-        "round": result.round_number,
-        "cooperationRatio": result.cooperation_ratio,
-        "threatLevel": result.threat_level,
-        "resources": result.world_state.resources.model_dump(),
-        "phases": [p.phase for p in result.phases],
-    }
-
-
-@router.post("/{experiment_id}/approve-plan")
-async def approve_plan(
-    experiment_id: str,
-    body: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    runner = _get_runner()
-    state = runner.get_experiment(experiment_id)
-    if not state:
-        raise HTTPException(status_code=404, detail="Experiment not found")
-    modified_plan = body.get("modifiedPlan") if body else None
-    result = await runner.approve_plan(experiment_id, modified_plan=modified_plan)
-    return {
-        "round": result.round_number,
-        "cooperationRatio": result.cooperation_ratio,
-        "threatLevel": result.threat_level,
-    }

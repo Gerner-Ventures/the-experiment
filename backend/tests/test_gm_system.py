@@ -1,3 +1,7 @@
+from typing import Any
+
+import pytest
+
 from app.gm import (
     GMPlanningContext,
     GMService,
@@ -9,6 +13,8 @@ from app.gm import (
     list_preset_arcs,
     validate_arc,
 )
+from app.llm import LLMService
+from app.llm.models import LLMResult
 from app.world import build_default_world_state
 
 
@@ -63,9 +69,50 @@ def test_rule_based_plan_pushes_drama_even_when_calm() -> None:
     assert "assertive pacing" in plan.reasoning.lower()
 
 
-def test_auto_approve_flow_applies_immediately() -> None:
-    service = GMService()
-    record = service.generate_plan(_context(10, auto_approve=True))
+class _StubLLMService(LLMService):
+    async def generate_gm_plan(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        response_format: dict[str, object] | type[Any],
+        metadata: dict[str, object] | None = None,
+        model_override: str | None = None,
+    ) -> LLMResult:
+        return LLMResult(
+            model="anthropic/claude-3-5-sonnet-20241022",
+            content="",
+            parsed={
+                "round": 10,
+                "round_theme": "A Witness Breaks Pattern",
+                "reasoning": "Escalate the social fracture.",
+                "crisis_event": {
+                    "type": "social",
+                    "description": "A witness publicly contradicts yesterday's story.",
+                    "affects": ["town_square", "bar"],
+                    "severity": "high",
+                },
+                "resource_modifiers": {"food": -2, "water": 0, "materials": 0, "power": -1},
+                "environmental": "The air feels electrically charged.",
+                "narration": "The square goes quiet before everyone starts talking at once.",
+                "meta_hint": "Someone is paying too much attention to the contradictions.",
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_auto_approve_flow_applies_immediately() -> None:
+    service = GMService(llm_service=_StubLLMService())
+    record = await service.generate_plan(_context(10, auto_approve=True))
     assert record.status == "applied"
     assert record.approved_at is not None
     assert record.applied_at is not None
+
+
+@pytest.mark.asyncio
+async def test_gm_service_uses_llm_plan_when_available() -> None:
+    service = GMService(llm_service=_StubLLMService())
+
+    record = await service.generate_plan(_context(10))
+
+    assert record.plan.round_theme == "A Witness Breaks Pattern"
+    assert record.plan.crisis_event.description.startswith("A witness publicly")

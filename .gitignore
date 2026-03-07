@@ -35,6 +35,12 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 
+# Worktrees
+.worktrees/
+
+# DevSpace
+.devspace/
+
 # Coverage
 htmlcov/
 .coverage

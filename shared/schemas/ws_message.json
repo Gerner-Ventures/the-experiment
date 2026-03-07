@@ -7,6 +7,7 @@
     "type": {
       "type": "string",
       "enum": [
+        "connected",
         "round_start", "round_end",
         "phase_change",
         "gm_plan", "gm_narration",

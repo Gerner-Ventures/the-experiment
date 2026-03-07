@@ -25,8 +25,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title=settings.app_name,
-    description="AI agent simulation engine",
+    description=(
+        "AI agent simulation engine.\n\n"
+        "Interactive API docs are available at `/docs`, ReDoc is available at `/redoc`, "
+        "and the OpenAPI schema is available at `/openapi.json`."
+    ),
     version=settings.app_version,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
     lifespan=lifespan,
 )
 

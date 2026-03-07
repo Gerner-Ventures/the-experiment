@@ -1,6 +1,9 @@
 /** @type {import('jest').Config} */
 export default {
   testEnvironment: 'jsdom',
+  testEnvironmentOptions: {
+    customExportConditions: ['node'],
+  },
   transform: {
     '^.+\\.vue$': '@vue/vue3-jest',
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.json' }],

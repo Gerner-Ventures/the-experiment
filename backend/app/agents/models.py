@@ -36,6 +36,27 @@ ActionType = Literal[
     "vote",
     "rest",
     "observe",
+    "attack",
+    "threaten",
+    "stab",
+    "shoot",
+    "poison",
+    "dance",
+    "pray",
+    "rally",
+    "mourn",
+    "celebrate",
+    "argue",
+    "pee",
+    "poop",
+    "vomit",
+    "sleep",
+    "eat",
+    "drink",
+    "investigate",
+    "monologue",
+    "panic",
+    "breakdown",
 ]
 SuspicionTrigger = Literal[
     "edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"
@@ -80,6 +101,27 @@ ACTION_TYPES: tuple[ActionType, ...] = (
     "vote",
     "rest",
     "observe",
+    "attack",
+    "threaten",
+    "stab",
+    "shoot",
+    "poison",
+    "dance",
+    "pray",
+    "rally",
+    "mourn",
+    "celebrate",
+    "argue",
+    "pee",
+    "poop",
+    "vomit",
+    "sleep",
+    "eat",
+    "drink",
+    "investigate",
+    "monologue",
+    "panic",
+    "breakdown",
 )
 
 
@@ -158,6 +200,7 @@ class SuspicionUpdate(AgentModel):
 class AgentContext(AgentModel):
     agent_id: str
     name: str
+    character_id: str | None = None
     status: AgentStatus = AgentStatus.IDLE
     personality: PersonalityProfile
     goal: SecretGoal

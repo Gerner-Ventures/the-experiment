@@ -10,12 +10,17 @@ from app.agents.models import (
     AgentMemoryState,
     AgentTurnResult,
     PersonalityProfile,
+    RelationshipMemory,
     SecretGoal,
 )
+from app.db.models import AgentStatus
 from app.gm.models import DirectorArc, GMPlanRecord
 from app.world.models import WorldState
 
 PhaseName = Literal["gm_plan", "dawn", "morning", "midday", "afternoon", "night"]
+ConversationTone = Literal["supportive", "suspicious", "manipulative", "guarded"]
+MeetingStance = Literal["support", "oppose", "hesitant"]
+MeetingVoteChoice = Literal["support", "oppose", "abstain"]
 
 
 class EngineModel(BaseModel):
@@ -25,12 +30,14 @@ class EngineModel(BaseModel):
 class EngineAgentState(EngineModel):
     agent_id: str
     name: str
+    character_id: str | None = None
+    status: AgentStatus = AgentStatus.IDLE
     personality: PersonalityProfile
     goal: SecretGoal
     memory: AgentMemoryState
     location: str | None = None
     inventory: list[str] = Field(default_factory=list)
-    relationships: dict[str, object] = Field(default_factory=dict)
+    relationships: dict[str, RelationshipMemory] = Field(default_factory=dict)
     suspicion_level: float = Field(ge=0, le=100, default=0)
     llm_model: str = "openai/gpt-4o-mini"
 
@@ -83,9 +90,44 @@ class RoundResult(EngineModel):
     created_at: datetime
 
 
+class ConversationTurn(EngineModel):
+    speaker_id: str
+    speaker_name: str
+    listener_id: str
+    listener_name: str
+    tone: ConversationTone
+    content: str
+    trust_delta: float = 0
+
+
+class ConversationOutcome(EngineModel):
+    location: str
+    participants: list[str]
+    turns: list[ConversationTurn] = Field(default_factory=list)
+    summary: str
+
+
+class MeetingSpeech(EngineModel):
+    agent_id: str
+    agent_name: str
+    stance: MeetingStance
+    content: str
+
+
+class MeetingVote(EngineModel):
+    agent_id: str
+    agent_name: str
+    vote: MeetingVoteChoice
+    rationale: str
+
+
 class MeetingOutcome(EngineModel):
     proposal: str
-    votes: dict[str, str]
+    speeches: list[MeetingSpeech] = Field(default_factory=list)
+    votes: dict[str, MeetingVoteChoice]
+    vote_rationales: dict[str, str] = Field(default_factory=dict)
+    tally: dict[str, int] = Field(default_factory=dict)
+    passed: bool = False
     summary: str
 
 
@@ -101,12 +143,14 @@ def build_agent_context(
     return AgentContext(
         agent_id=agent.agent_id,
         name=agent.name,
+        character_id=agent.character_id,
+        status=agent.status,
         personality=agent.personality,
         goal=agent.goal,
         memory=agent.memory,
         location=agent.location,
         inventory=agent.inventory,
-        relationships=agent.relationships,  # type: ignore[arg-type]
+        relationships=agent.relationships,
         suspicion_level=agent.suspicion_level,
         world_state=world_state,
         current_crisis=current_crisis,
