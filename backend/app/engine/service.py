@@ -19,6 +19,7 @@ from app.engine.models import (
     build_agent_context,
 )
 from app.agents.models import AgentTurnResult
+from app.db.models import AgentStatus
 from app.gm.models import GMPlanData, GMPlanRecord
 from app.gm import GMPlanningContext, GMService
 from app.social import SocialService
@@ -515,7 +516,7 @@ class SimulationEngine:
         for agent in state.agents:
             if agent.agent_id != outcome.exile.target_agent_id:
                 continue
-            agent.status = "exiled"
+            agent.status = AgentStatus.EXILED
             agent.location = "perimeter_fence"
             agent.faction_id = None
             agent.faction_role = None
@@ -637,11 +638,11 @@ class SimulationEngine:
             member_id: faction for faction in factions for member_id in faction.member_ids
         }
         for agent in state.agents:
-            faction = faction_map.get(agent.agent_id)
-            if faction is None:
+            agent_faction = faction_map.get(agent.agent_id)
+            if agent_faction is None:
                 continue
-            agent.faction_id = faction.faction_id
-            agent.faction_role = "leader" if agent.agent_id == faction.leader_id else "member"
+            agent.faction_id = agent_faction.faction_id
+            agent.faction_role = "leader" if agent.agent_id == agent_faction.leader_id else "member"
 
     def _is_cult_candidate(self, agent: EngineAgentState) -> bool:
         return (

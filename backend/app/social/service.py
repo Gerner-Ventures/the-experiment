@@ -9,6 +9,7 @@ from app.engine.models import (
     EngineAgentState,
     ExileOutcome,
     ExileVote,
+    ExileVoteChoice,
     MeetingOutcome,
     MeetingStance,
     MeetingSpeech,
@@ -303,6 +304,7 @@ class SocialService:
         target: EngineAgentState,
         state: SimulationState,
     ) -> ExileVote:
+        vote: ExileVoteChoice
         if agent.agent_id == target.agent_id:
             vote = "protect"
             rationale = f"{agent.name} fights exile when their own name is on the block."

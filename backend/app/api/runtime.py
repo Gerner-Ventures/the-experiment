@@ -347,7 +347,8 @@ class ExperimentRuntime:
         for round_number, snapshot in snapshots:
             round_logs = [item for item in logs if item.round_number == round_number]
             summary = round_logs[-1].summary if round_logs else f"Round {round_number} concluded."
-            threat_level = float(snapshot.get("threat_level", 0.0))
+            raw_threat = snapshot.get("threat_level", 0.0)
+            threat_level = float(raw_threat) if isinstance(raw_threat, (int, float, str)) else 0.0
             rounds.append(
                 ReplayRound(
                     round_number=round_number,
