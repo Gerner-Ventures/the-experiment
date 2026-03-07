@@ -1,0 +1,131 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "poetry"
+          cache-dependency-path: backend/poetry.lock
+
+      - name: Install backend deps
+        run: cd backend && poetry install
+
+      - name: Lint
+        run: cd backend && poetry run ruff check .
+
+      - name: Format check
+        run: cd backend && poetry run ruff format --check .
+
+      - name: Test
+        run: cd backend && poetry run pytest
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+  deploy:
+    needs: check
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch secrets from Doppler
+        uses: dopplerhq/secrets-fetch-action@v1.3.1
+        id: secrets
+        with:
+          doppler-token: ${{ secrets.DOPPLER_SERVICE_TOKEN }}
+          doppler-project: the-experiment
+          doppler-config: prd
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ steps.secrets.outputs.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Log in to DOCR
+        run: doctl registry login --expiry-seconds 600
+
+      - name: Build and push Docker images
+        run: |
+          REGISTRY="registry.digitalocean.com/${{ steps.secrets.outputs.DOCR_REGISTRY_NAME }}"
+          TAG="sha-${GITHUB_SHA::7}"
+
+          docker build -t "${REGISTRY}/the-experiment-backend:${TAG}" -t "${REGISTRY}/the-experiment-backend:latest" ./backend
+          docker push "${REGISTRY}/the-experiment-backend:${TAG}"
+          docker push "${REGISTRY}/the-experiment-backend:latest"
+
+          docker build -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
+          docker push "${REGISTRY}/the-experiment-frontend:${TAG}"
+          docker push "${REGISTRY}/the-experiment-frontend:latest"
+
+          echo "IMAGE_TAG=${TAG}" >> "$GITHUB_ENV"
+
+      - name: Save kubeconfig
+        run: doctl kubernetes cluster kubeconfig save ${{ steps.secrets.outputs.DOKS_CLUSTER_NAME }}
+
+      - name: Ensure DOCR pull secret
+        run: |
+          kubectl create namespace the-experiment --dry-run=client -o yaml | kubectl apply -f -
+          doctl registry kubernetes-manifest --namespace the-experiment | kubectl apply -f -
+
+      - name: Ensure app secrets
+        env:
+          DATABASE_URL: ${{ steps.secrets.outputs.DATABASE_URL }}
+          AUTH0_DOMAIN: ${{ steps.secrets.outputs.AUTH0_DOMAIN }}
+          AUTH0_CLIENT_ID: ${{ steps.secrets.outputs.AUTH0_CLIENT_ID }}
+          AUTH0_CLIENT_SECRET: ${{ steps.secrets.outputs.AUTH0_CLIENT_SECRET }}
+          AUTH0_AUDIENCE: ${{ steps.secrets.outputs.AUTH0_AUDIENCE }}
+          ANTHROPIC_API_KEY: ${{ steps.secrets.outputs.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ steps.secrets.outputs.OPENAI_API_KEY }}
+          POSTHOG_KEY: ${{ steps.secrets.outputs.POSTHOG_KEY }}
+        run: |
+          kubectl create secret generic the-experiment-neon \
+            --from-literal=DATABASE_URL="$DATABASE_URL" \
+            -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic the-experiment-auth0 \
+            --from-literal=AUTH0_DOMAIN="$AUTH0_DOMAIN" \
+            --from-literal=AUTH0_CLIENT_ID="$AUTH0_CLIENT_ID" \
+            --from-literal=AUTH0_CLIENT_SECRET="$AUTH0_CLIENT_SECRET" \
+            --from-literal=AUTH0_AUDIENCE="$AUTH0_AUDIENCE" \
+            -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic the-experiment-litellm \
+            --from-literal=ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
+            --from-literal=OPENAI_API_KEY="$OPENAI_API_KEY" \
+            -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic the-experiment-posthog \
+            --from-literal=POSTHOG_KEY="$POSTHOG_KEY" \
+            -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install the-experiment chart/the-experiment/ \
+            -f chart/the-experiment/values-production.yaml \
+            --set backend.image.tag="${IMAGE_TAG}" \
+            --set frontend.image.tag="${IMAGE_TAG}" \
+            -n the-experiment --create-namespace \
+            --wait --timeout 5m
