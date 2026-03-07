@@ -362,10 +362,8 @@ class TestExperimentAPI:
         assert data["experiment_id"] == exp_id
 
     def test_start_not_found(self, client: TestClient) -> None:
-        # runtime.start() raises KeyError for unknown experiments
-        # (route doesn't call _get_state first — known gap in main)
-        with pytest.raises((KeyError, Exception)):
-            client.post("/api/experiments/nope/start")
+        resp = client.post("/api/experiments/nope/start")
+        assert resp.status_code == 404
 
     def test_pause_experiment_via_api(self, client: TestClient) -> None:
         created = _create_via_api(client)
