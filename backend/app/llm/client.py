@@ -17,8 +17,7 @@ class LLMClient:
         self.settings = get_settings()
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
-        router_cls = getattr(litellm, "Router")
-        self.router: Any = router_cls(
+        self.router = litellm.Router(
             model_list=self._build_model_list(),
             fallbacks=self._build_fallbacks(),
             num_retries=self.settings.llm_max_retries,
