@@ -382,13 +382,14 @@ Code references:
 - `frontend/src/stores/gm.ts`
 - `frontend/src/stores/world.ts`
 
-## Current Caveats
+## Runtime Ownership
 
-There are two execution entry points in the repo:
+There is a single backend execution path:
 
-- `ExperimentRuntime` in `backend/app/api/runtime.py`
-- `ExperimentRunner` in `backend/app/engine/runner.py`
+- FastAPI route handlers in `backend/app/api/routes/experiments.py`
+- `ExperimentRuntime` plus its websocket connection manager in `backend/app/api/runtime.py`
+- `ExperimentStore` implementations in `backend/app/api/store.py`
 
-The API runtime plus persistent store appears to be the main current path. If these diverge, this document should track the API runtime behavior.
+`backend/app/main.py` only wires the FastAPI application and middleware; it does not construct a separate runner stack.
 
 This document describes the current implementation, not a guaranteed long-term contract.
