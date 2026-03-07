@@ -5,14 +5,22 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from app.api.models import (
+    AnalyticsSummary,
     ApproveGMPlanRequest,
     CreateExperimentRequest,
     EventLogPage,
     ExperimentDetail,
+    FactionAnalytics,
+    HighlightPage,
+    PromptTracePage,
+    RelationshipAnalytics,
+    ReplayIndex,
+    RoundSnapshotResponse,
     ExperimentSummary,
     ObserverEventRequest,
     StepResponse,
     UpdateArcRequest,
+    UsageReport,
 )
 from app.api.runtime import runtime
 from app.engine import EngineAgentState, SimulationState
@@ -117,6 +125,83 @@ async def get_event_log(
     return EventLogPage(items=items, total=total, limit=limit, offset=offset)
 
 
+@router.get("/{experiment_id}/analytics/summary", response_model=AnalyticsSummary)
+async def get_analytics_summary(experiment_id: str) -> AnalyticsSummary:
+    await _get_state(experiment_id)
+    return await runtime.get_analytics_summary(experiment_id)
+
+
+@router.get("/{experiment_id}/analytics/relationships", response_model=RelationshipAnalytics)
+async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytics:
+    await _get_state(experiment_id)
+    return RelationshipAnalytics(items=await runtime.get_relationship_analytics(experiment_id))
+
+
+@router.get("/{experiment_id}/analytics/factions", response_model=FactionAnalytics)
+async def get_faction_analytics(experiment_id: str) -> FactionAnalytics:
+    state = await _get_state(experiment_id)
+    return FactionAnalytics(items=state.factions)
+
+
+@router.get("/{experiment_id}/analytics/highlights", response_model=HighlightPage)
+async def get_highlights(experiment_id: str) -> HighlightPage:
+    await _get_state(experiment_id)
+    return HighlightPage(items=await runtime.get_highlights(experiment_id))
+
+
+@router.get("/{experiment_id}/replay", response_model=ReplayIndex)
+async def get_replay_index(experiment_id: str) -> ReplayIndex:
+    await _get_state(experiment_id)
+    return await runtime.get_replay_index(experiment_id)
+
+
+@router.get(
+    "/{experiment_id}/rounds/{round_number}/snapshot",
+    response_model=RoundSnapshotResponse,
+)
+async def get_round_snapshot(experiment_id: str, round_number: int) -> RoundSnapshotResponse:
+    await _get_state(experiment_id)
+    try:
+        return await runtime.get_round_snapshot(experiment_id, round_number)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Round snapshot not found") from exc
+
+
+@router.get("/{experiment_id}/usage", response_model=UsageReport)
+async def get_usage_report(
+    experiment_id: str,
+    round_number: int | None = Query(default=None, ge=1),
+    agent_id: str | None = None,
+) -> UsageReport:
+    await _get_state(experiment_id)
+    return await runtime.get_usage_report(
+        experiment_id,
+        round_number=round_number,
+        agent_id=agent_id,
+    )
+
+
+@router.get("/{experiment_id}/usage/traces", response_model=PromptTracePage)
+async def get_prompt_traces(
+    experiment_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+    round_number: int | None = Query(default=None, ge=1),
+    agent_id: str | None = None,
+    role: str | None = Query(default=None, pattern="^(gm|agent)$"),
+) -> PromptTracePage:
+    await _get_state(experiment_id)
+    items, total = await runtime.get_prompt_traces(
+        experiment_id,
+        limit=limit,
+        offset=offset,
+        round_number=round_number,
+        agent_id=agent_id,
+        role=role,
+    )
+    return PromptTracePage(items=items, total=total, limit=limit, offset=offset)
+
+
 @router.websocket("/{experiment_id}/ws")
 async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
     await _get_state(experiment_id)
@@ -168,4 +253,6 @@ def _detail(state: SimulationState) -> ExperimentDetail:
         agents=state.agents,
         gm_plan=state.gm_plan,
         unresolved_plotlines=state.unresolved_plotlines,
+        factions=state.factions,
+        exile_history=state.exile_history,
     )

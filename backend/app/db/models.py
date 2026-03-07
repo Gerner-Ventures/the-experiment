@@ -77,6 +77,8 @@ class Experiment(TimestampMixin, Base):
     world_state: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     unresolved_plotlines: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     recent_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    factions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    exile_history: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
 
     arc: Mapped[Arc | None] = relationship(
         back_populates="experiment",
@@ -171,6 +173,9 @@ class Agent(TimestampMixin, Base):
     inventory: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     memory: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
     relationships: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    faction_id: Mapped[str | None] = mapped_column(String(255))
+    faction_role: Mapped[str | None] = mapped_column(String(32))
+    influence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
     experiment: Mapped[Experiment] = relationship(back_populates="agents")
 

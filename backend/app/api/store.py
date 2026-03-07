@@ -39,11 +39,18 @@ class ExperimentStore(Protocol):
 
     async def record_round_result(self, experiment_id: str, round_result: RoundResult) -> None: ...
 
+    async def load_world_snapshot(
+        self, experiment_id: str, round_number: int
+    ) -> dict[str, object] | None: ...
+
+    async def list_world_snapshots(self, experiment_id: str) -> list[tuple[int, dict[str, object]]]: ...
+
 
 class InMemoryExperimentStore:
     def __init__(self) -> None:
         self.states: dict[str, SimulationState] = {}
         self.logs: defaultdict[str, list[EventLogItem]] = defaultdict(list)
+        self.snapshots: defaultdict[str, dict[int, dict[str, object]]] = defaultdict(dict)
 
     async def load_state(self, experiment_id: str) -> SimulationState:
         return self.states[experiment_id]
@@ -58,7 +65,17 @@ class InMemoryExperimentStore:
         return list(self.logs[experiment_id])
 
     async def record_round_result(self, experiment_id: str, round_result: RoundResult) -> None:
-        return None
+        self.snapshots[experiment_id][round_result.round_number] = round_result.world_state.model_dump(
+            mode="json"
+        )
+
+    async def load_world_snapshot(
+        self, experiment_id: str, round_number: int
+    ) -> dict[str, object] | None:
+        return self.snapshots[experiment_id].get(round_number)
+
+    async def list_world_snapshots(self, experiment_id: str) -> list[tuple[int, dict[str, object]]]:
+        return sorted(self.snapshots[experiment_id].items())
 
 
 class SqlAlchemyExperimentStore:
@@ -128,6 +145,27 @@ class SqlAlchemyExperimentStore:
             session.add(snapshot)
             await session.commit()
 
+    async def load_world_snapshot(
+        self, experiment_id: str, round_number: int
+    ) -> dict[str, object] | None:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(WorldSnapshot)
+                .where(WorldSnapshot.experiment_id == uuid.UUID(experiment_id))
+                .where(WorldSnapshot.round_number == round_number)
+            )
+            snapshot = result.scalar_one_or_none()
+            return snapshot.state if snapshot is not None else None
+
+    async def list_world_snapshots(self, experiment_id: str) -> list[tuple[int, dict[str, object]]]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(WorldSnapshot)
+                .where(WorldSnapshot.experiment_id == uuid.UUID(experiment_id))
+                .order_by(WorldSnapshot.round_number.asc())
+            )
+            return [(item.round_number, item.state) for item in result.scalars()]
+
     async def _load_experiment(
         self, session: AsyncSession, experiment_id: str
     ) -> Experiment | None:
@@ -153,6 +191,8 @@ class SqlAlchemyExperimentStore:
         experiment.world_state = state.world_state.model_dump(mode="json")
         experiment.unresolved_plotlines = list(state.unresolved_plotlines)
         experiment.recent_events = list(state.recent_events)
+        experiment.factions = [faction.model_dump(mode="json") for faction in state.factions]
+        experiment.exile_history = [record.model_dump(mode="json") for record in state.exile_history]
 
         if experiment.arc is None:
             experiment.arc = Arc(name=state.arc.name, description=state.arc.description)
@@ -209,6 +249,9 @@ class SqlAlchemyExperimentStore:
         agent.relationships = {
             key: value.model_dump(mode="json") for key, value in agent_state.relationships.items()
         }
+        agent.faction_id = agent_state.faction_id
+        agent.faction_role = agent_state.faction_role
+        agent.influence = agent_state.influence
         return agent
 
     def _apply_gm_plan(self, row: GMPlan, plan: GMPlanRecord) -> None:
@@ -259,6 +302,9 @@ class SqlAlchemyExperimentStore:
                     "relationships": agent.relationships,
                     "suspicion_level": agent.suspicion_level,
                     "llm_model": agent.llm_model,
+                    "faction_id": agent.faction_id,
+                    "faction_role": agent.faction_role,
+                    "influence": agent.influence,
                 }
             )
             for agent in experiment.agents
@@ -288,6 +334,8 @@ class SqlAlchemyExperimentStore:
             unresolved_plotlines=list(experiment.unresolved_plotlines),
             recent_events=list(experiment.recent_events),
             gm_plan=gm_plan,
+            factions=experiment.factions,
+            exile_history=experiment.exile_history,
         )
 
     def _to_gm_plan_record(self, row: GMPlan) -> GMPlanRecord:
@@ -315,7 +363,14 @@ def _event_category(event_type: EventLogType) -> EventType:
         return EventType.CRISIS
     if event_type in {"agent_action", "agent_move", "experiment_started", "experiment_paused"}:
         return EventType.ACTION
-    if event_type in {"midday", "observer_event"}:
+    if event_type in {
+        "midday",
+        "observer_event",
+        "faction_update",
+        "cult_activity",
+        "exile_vote",
+        "exile_enacted",
+    }:
         return EventType.SOCIAL
     if event_type in {"morning", "afternoon", "night", "round_start", "round_end"}:
         return EventType.ROUND

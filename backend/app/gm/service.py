@@ -20,7 +20,10 @@ class GMService:
                     {"role": "user", "content": prompt.user_prompt},
                 ],
                 response_format=GMPlanData,
-                metadata={"round_number": context.round_number},
+                metadata={
+                    "experiment_id": context.experiment_id,
+                    "round_number": context.round_number,
+                },
                 model_override=None,
             )
             plan = GMPlanData.model_validate(result.parsed or {})
