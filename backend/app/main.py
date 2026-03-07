@@ -5,11 +5,17 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
+from app.api.ws_manager import ConnectionManager
 from app.core.config import get_settings
+from app.engine.runner import ExperimentRunner
 from app.logging import setup_logging
 
 setup_logging()
 settings = get_settings()
+
+# Global singletons (no DB — in-memory for now)
+ws_manager = ConnectionManager()
+experiment_runner = ExperimentRunner(ws_manager)
 
 
 @asynccontextmanager
@@ -19,8 +25,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     title=settings.app_name,
-    description="AI agent simulation engine",
+    description=(
+        "AI agent simulation engine.\n\n"
+        "Interactive API docs are available at `/docs`, ReDoc is available at `/redoc`, "
+        "and the OpenAPI schema is available at `/openapi.json`."
+    ),
     version=settings.app_version,
+    docs_url="/docs",
+    redoc_url="/redoc",
+    openapi_url="/openapi.json",
     lifespan=lifespan,
 )
 

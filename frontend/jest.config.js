@@ -1,6 +1,5 @@
-import type { Config } from 'jest'
-
-const config: Config = {
+/** @type {import('jest').Config} */
+export default {
   testEnvironment: 'jsdom',
   testEnvironmentOptions: {
     customExportConditions: ['node'],
@@ -21,5 +20,3 @@ const config: Config = {
     '!src/**/*.d.ts',
   ],
 }
-
-export default config

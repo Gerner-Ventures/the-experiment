@@ -28,6 +28,7 @@ export default [
         HTMLElement: "readonly",
         document: "readonly",
         window: "readonly",
+        sessionStorage: "readonly",
       },
     },
     rules: {
