@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     gm_fallback_model: str = "openai/gpt-4o-mini"
     agent_model: str = "openai/gpt-4o-mini"
     agent_fallback_model: str = "anthropic/claude-3-5-haiku-20241022"
+    memory_model: str = "openai/gpt-4o-mini"
     llm_timeout_seconds: float = 45.0
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2

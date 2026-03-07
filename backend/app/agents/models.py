@@ -23,6 +23,9 @@ GoalArchetype = Literal[
     "personal_redemption",
     "obsession_desire",
 ]
+MemorySalienceType = Literal[
+    "threat", "betrayal", "goal_clue", "relationship", "resource", "identity", "other"
+]
 ActionType = Literal[
     "move",
     "gather",
@@ -164,18 +167,21 @@ class KeyMemory(AgentModel):
     meaning: str
     round_number: int = Field(ge=0)
     confidence: int = Field(ge=0, le=100, default=70)
+    salience_type: MemorySalienceType = "other"
 
 
 class RelationshipMemory(AgentModel):
     trust: float = Field(default=0, ge=-100, le=100)
     history: list[str] = Field(default_factory=list)
     notes: str | None = None
+    last_consolidated_history_signature: str | None = None
 
 
 class AgentMemoryState(AgentModel):
     recent_events: list[MemoryEvent] = Field(default_factory=list)
     key_memories: list[KeyMemory] = Field(default_factory=list)
     relationship_memory: dict[str, RelationshipMemory] = Field(default_factory=dict)
+    last_consolidated_round: int = Field(ge=0, default=0)
 
 
 class ActionDefinition(AgentModel):

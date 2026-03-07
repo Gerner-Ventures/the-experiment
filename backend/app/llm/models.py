@@ -6,6 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 LLMRole = Literal["gm", "agent"]
+MemorySalienceType = Literal[
+    "threat", "betrayal", "goal_clue", "relationship", "resource", "identity", "other"
+]
 
 
 class LLMModel(BaseModel):
@@ -73,3 +76,24 @@ class UsageSummary(LLMModel):
 class RepairAttempt(LLMModel):
     original_text: str
     error: str
+
+
+class MemoryPromotionDecision(LLMModel):
+    promote_to_key_memory: bool = False
+    meaning: str | None = None
+    salience_type: MemorySalienceType = "other"
+    confidence: int = Field(ge=0, le=100, default=60)
+
+
+class MemoryConsolidationDecision(LLMModel):
+    create_summary: bool = False
+    summary: str | None = None
+    meaning: str | None = None
+    salience_type: MemorySalienceType = "other"
+    confidence: int = Field(ge=0, le=100, default=65)
+
+
+class RelationshipConsolidationDecision(LLMModel):
+    update_notes: bool = False
+    notes: str | None = None
+    confidence: int = Field(ge=0, le=100, default=65)
