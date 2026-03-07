@@ -17,7 +17,7 @@ from app.logging import setup_logging
 setup_logging()
 settings = get_settings()
 
-# Global singletons (no DB — in-memory for now)
+# Global app singletons
 ws_manager = ConnectionManager()
 experiment_runner = ExperimentRunner(ws_manager)
 

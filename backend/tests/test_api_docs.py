@@ -24,5 +24,13 @@ def test_docs_and_openapi_endpoints_are_available() -> None:
         body["paths"]["/api/experiments/{experiment_id}/log"]["get"]["summary"]
         == "Query the event log"
     )
+    assert (
+        body["paths"]["/api/experiments/{experiment_id}/analytics/summary"]["get"]["summary"]
+        == "Get experiment analytics summary"
+    )
+    assert (
+        body["paths"]["/api/experiments/{experiment_id}/usage"]["get"]["summary"]
+        == "Get LLM usage report"
+    )
     assert body["paths"]["/api/health"]["get"]["summary"] == "Liveness check"
     assert body["paths"]["/api/health/ready"]["get"]["summary"] == "Readiness check"
