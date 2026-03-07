@@ -1,9 +1,11 @@
-"""Tests for Langfuse configuration and lifecycle (S3.6 sections 3 + 5)."""
+"""Tests for Langfuse configuration and lifecycle (S3.6 sections 1, 3 + 5)."""
 
 from unittest.mock import MagicMock, patch
 
 import pytest
 
+import app.llm.client as llm_client_module
+import app.llm.config as llm_config_module
 from app.core.config import Settings
 
 
@@ -116,6 +118,16 @@ class TestLangfuseLifecycle:
         langfuse._client = None
         langfuse.shutdown()  # should not raise
 
+    def test_shutdown_resets_client(self) -> None:
+        from app.core import langfuse
+
+        mock_client = MagicMock()
+        langfuse._client = mock_client
+
+        langfuse.shutdown()
+
+        assert langfuse._client is None
+
     def test_tracing_errors_do_not_propagate(self) -> None:
         from app.core import langfuse
 
@@ -127,3 +139,48 @@ class TestLangfuseLifecycle:
         result = langfuse.trace(name="test-trace", session_id="exp-1")
         assert result is None
         langfuse._client = None
+
+
+# --- Section 1: litellm Callback Integration ---
+
+
+class TestLitellmCallbackIntegration:
+    def test_langfuse_callback_registered_when_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        settings = Settings(
+            langfuse_public_key="pk-lf-test",
+            langfuse_secret_key="sk-lf-test",
+        )
+        monkeypatch.setattr(llm_client_module, "get_settings", lambda: settings)
+        monkeypatch.setattr(llm_config_module, "get_settings", lambda: settings)
+        # Clear any existing callbacks
+        monkeypatch.setattr(litellm, "success_callback", [])
+        monkeypatch.setattr(litellm, "failure_callback", [])
+
+        from app.llm import LLMClient
+
+        LLMClient()
+
+        assert "langfuse" in litellm.success_callback
+        assert "langfuse" in litellm.failure_callback
+
+    def test_langfuse_callback_not_registered_when_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import litellm
+
+        settings = Settings()
+        monkeypatch.setattr(llm_client_module, "get_settings", lambda: settings)
+        monkeypatch.setattr(llm_config_module, "get_settings", lambda: settings)
+        monkeypatch.setattr(litellm, "success_callback", [])
+        monkeypatch.setattr(litellm, "failure_callback", [])
+
+        from app.llm import LLMClient
+
+        LLMClient()
+
+        assert "langfuse" not in litellm.success_callback
+        assert "langfuse" not in litellm.failure_callback

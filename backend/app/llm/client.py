@@ -17,6 +17,7 @@ class LLMClient:
         self.settings = get_settings()
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
+        self._register_langfuse_callbacks()
         router_cls = cast(Any, getattr(litellm, "Router"))
         self.router = router_cls(
             model_list=self._build_model_list(),
@@ -26,6 +27,14 @@ class LLMClient:
             timeout=self.settings.llm_timeout_seconds,
             set_verbose=False,
         )
+
+    def _register_langfuse_callbacks(self) -> None:
+        if not self.settings.langfuse_enabled:
+            return
+        if "langfuse" not in litellm.success_callback:
+            litellm.success_callback.append("langfuse")
+        if "langfuse" not in litellm.failure_callback:
+            litellm.failure_callback.append("langfuse")
 
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         model_config = self._resolve_model_config(request)

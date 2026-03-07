@@ -28,8 +28,10 @@ def init() -> None:
 
 
 def shutdown() -> None:
+    global _client
     if _client is not None:
         _client.flush()
+        _client = None
 
 
 def trace(*, name: str, session_id: str, **kwargs: Any) -> Any:
