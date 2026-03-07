@@ -6,7 +6,9 @@ NEON_ORG_ID := org-jolly-haze-41433858
 NEON_PARENT_BRANCH := main
 NEON_DB_NAME := neondb
 NEON_ROLE := neondb_owner
+NEON_BRANCH_TTL_DAYS := 7
 BRANCH_NAME ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+NEON_EXPIRES_AT ?= $(shell python3 -c "from datetime import datetime,timedelta; print((datetime.utcnow()+timedelta(days=$(NEON_BRANCH_TTL_DAYS))).strftime('%Y-%m-%dT%H:%M:%SZ'))")
 
 # ============================================================================
 # Help
@@ -191,13 +193,14 @@ db-shell: ## Open psql shell to the database
 
 .PHONY: neon-create neon-delete neon-list neon-url neon-migrate
 
-neon-create: ## Create a Neon branch for current git branch (from prod)
-	@echo "Creating Neon branch '$(BRANCH_NAME)' from $(NEON_PARENT_BRANCH)..."
+neon-create: ## Create a Neon branch for current git branch (from prod, 7-day TTL)
+	@echo "Creating Neon branch '$(BRANCH_NAME)' from $(NEON_PARENT_BRANCH) (expires $(NEON_EXPIRES_AT))..."
 	@CONN=$$(npx neonctl branches create \
 		--project-id $(NEON_PROJECT_ID) \
 		--org-id $(NEON_ORG_ID) \
 		--name $(BRANCH_NAME) \
 		--parent $(NEON_PARENT_BRANCH) \
+		--expires-at $(NEON_EXPIRES_AT) \
 		--output json \
 		| python3 -c "import sys,json; d=json.load(sys.stdin); ep=d['endpoints'][0]; print(f\"postgresql+asyncpg://{ep['host']}/{d['branch']['name']}?sslmode=require\")") && \
 	FULL_URL=$$(npx neonctl connection-string \
