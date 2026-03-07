@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-LLMRole = Literal["gm", "agent"]
+LLMRole = Literal["gm", "agent", "memory"]
 MemorySalienceType = Literal[
     "threat", "betrayal", "goal_clue", "relationship", "resource", "identity", "other"
 ]

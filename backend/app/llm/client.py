@@ -60,11 +60,9 @@ class LLMClient:
 
     def _build_model_list(self) -> list[dict[str, Any]]:
         unique_models = {
-            self.model_configs["gm"].primary_model,
-            *self.model_configs["gm"].fallback_models,
-            self.model_configs["agent"].primary_model,
-            *self.model_configs["agent"].fallback_models,
-            self.settings.memory_model,
+            model
+            for config in self.model_configs.values()
+            for model in [config.primary_model, *config.fallback_models]
         }
         return [
             {"model_name": model, "litellm_params": {"model": model}}

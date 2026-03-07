@@ -19,4 +19,11 @@ def get_default_model_configs() -> dict[str, LLMModelConfig]:
             temperature=settings.llm_default_temperature,
             timeout_seconds=settings.llm_timeout_seconds,
         ),
+        "memory": LLMModelConfig(
+            role="memory",
+            primary_model=settings.memory_model,
+            fallback_models=[settings.memory_fallback_model],
+            temperature=0,
+            timeout_seconds=settings.llm_timeout_seconds,
+        ),
     }

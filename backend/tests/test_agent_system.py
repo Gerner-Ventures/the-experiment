@@ -65,7 +65,7 @@ class _StubLLMService(LLMService):
         )
 
 
-class _StubMemoryLLMService(LLMService):
+class _StubMemoryLLMService:
     def __init__(
         self,
         decision: MemoryPromotionDecision | None = None,
@@ -440,7 +440,7 @@ async def test_relationship_memory_consolidates_notes() -> None:
     )
 
     assert memory.relationship_memory["agent-2"].notes is not None
-    assert memory.relationship_memory["agent-2"].last_consolidated_history_signature is not None
+    assert memory.relationship_consolidation_signatures["agent-2"]
     assert "steady me" in memory.relationship_memory["agent-2"].notes
 
     memory = await service.consolidate_relationship_memory(
@@ -533,6 +533,17 @@ async def test_conversation_updates_relationship_memory_for_both_participants() 
     assert jon.relationships["a1"].trust == 0.5
     assert len(mara.relationships["a2"].history) == 2
     assert len(jon.relationships["a1"].history) == 2
+    assert llm_service.classify_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_night_reflections_skip_classifier_for_low_suspicion_agents() -> None:
+    llm_service = _StubMemoryLLMService()
+    engine = SimulationEngine(agent_service=AgentService(memory_llm_service=llm_service))
+    state = _engine_state()
+
+    await engine._night_phase(state, cooperation_ratio=0.6)
+
     assert llm_service.classify_calls == 0
 
 

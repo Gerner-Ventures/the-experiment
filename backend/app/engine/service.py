@@ -322,6 +322,7 @@ class SimulationEngine:
             important=agent.suspicion_level > 40,
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
+            classify=False,
         )
         updated_memory = await self.agent_service.consolidate_memory(
             updated_memory,

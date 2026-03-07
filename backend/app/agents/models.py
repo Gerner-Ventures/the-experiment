@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import AgentStatus
+from app.llm.models import MemorySalienceType
 from app.schemas.agent_decision import AgentDecision
 from app.world.models import WorldState
 
@@ -22,9 +23,6 @@ GoalArchetype = Literal[
     "belief_transformation",
     "personal_redemption",
     "obsession_desire",
-]
-MemorySalienceType = Literal[
-    "threat", "betrayal", "goal_clue", "relationship", "resource", "identity", "other"
 ]
 ActionType = Literal[
     "move",
@@ -174,13 +172,13 @@ class RelationshipMemory(AgentModel):
     trust: float = Field(default=0, ge=-100, le=100)
     history: list[str] = Field(default_factory=list)
     notes: str | None = None
-    last_consolidated_history_signature: str | None = None
 
 
 class AgentMemoryState(AgentModel):
     recent_events: list[MemoryEvent] = Field(default_factory=list)
     key_memories: list[KeyMemory] = Field(default_factory=list)
     relationship_memory: dict[str, RelationshipMemory] = Field(default_factory=dict)
+    relationship_consolidation_signatures: dict[str, str] = Field(default_factory=dict)
     last_consolidated_round: int = Field(ge=0, default=0)
 
 

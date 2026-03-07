@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from typing import Protocol, cast
 
 from app.agents.brain import AgentBrain
 from app.agents.memory import add_key_memory, append_recent_event, update_relationship_memory
@@ -15,22 +16,56 @@ from app.agents.models import (
     RelationshipMemory,
     SecretGoal,
 )
-from app.llm.models import MemoryConsolidationDecision, MemoryPromotionDecision
-from app.llm.service import LLMService
+from app.llm.models import (
+    MemoryConsolidationDecision,
+    MemoryPromotionDecision,
+    RelationshipConsolidationDecision,
+)
 
 MEMORY_CONSOLIDATION_MIN_EVENTS = 3
 RELATIONSHIP_CONSOLIDATION_MIN_HISTORY = 3
 logger = logging.getLogger(__name__)
 
 
+class MemoryLLMService(Protocol):
+    async def classify_memory_event(
+        self,
+        *,
+        event: MemoryEvent,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+        recent_key_memories: list[KeyMemory],
+    ) -> MemoryPromotionDecision: ...
+
+    async def consolidate_memory_events(
+        self,
+        *,
+        events: list[MemoryEvent],
+        goal: SecretGoal | None,
+        suspicion_level: float,
+        recent_key_memories: list[KeyMemory],
+    ) -> MemoryConsolidationDecision: ...
+
+    async def consolidate_relationship_memory(
+        self,
+        *,
+        other_agent_id: str,
+        relationship: RelationshipMemory,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+    ) -> RelationshipConsolidationDecision: ...
+
+
 class AgentService:
     def __init__(
         self,
         brain: AgentBrain | None = None,
-        memory_llm_service: LLMService | None = None,
+        memory_llm_service: MemoryLLMService | None = None,
     ) -> None:
         self.brain: AgentBrain = brain or AgentBrain()
-        self.memory_llm_service = memory_llm_service or self.brain.llm_service
+        self.memory_llm_service = memory_llm_service or cast(
+            MemoryLLMService, self.brain.llm_service
+        )
 
     def initialize_memory(self) -> AgentMemoryState:
         return AgentMemoryState()
@@ -151,13 +186,14 @@ class AgentService:
         suspicion_level: float,
     ) -> AgentMemoryState:
         relationships = dict(memory.relationship_memory)
+        consolidation_signatures = dict(memory.relationship_consolidation_signatures)
         changed = False
 
         for other_agent_id, relationship in relationships.items():
             if len(relationship.history) < RELATIONSHIP_CONSOLIDATION_MIN_HISTORY:
                 continue
             history_signature = _relationship_history_signature(relationship)
-            if relationship.last_consolidated_history_signature == history_signature:
+            if consolidation_signatures.get(other_agent_id) == history_signature:
                 continue
             try:
                 decision = await self.memory_llm_service.consolidate_relationship_memory(
@@ -177,18 +213,22 @@ class AgentService:
                 )
                 continue
 
-            relationship_update: dict[str, object] = {
-                "last_consolidated_history_signature": history_signature
-            }
+            relationship_update: dict[str, object] = {}
             if decision.update_notes and decision.notes:
                 relationship_update["notes"] = decision.notes
 
             relationships[other_agent_id] = relationship.model_copy(update=relationship_update)
+            consolidation_signatures[other_agent_id] = history_signature
             changed = True
 
         if not changed:
             return memory
-        return memory.model_copy(update={"relationship_memory": relationships})
+        return memory.model_copy(
+            update={
+                "relationship_memory": relationships,
+                "relationship_consolidation_signatures": consolidation_signatures,
+            }
+        )
 
     def _build_key_memory(
         self,

@@ -63,13 +63,17 @@ class _FakeLLMClient:
 @pytest.mark.asyncio
 async def test_defaults_include_gm_and_agent_configs() -> None:
     configs = get_default_model_configs()
-    assert set(configs) == {"gm", "agent"}
+    assert set(configs) == {"gm", "agent", "memory"}
     assert configs["gm"].primary_model
     assert configs["agent"].fallback_models
+    assert configs["memory"].fallback_models
 
 
 def test_router_model_list_includes_memory_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = Settings(memory_model="anthropic/claude-3-5-sonnet-20241022")
+    settings = Settings(
+        memory_model="anthropic/claude-3-5-sonnet-20241022",
+        memory_fallback_model="openai/gpt-4o-mini",
+    )
     monkeypatch.setattr(llm_client_module, "get_settings", lambda: settings)
     monkeypatch.setattr(llm_config_module, "get_settings", lambda: settings)
 
@@ -77,6 +81,8 @@ def test_router_model_list_includes_memory_model(monkeypatch: pytest.MonkeyPatch
     model_names = {entry["model_name"] for entry in client.router.model_list}
 
     assert "anthropic/claude-3-5-sonnet-20241022" in model_names
+    assert "openai/gpt-4o-mini" in model_names
+    assert {settings.memory_model: [settings.memory_fallback_model]} in client._build_fallbacks()
 
 
 @pytest.mark.asyncio
