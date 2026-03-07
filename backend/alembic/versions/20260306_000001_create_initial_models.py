@@ -18,7 +18,7 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-experiment_status = sa.Enum(
+experiment_status = postgresql.ENUM(
     "setup",
     "running",
     "paused",
@@ -27,7 +27,7 @@ experiment_status = sa.Enum(
     name="experiment_status",
     create_type=False,
 )
-agent_status = sa.Enum(
+agent_status = postgresql.ENUM(
     "idle",
     "thinking",
     "talking",
@@ -38,7 +38,7 @@ agent_status = sa.Enum(
     name="agent_status",
     create_type=False,
 )
-resource_pressure = sa.Enum(
+resource_pressure = postgresql.ENUM(
     "low",
     "medium",
     "high",
@@ -46,7 +46,7 @@ resource_pressure = sa.Enum(
     name="resource_pressure",
     create_type=False,
 )
-event_type = sa.Enum(
+event_type = postgresql.ENUM(
     "round",
     "action",
     "social",
