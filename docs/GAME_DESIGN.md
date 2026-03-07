@@ -1,5 +1,9 @@
 # Game Design: the-experiment
 
+This document describes design intent: premise, player experience, mechanics, and the intended round structure.
+
+For the current backend implementation and runtime state model, see [GAME_RUNTIME.md](./GAME_RUNTIME.md).
+
 ## Premise
 
 Agents wake up in a small town with no memory of how they got there. Resources are limited and depleting. Someone is watching. Each agent has a secret personal goal that may or may not align with group survival. The core tension: civilization vs. self-interest, and the slow unraveling of social order under pressure.

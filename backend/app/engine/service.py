@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from random import Random
 from typing import cast
 
+from app.agents.memory import append_recent_event
+from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
+from app.agents.suspicion import apply_suspicion_trigger
 from app.agents.service import AgentService
+from app.db.models import AgentStatus
 from app.engine.models import (
     ConflictRecord,
     ConversationOutcome,
@@ -19,16 +24,55 @@ from app.engine.models import (
     SimulationState,
     build_agent_context,
 )
-from app.agents.models import AgentMemoryState, AgentTurnResult
-from app.db.models import AgentStatus
 from app.gm.models import GMPlanData, GMPlanRecord
 from app.gm import GMPlanningContext, GMService
 from app.social import SocialService
 from app.world.models import ResourceName, ResourceTick
-from app.world.service import apply_resource_tick, calculate_threat_level
+from app.world.service import (
+    apply_resource_tick,
+    calculate_threat_level,
+    get_location_type,
+    location_label_for_tile,
+    resolve_location_target,
+    resolve_spawn_tile,
+    step_toward,
+    tile_distance,
+)
+
+
+@dataclass
+class PreparedAction:
+    agent: EngineAgentState
+    turn: AgentTurnResult
+    action_type: str
+    location: str
+    summary: str | None = None
 
 
 class SimulationEngine:
+    MAX_MOVE_TILES_PER_ACTION = 2
+    CONTACT_RANGE_TILES = 2
+    RANGED_CONTACT_RANGE_TILES = 4
+    AGENT_INTERACTION_ACTIONS = {
+        "talk",
+        "trade",
+        "accuse",
+        "attack",
+        "threaten",
+        "stab",
+        "shoot",
+        "poison",
+        "argue",
+        "investigate",
+    }
+    RANGED_ACTIONS = {"shoot"}
+    ACTION_LOCATION_RULES: dict[str, set[str]] = {
+        "gather": {"farm", "water_source", "store"},
+        "repair": {"workshop", "meeting_hall", "boundary", "mystery"},
+        "hoard": {"farm", "water_source", "store", "residence", "bar", "brothel"},
+        "vote": {"meeting_hall"},
+    }
+
     def __init__(
         self,
         *,
@@ -185,7 +229,12 @@ class SimulationEngine:
         actions_per_agent: int,
     ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
-        actions: list[tuple[EngineAgentState, AgentTurnResult]] = []
+        actions: list[PreparedAction] = []
+        for agent in self._active_agents(state):
+            self._ensure_agent_position(agent)
+        # Actions are prepared sequentially, not from a start-of-phase position snapshot.
+        # If one agent moves first, later proximity checks in the same phase will see that
+        # updated tile position.
         for agent in self._active_agents(state):
             turns = []
             for _ in range(actions_per_agent):
@@ -200,11 +249,10 @@ class SimulationEngine:
                 )
                 turn = await self.agent_service.decide(context)
                 turns.append(turn)
-                actions.append((agent, turn))
                 agent.memory = turn.updated_memory
                 agent.suspicion_level = turn.suspicion_level
-                if turn.decision.action.location:
-                    agent.location = turn.decision.action.location
+                prepared = self._prepare_action(state, agent, turn)
+                actions.append(prepared)
             all_turns[agent.agent_id] = turns
 
         result = await self._resolve_actions(state, phase=phase, actions=actions)
@@ -241,7 +289,7 @@ class SimulationEngine:
                     },
                 )
             )
-        for agent in state.agents:
+        for agent in self._active_agents(state):
             events.append(
                 RoundEvent(
                     phase="midday",
@@ -340,23 +388,22 @@ class SimulationEngine:
         state: SimulationState,
         *,
         phase: PhaseName,
-        actions: list[tuple[EngineAgentState, AgentTurnResult]],
+        actions: list[PreparedAction],
     ) -> PhaseResult:
-        grouped: dict[tuple[str, str], list[tuple[EngineAgentState, AgentTurnResult]]] = {}
+        grouped: dict[tuple[str, str], list[PreparedAction]] = {}
         events: list[RoundEvent] = []
         conflicts: list[ConflictRecord] = []
 
-        for agent, turn in actions:
-            location = turn.decision.action.location or agent.location or "town_square"
-            key = (location, turn.decision.action.type)
-            grouped.setdefault(key, []).append((agent, turn))
+        for prepared in actions:
+            key = (prepared.location, prepared.action_type)
+            grouped.setdefault(key, []).append(prepared)
 
         for (location, action_type), group in grouped.items():
             if action_type == "talk" and len(group) > 1:
                 outcomes = self.social_service.run_conversations(
                     state,
                     location=location,
-                    participants=[agent for agent, _ in group],
+                    participants=[prepared.agent for prepared in group],
                 )
                 await self._apply_conversation_outcomes(state, outcomes)
                 for outcome in outcomes:
@@ -372,36 +419,40 @@ class SimulationEngine:
             }:
                 winner_count = max(1, len(group) // 2)
                 ordered = sorted(
-                    group, key=lambda item: (item[0].suspicion_level, self.random.random())
+                    group, key=lambda item: (item.agent.suspicion_level, self.random.random())
                 )
                 winners = ordered[:winner_count]
                 losers = ordered[winner_count:]
                 summary = (
                     f"At {location}, {len(group)} agents collided over {action_type}; "
-                    f"{', '.join(agent.name for agent, _ in winners)} came out ahead."
+                    f"{', '.join(prepared.agent.name for prepared in winners)} came out ahead."
                 )
                 conflicts.append(
                     ConflictRecord(
                         location=location,
                         action_type=action_type,
-                        participants=[agent.agent_id for agent, _ in group],
-                        winner_ids=[agent.agent_id for agent, _ in winners],
-                        loser_ids=[agent.agent_id for agent, _ in losers],
+                        participants=[prepared.agent.agent_id for prepared in group],
+                        winner_ids=[prepared.agent.agent_id for prepared in winners],
+                        loser_ids=[prepared.agent.agent_id for prepared in losers],
                         summary=summary,
                     )
                 )
                 self._apply_conflict_consequences(state, location, action_type, winners, losers)
                 events.append(RoundEvent(phase=phase, summary=summary))
             else:
-                for agent, turn in group:
-                    self._apply_clean_action(state, agent, turn.decision.action.type, location)
+                for prepared in group:
+                    agent = prepared.agent
+                    turn = prepared.turn
+                    self._apply_clean_action(state, agent, prepared.action_type, location)
                     events.append(
                         RoundEvent(
                             phase=phase,
-                            summary=f"{agent.name} chose to {turn.decision.action.type} at {location}.",
+                            summary=prepared.summary
+                            or f"{agent.name} chose to {prepared.action_type} at {location}.",
                             data={
                                 "agent_id": agent.agent_id,
-                                "action_type": turn.decision.action.type,
+                                "action_type": prepared.action_type,
+                                "requested_action_type": turn.decision.action.type,
                             },
                         )
                     )
@@ -421,15 +472,17 @@ class SimulationEngine:
         state: SimulationState,
         location: str,
         action_type: str,
-        winners: list[tuple[EngineAgentState, AgentTurnResult]],
-        losers: list[tuple[EngineAgentState, AgentTurnResult]],
+        winners: list[PreparedAction],
+        losers: list[PreparedAction],
     ) -> None:
-        for agent, _ in winners:
+        for prepared in winners:
+            agent = prepared.agent
             occupancy = state.world_state.location_occupancy.setdefault(location, [])
             if agent.agent_id not in occupancy:
                 occupancy.append(agent.agent_id)
             self._apply_resource_effect(state, action_type, chaotic_bonus=True)
-        for agent, _ in losers:
+        for prepared in losers:
+            agent = prepared.agent
             agent.suspicion_level = min(100.0, agent.suspicion_level + 3.0)
 
     def _apply_resource_effect(
@@ -748,9 +801,6 @@ class SimulationEngine:
             + max(agent.suspicion_level, 20.0) * 0.25,
         )
 
-    def _active_agents(self, state: SimulationState) -> list[EngineAgentState]:
-        return [agent for agent in state.agents if agent.status != "exiled"]
-
     def _update_experiment_status(self, state: SimulationState) -> None:
         if state.world_state.threat_level >= 100:
             state.status = "collapsed"
@@ -813,6 +863,9 @@ class SimulationEngine:
             return 0.5
         return round(cooperative / total, 2)
 
+    def _active_agents(self, state: SimulationState) -> list[EngineAgentState]:
+        return [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
+
     def _build_observations(
         self, agent: EngineAgentState, state: SimulationState
     ) -> list[dict[str, object]]:
@@ -832,6 +885,172 @@ class SimulationEngine:
                 {"summary": "The fence seems wrong from up close.", "importance": 5}
             )
         return observations
+
+    def _prepare_action(
+        self, state: SimulationState, agent: EngineAgentState, turn: AgentTurnResult
+    ) -> PreparedAction:
+        current_tile = self._agent_tile(agent)
+        requested_action = turn.decision.action.type
+        requested_location = turn.decision.action.location
+        action_tile = current_tile
+        action_location = agent.location or location_label_for_tile(current_tile)
+
+        if requested_location:
+            goals = resolve_location_target(requested_location)
+            if not goals:
+                return self._block_action(
+                    agent,
+                    turn=turn,
+                    round_number=state.world_state.round_number,
+                    requested_action=requested_action,
+                    note=f"{agent.name} cannot find a valid route to {requested_location} and pauses to observe.",
+                )
+
+            path = step_toward(
+                current_tile,
+                goals,
+                max_steps=self.MAX_MOVE_TILES_PER_ACTION,
+            )
+            destination = path[-1]
+            destination_location = location_label_for_tile(destination)
+            if requested_action == "move":
+                self._set_agent_tile(agent, destination)
+                reached = destination in goals
+                summary = (
+                    f"{agent.name} moves to {agent.location}."
+                    if reached
+                    else f"{agent.name} moves toward {requested_location} but cannot reach it this turn."
+                )
+                return PreparedAction(
+                    agent=agent,
+                    turn=turn,
+                    action_type="move",
+                    location=agent.location or "town_square",
+                    summary=summary,
+                )
+
+            if destination not in goals:
+                self._set_agent_tile(agent, destination)
+                return PreparedAction(
+                    agent=agent,
+                    turn=turn,
+                    action_type="move",
+                    location=agent.location or "town_square",
+                    summary=(
+                        f"{agent.name} heads toward {requested_location} and spends the turn traveling."
+                    ),
+                )
+            action_tile = destination
+            action_location = destination_location
+
+        location_type = get_location_type(action_location)
+        allowed_location_types = self.ACTION_LOCATION_RULES.get(requested_action)
+        if allowed_location_types is not None and location_type not in allowed_location_types:
+            allowed = ", ".join(sorted(allowed_location_types))
+            return self._block_action(
+                agent,
+                turn=turn,
+                round_number=state.world_state.round_number,
+                requested_action=requested_action,
+                note=(
+                    f"{agent.name} cannot {requested_action} effectively at {action_location}; "
+                    f"that action requires one of: {allowed}."
+                ),
+            )
+
+        if requested_action in self.AGENT_INTERACTION_ACTIONS:
+            interaction_range = (
+                self.RANGED_CONTACT_RANGE_TILES
+                if requested_action in self.RANGED_ACTIONS
+                else self.CONTACT_RANGE_TILES
+            )
+            if not self._has_nearby_agent(
+                state, agent, max_distance=interaction_range, origin_tile=action_tile
+            ):
+                return self._block_action(
+                    agent,
+                    turn=turn,
+                    round_number=state.world_state.round_number,
+                    requested_action=requested_action,
+                    note=(
+                        f"{agent.name} cannot {requested_action} from {action_location}; "
+                        "no other agent is close enough."
+                    ),
+                )
+
+        if action_tile != current_tile:
+            self._set_agent_tile(agent, action_tile)
+
+        return PreparedAction(
+            agent=agent,
+            turn=turn,
+            action_type=requested_action,
+            location=action_location,
+        )
+
+    def _block_action(
+        self,
+        agent: EngineAgentState,
+        *,
+        turn: AgentTurnResult,
+        round_number: int,
+        requested_action: str,
+        note: str,
+    ) -> PreparedAction:
+        # Blocked actions immediately affect memory/suspicion so subsequent decisions in the
+        # same round can react to the failed attempt.
+        agent.suspicion_level, _ = apply_suspicion_trigger(
+            current_level=agent.suspicion_level,
+            trigger="failed_action",
+            note=note,
+        )
+        agent.memory = append_recent_event(
+            agent.memory,
+            MemoryEvent(
+                round_number=round_number,
+                summary=note,
+                emotional_charge=6,
+                tags=["failed_action", requested_action],
+            ),
+        )
+        return PreparedAction(
+            agent=agent,
+            turn=turn,
+            action_type="observe",
+            location=agent.location or "town_square",
+            summary=note,
+        )
+
+    def _has_nearby_agent(
+        self,
+        state: SimulationState,
+        agent: EngineAgentState,
+        *,
+        max_distance: int,
+        origin_tile: tuple[int, int] | None = None,
+    ) -> bool:
+        origin = origin_tile or self._agent_tile(agent)
+        for other in self._active_agents(state):
+            if other.agent_id == agent.agent_id:
+                continue
+            if tile_distance(origin, self._agent_tile(other)) <= max_distance:
+                return True
+        return False
+
+    def _ensure_agent_position(self, agent: EngineAgentState) -> None:
+        if agent.tile_x is None or agent.tile_y is None:
+            tile_x, tile_y = resolve_spawn_tile(agent.location)
+            agent.tile_x = tile_x
+            agent.tile_y = tile_y
+            agent.location = agent.location or location_label_for_tile((tile_x, tile_y))
+
+    def _agent_tile(self, agent: EngineAgentState) -> tuple[int, int]:
+        self._ensure_agent_position(agent)
+        return cast(int, agent.tile_x), cast(int, agent.tile_y)
+
+    def _set_agent_tile(self, agent: EngineAgentState, tile: tuple[int, int]) -> None:
+        agent.tile_x, agent.tile_y = tile
+        agent.location = location_label_for_tile(tile)
 
     def _summarize_relationships(self, agents: list[EngineAgentState]) -> str:
         fragments: list[str] = []

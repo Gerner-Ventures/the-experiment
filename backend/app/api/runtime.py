@@ -24,13 +24,14 @@ from app.api.models import (
     UsageReport,
 )
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
+from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
 from app.schemas.ws_message import WSMessage, WSMessageType
-from app.world import build_default_world_state
+from app.world import build_default_world_state, resolve_spawn_tile
 
 
 class ConnectionManager:
@@ -64,6 +65,30 @@ class ExperimentRuntime:
         async with self.lock:
             experiment_id = str(uuid.uuid4())
             arc = request.arc or get_preset_arc(request.preset_arc_id)
+            agents: list[EngineAgentState] = []
+            spawn_counts: dict[str, int] = {}
+            for agent in request.agents:
+                location = agent.location or "town_square"
+                spawn_index = spawn_counts.get(location, 0)
+                spawn_counts[location] = spawn_index + 1
+                spawn_tile = resolve_spawn_tile(location, spawn_index=spawn_index)
+                agents.append(
+                    EngineAgentState(
+                        agent_id=str(uuid.uuid4()),
+                        name=agent.name,
+                        character_id=agent.character_id,
+                        personality=agent.personality,
+                        goal=agent.goal,
+                        memory=AgentMemoryState(),
+                        location=location,
+                        tile_x=spawn_tile[0],
+                        tile_y=spawn_tile[1],
+                        inventory=agent.inventory,
+                        relationships={},
+                        suspicion_level=0,
+                        llm_model=agent.llm_model,
+                    )
+                )
             state = SimulationState(
                 experiment_id=experiment_id,
                 experiment_name=request.name,
@@ -73,22 +98,7 @@ class ExperimentRuntime:
                 auto_approve=request.auto_approve,
                 arc=arc,
                 world_state=build_default_world_state(),
-                agents=[
-                    EngineAgentState(
-                        agent_id=str(uuid.uuid4()),
-                        name=agent.name,
-                        character_id=agent.character_id,
-                        personality=agent.personality,
-                        goal=agent.goal,
-                        memory=AgentMemoryState(),
-                        location=agent.location,
-                        inventory=agent.inventory,
-                        relationships={},
-                        suspicion_level=0,
-                        llm_model=agent.llm_model,
-                    )
-                    for agent in request.agents
-                ],
+                agents=agents,
             )
             await self.store.save_state(state)
             await self._log(
@@ -285,7 +295,7 @@ class ExperimentRuntime:
 
     async def get_analytics_summary(self, experiment_id: str) -> AnalyticsSummary:
         state = await self.get_state(experiment_id)
-        active_agents = [agent for agent in state.agents if agent.status != "exiled"]
+        active_agents = [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
         cooperation_score = await self._cooperation_score(experiment_id)
         return AnalyticsSummary(
