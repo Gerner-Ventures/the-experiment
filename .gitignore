@@ -35,10 +35,21 @@ docker-compose.override.yml
 .DS_Store
 Thumbs.db
 
+# Worktrees
+.worktrees/
+
 # Coverage
 htmlcov/
 .coverage
 coverage/
+
+# Playwright
+playwright-report/
+test-results/
+
+# claude-mem auto-generated files in subdirectories
+**/src/**/CLAUDE.md
+frontend/frontend/
 
 # Alembic
 alembic/versions/*.pyc

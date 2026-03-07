@@ -18,6 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    op.add_column("agents", sa.Column("character_id", sa.String(length=255), nullable=True))
     op.add_column("agents", sa.Column("goal_archetype", sa.String(length=100), nullable=True))
     op.add_column(
         "agents",
@@ -29,3 +30,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_column("agents", "memory")
     op.drop_column("agents", "goal_archetype")
+    op.drop_column("agents", "character_id")

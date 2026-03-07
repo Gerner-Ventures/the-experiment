@@ -1,22 +1,27 @@
 <script setup lang="ts">
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <RouterView />
+  <div class="h-full w-full bg-void text-white noise scanlines">
+    <RouterView v-slot="{ Component, route }">
+      <Transition
+        :name="route.meta.transition as string || 'fade'"
+        mode="out-in"
+      >
+        <component :is="Component" :key="route.path" />
+      </Transition>
+    </RouterView>
+  </div>
 </template>
 
 <style>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
 }
-
-html, body, #app {
-  width: 100%;
-  height: 100%;
-  background: #0a0a0a;
-  color: #e0e0e0;
-  font-family: 'Courier New', monospace;
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

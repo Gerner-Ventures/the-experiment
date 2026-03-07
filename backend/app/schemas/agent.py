@@ -21,6 +21,7 @@ class Relationship(APIModel):
 class AgentRead(APIModel):
     id: UUID
     name: str
+    character_id: str | None = None
     personality: Personality
     secret_goal: str
     goal_archetype: str | None = None

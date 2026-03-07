@@ -52,6 +52,7 @@ def _context() -> AgentContext:
     return AgentContext(
         agent_id="agent-1",
         name="Mara",
+        character_id="undertaker_01",
         personality=PersonalityProfile(
             axes=PersonalityAxes(
                 paranoia=72,
@@ -87,6 +88,8 @@ def test_prompt_includes_hybrid_personality_and_goal() -> None:
     assert "paranoia" in prompt
     assert "guarded" in prompt
     assert "truth_revelation" in prompt
+    assert "undertaker_01" in prompt
+    assert "attack" in prompt
 
 
 def test_memory_registers_recent_and_key_observations() -> None:
@@ -122,6 +125,13 @@ def test_action_registry_exposes_expected_actions() -> None:
     action = get_action_definition("hoard")
     assert action.category == "selfish"
     assert action.requires_target is True
+
+    aggressive = get_action_definition("attack")
+    assert aggressive.category == "selfish"
+    assert aggressive.requires_target is True
+
+    biological = get_action_definition("sleep")
+    assert biological.requires_location is True
 
 
 def test_suspicion_trigger_clamps_and_returns_note() -> None:
