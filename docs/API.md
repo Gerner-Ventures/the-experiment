@@ -223,7 +223,7 @@ Additional report-grade analytics endpoints expose persisted derived views for f
 - `GET /api/experiments/{experiment_id}/analytics/rounds`
   - one round-level item per completed round
   - GM theme, narration, and crisis payload
-  - resolved cooperation score, betrayal count, sabotage count
+  - resolved cooperation score, betrayal count (includes sabotage), sabotage count (subset of betrayal)
   - `sabotage_count` is a subset of the broader `betrayal_count`
   - round resources, threat, and dominant faction
 - `GET /api/experiments/{experiment_id}/analytics/goals`
