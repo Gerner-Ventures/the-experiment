@@ -198,11 +198,16 @@ onUnmounted(() => {
   socialStore.$reset()
 })
 
-// Clear stepping state if WebSocket disconnects mid-round (prevents stuck UI)
+// Clear stepping and auto-play state if WebSocket disconnects mid-round
 watch(() => ws.state.value, (state) => {
-  if (state === 'disconnected' && uiStore.isStepping) {
-    uiStore.clearStepping()
-    waitingForRound = false
+  if (state === 'disconnected') {
+    if (uiStore.isStepping) {
+      uiStore.clearStepping()
+      waitingForRound = false
+    }
+    if (uiStore.isPlaying) {
+      uiStore.isPlaying = false
+    }
   }
 })
 

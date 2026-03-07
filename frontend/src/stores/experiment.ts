@@ -131,7 +131,7 @@ export const useExperimentStore = defineStore('experiment', () => {
       }
       useUIStore().setSteppingStatus(labels[phase] ?? phase)
     }
-    if (data.events) {
+    if ((data.events as unknown[])?.length) {
       addEvent(msg)
     }
   }
