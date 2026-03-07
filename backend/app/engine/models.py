@@ -23,6 +23,14 @@ MeetingStance = Literal["support", "oppose", "hesitant"]
 MeetingVoteChoice = Literal["support", "oppose", "abstain"]
 ExileVoteChoice = Literal["banish", "protect", "abstain"]
 FactionKind = Literal["alliance", "cult"]
+ActionResolutionOutcome = Literal[
+    "resolved",
+    "blocked",
+    "rerouted",
+    "conflict_winner",
+    "conflict_loser",
+    "self_sacrifice",
+]
 
 
 class EngineModel(BaseModel):
@@ -96,7 +104,24 @@ class RoundResult(EngineModel):
     threat_level: float = Field(ge=0, le=100)
     world_state: WorldState
     agent_turns: dict[str, list[AgentTurnResult]] = Field(default_factory=dict)
+    action_resolutions: list["ActionResolution"] = Field(default_factory=list)
     created_at: datetime
+
+
+class ActionResolution(EngineModel):
+    phase: Literal["morning", "afternoon"]
+    agent_id: str
+    agent_name: str
+    location: str
+    requested_action_type: str
+    resolved_action_type: str
+    outcome: ActionResolutionOutcome = "resolved"
+    cooperation_intent: str
+    goal_progress: str
+    summary: str
+    target: str | None = None
+    dialogue_target: str | None = None
+    suspicion_level: float = Field(ge=0, le=100)
 
 
 class ConversationTurn(EngineModel):

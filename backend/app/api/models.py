@@ -173,6 +173,103 @@ class AnalyticsSummary(APIRequestModel):
     current_resources: dict[str, float] = Field(default_factory=dict)
 
 
+class CooperationRound(APIRequestModel):
+    round_number: int
+    cooperation_score: float = 0.0
+    cooperative_actions: int = 0
+    total_actions: int = 0
+
+
+class AgentGoalProgress(APIRequestModel):
+    round_number: int
+    phase: str | None = None
+    requested_action_type: str
+    resolved_action_type: str
+    cooperation_intent: str
+    progress: str
+    summary: str
+
+
+class GoalOutcomeSummary(APIRequestModel):
+    agent_id: str
+    agent_name: str
+    goal_text: str
+    goal_archetype: str
+    status: str
+    outcome: Literal["achieved", "partial", "failed", "unknown"] = "unknown"
+    latest_progress: str | None = None
+    progress_history: list[AgentGoalProgress] = Field(default_factory=list)
+
+
+class GoalAnalytics(APIRequestModel):
+    items: list[GoalOutcomeSummary] = Field(default_factory=list)
+
+
+class BetrayalTimelineItem(APIRequestModel):
+    round_number: int
+    phase: str | None = None
+    category: Literal["sabotage", "hostile_action", "exile_vote", "exile_enacted"]
+    summary: str
+    agent_id: str | None = None
+    agent_name: str | None = None
+    target_agent_id: str | None = None
+    target_agent_name: str | None = None
+    requested_action_type: str | None = None
+    resolved_action_type: str | None = None
+    resolved: bool = True
+
+
+class BetrayalAnalytics(APIRequestModel):
+    items: list[BetrayalTimelineItem] = Field(default_factory=list)
+
+
+class SuspicionPoint(APIRequestModel):
+    round_number: int
+    agent_id: str
+    agent_name: str
+    suspicion_level: float = 0.0
+
+
+class AgentSuspicionHistory(APIRequestModel):
+    agent_id: str
+    agent_name: str
+    points: list[SuspicionPoint] = Field(default_factory=list)
+
+
+class SuspicionAnalytics(APIRequestModel):
+    heatmap: list[SuspicionPoint] = Field(default_factory=list)
+    agents: list[AgentSuspicionHistory] = Field(default_factory=list)
+
+
+class FactionTimelinePoint(APIRequestModel):
+    round_number: int
+    faction_id: str
+    faction_name: str
+    kind: str
+    pressure: float = 0.0
+    influence: float = 0.0
+    member_ids: list[str] = Field(default_factory=list)
+
+
+class FactionMembershipChange(APIRequestModel):
+    round_number: int
+    faction_id: str
+    faction_name: str
+    joined_agent_ids: list[str] = Field(default_factory=list)
+    left_agent_ids: list[str] = Field(default_factory=list)
+
+
+class GMRoundTimelineItem(APIRequestModel):
+    round_number: int
+    round_theme: str
+    narration: str
+    crisis_event: dict[str, Any] = Field(default_factory=dict)
+
+
+class GMTimelinePage(APIRequestModel):
+    items: list[GMRoundTimelineItem] = Field(default_factory=list)
+
+
 class HighlightItem(APIRequestModel):
     round_number: int | None = None
     score: float = 0.0
@@ -181,11 +278,38 @@ class HighlightItem(APIRequestModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
 
+class RoundAnalyticsItem(APIRequestModel):
+    round_number: int
+    summary: str
+    gm_round_theme: str
+    gm_narration: str
+    crisis_event: dict[str, Any] = Field(default_factory=dict)
+    cooperation_score: float = 0.0
+    cooperative_actions: int = 0
+    total_actions: int = 0
+    betrayal_count: int = 0
+    sabotage_count: int = 0
+    threat_level: float = 0.0
+    resources: dict[str, float] = Field(default_factory=dict)
+    faction_count: int = 0
+    dominant_faction: str | None = None
+
+
+class RoundAnalyticsPage(APIRequestModel):
+    items: list[RoundAnalyticsItem] = Field(default_factory=list)
+
+
 class ReplayRound(APIRequestModel):
     round_number: int
     summary: str
     threat_level: float = 0.0
     event_count: int = 0
+    cooperation_score: float = 0.0
+    betrayal_count: int = 0
+    sabotage_count: int = 0
+    resources: dict[str, float] = Field(default_factory=dict)
+    gm_round_theme: str = ""
+    gm_narration: str = ""
 
 
 class ReplayIndex(APIRequestModel):
@@ -206,6 +330,8 @@ class RelationshipAnalytics(APIRequestModel):
 
 class FactionAnalytics(APIRequestModel):
     items: list[FactionState] = Field(default_factory=list)
+    timeline: list[FactionTimelinePoint] = Field(default_factory=list)
+    membership_changes: list[FactionMembershipChange] = Field(default_factory=list)
 
 
 class HighlightPage(APIRequestModel):

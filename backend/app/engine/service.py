@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from random import Random
-from typing import cast
+from typing import Literal, cast
 
 from app.agents.memory import append_recent_event
 from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
@@ -12,6 +12,8 @@ from app.agents.suspicion import apply_suspicion_trigger
 from app.agents.service import AgentService
 from app.db.models import AgentStatus
 from app.engine.models import (
+    ActionResolution,
+    ActionResolutionOutcome,
     ConflictRecord,
     ConversationOutcome,
     EngineAgentState,
@@ -110,11 +112,11 @@ class SimulationEngine:
         else:
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
-        morning_result, morning_turns = await self._action_phase(
+        morning_result, morning_turns, morning_actions = await self._action_phase(
             state, phase="morning", actions_per_agent=2
         )
         midday_result = self._midday_phase(state)
-        afternoon_result, afternoon_turns = await self._action_phase(
+        afternoon_result, afternoon_turns, afternoon_actions = await self._action_phase(
             state, phase="afternoon", actions_per_agent=1
         )
         cooperation_ratio = self._calculate_cooperation_ratio(
@@ -141,6 +143,12 @@ class SimulationEngine:
         )
         state.recent_events = state.recent_events[-20:]
         state.gm_plan = gm_plan
+        agent_turns: dict[str, list[AgentTurnResult]] = {}
+        for agent_id in set(morning_turns) | set(afternoon_turns):
+            agent_turns[agent_id] = [
+                *morning_turns.get(agent_id, []),
+                *afternoon_turns.get(agent_id, []),
+            ]
 
         return RoundResult(
             round_number=round_number,
@@ -156,7 +164,8 @@ class SimulationEngine:
             cooperation_ratio=cooperation_ratio,
             threat_level=state.world_state.threat_level,
             world_state=state.world_state.model_copy(deep=True),
-            agent_turns={**morning_turns, **afternoon_turns},
+            agent_turns=agent_turns,
+            action_resolutions=[*morning_actions, *afternoon_actions],
             created_at=datetime.now(UTC),
         )
 
@@ -225,9 +234,9 @@ class SimulationEngine:
         self,
         state: SimulationState,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         actions_per_agent: int,
-    ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]]]:
+    ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]], list[ActionResolution]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
         actions: list[PreparedAction] = []
         for agent in self._active_agents(state):
@@ -255,8 +264,10 @@ class SimulationEngine:
                 actions.append(prepared)
             all_turns[agent.agent_id] = turns
 
-        result = await self._resolve_actions(state, phase=phase, actions=actions)
-        return result, all_turns
+        result, action_resolutions = await self._resolve_actions(
+            state, phase=phase, actions=actions
+        )
+        return result, all_turns, action_resolutions
 
     def _midday_phase(self, state: SimulationState) -> PhaseResult:
         proposal = self._meeting_proposal(state)
@@ -387,12 +398,13 @@ class SimulationEngine:
         self,
         state: SimulationState,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         actions: list[PreparedAction],
-    ) -> PhaseResult:
+    ) -> tuple[PhaseResult, list[ActionResolution]]:
         grouped: dict[tuple[str, str], list[PreparedAction]] = {}
         events: list[RoundEvent] = []
         conflicts: list[ConflictRecord] = []
+        action_resolutions: list[ActionResolution] = []
 
         for prepared in actions:
             key = (prepared.location, prepared.action_type)
@@ -408,6 +420,19 @@ class SimulationEngine:
                 await self._apply_conversation_outcomes(state, outcomes)
                 for outcome in outcomes:
                     events.extend(self._conversation_events(phase, outcome))
+                for prepared in group:
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type="talk",
+                            summary=(
+                                prepared.summary
+                                or f"{prepared.agent.name} joins a tense conversation at {location}."
+                            ),
+                            outcome="resolved",
+                        )
+                    )
                 continue
             if len(group) > 1 and action_type in {
                 "gather",
@@ -438,26 +463,115 @@ class SimulationEngine:
                     )
                 )
                 self._apply_conflict_consequences(state, location, action_type, winners, losers)
-                events.append(RoundEvent(phase=phase, summary=summary))
+                events.append(
+                    RoundEvent(
+                        phase=phase,
+                        summary=summary,
+                        data={
+                            "kind": "action_conflict",
+                            "location": location,
+                            "action_type": action_type,
+                            "participants": [prepared.agent.agent_id for prepared in group],
+                            "winner_ids": [prepared.agent.agent_id for prepared in winners],
+                            "loser_ids": [prepared.agent.agent_id for prepared in losers],
+                        },
+                    )
+                )
+                for prepared in winners:
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type=action_type,
+                            summary=f"{prepared.agent.name} wins the clash over {action_type} at {location}.",
+                            outcome="conflict_winner",
+                        )
+                    )
+                for prepared in losers:
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type="observe",
+                            summary=(
+                                f"{prepared.agent.name} loses the clash over {action_type} at "
+                                f"{location} and falls back."
+                            ),
+                            outcome="conflict_loser",
+                        )
+                    )
             else:
                 for prepared in group:
                     agent = prepared.agent
                     turn = prepared.turn
                     self._apply_clean_action(state, agent, prepared.action_type, location)
+                    summary = (
+                        prepared.summary
+                        or f"{agent.name} chose to {prepared.action_type} at {location}."
+                    )
                     events.append(
                         RoundEvent(
                             phase=phase,
-                            summary=prepared.summary
-                            or f"{agent.name} chose to {prepared.action_type} at {location}.",
+                            summary=summary,
                             data={
+                                "kind": "agent_action",
                                 "agent_id": agent.agent_id,
+                                "agent_name": agent.name,
+                                "location": location,
                                 "action_type": prepared.action_type,
                                 "requested_action_type": turn.decision.action.type,
                             },
                         )
                     )
+                    action_resolutions.append(
+                        self._action_resolution(
+                            phase=phase,
+                            prepared=prepared,
+                            resolved_action_type=prepared.action_type,
+                            summary=summary,
+                            outcome=self._action_outcome(prepared),
+                        )
+                    )
 
-        return PhaseResult(phase=phase, events=events, conflicts=conflicts)
+        return PhaseResult(phase=phase, events=events, conflicts=conflicts), action_resolutions
+
+    def _action_resolution(
+        self,
+        *,
+        phase: Literal["morning", "afternoon"],
+        prepared: PreparedAction,
+        resolved_action_type: str,
+        summary: str,
+        outcome: ActionResolutionOutcome,
+    ) -> ActionResolution:
+        dialogue_target = (
+            prepared.turn.decision.dialogue.target if prepared.turn.decision.dialogue else None
+        )
+        return ActionResolution(
+            phase=phase,
+            agent_id=prepared.agent.agent_id,
+            agent_name=prepared.agent.name,
+            location=prepared.location,
+            requested_action_type=prepared.turn.decision.action.type,
+            resolved_action_type=resolved_action_type,
+            outcome=outcome,
+            cooperation_intent=prepared.turn.decision.cooperation_intent,
+            goal_progress=prepared.turn.decision.goal_progress,
+            summary=summary,
+            target=prepared.turn.decision.action.target,
+            dialogue_target=dialogue_target,
+            suspicion_level=prepared.agent.suspicion_level,
+        )
+
+    def _action_outcome(self, prepared: PreparedAction) -> ActionResolutionOutcome:
+        requested_action = prepared.turn.decision.action.type
+        if requested_action == prepared.action_type:
+            return "resolved"
+        if prepared.action_type == "observe":
+            return "blocked"
+        if prepared.action_type == "move":
+            return "rerouted"
+        return "resolved"
 
     def _apply_clean_action(
         self, state: SimulationState, agent: EngineAgentState, action_type: str, location: str
