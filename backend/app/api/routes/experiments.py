@@ -19,6 +19,7 @@ from app.api.models import (
     ExperimentSummary,
     ObserverEventRequest,
     StepResponse,
+    StepStartedResponse,
     UpdateArcRequest,
     UsageReport,
 )
@@ -76,14 +77,17 @@ async def pause_experiment(experiment_id: str) -> ExperimentSummary:
 
 @router.post(
     "/{experiment_id}/step",
-    response_model=StepResponse,
+    response_model=StepStartedResponse,
     summary="Advance one round",
-    description="Run exactly one simulation round and return both the round result and refreshed state.",
+    description="Start a simulation round in the background. Results stream over WebSocket.",
 )
-async def step_experiment(experiment_id: str) -> StepResponse:
-    await _get_state(experiment_id)
-    round_result, state = await runtime.step(experiment_id)
-    return StepResponse(round_result=round_result, experiment=_detail(state))
+async def step_experiment(experiment_id: str) -> StepStartedResponse:
+    state = await _get_state(experiment_id)
+    runtime.start_step(experiment_id)
+    return StepStartedResponse(
+        round_number=state.current_round + 1,
+        experiment_id=experiment_id,
+    )
 
 
 @router.post(

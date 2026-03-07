@@ -26,6 +26,7 @@ from app.api.models import (
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
 from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
+from app.engine.models import PhaseResult, RoundEvent
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
@@ -191,6 +192,7 @@ class ExperimentRuntime:
         return applied
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
+        """Run a full round synchronously (legacy). Prefer step_async for streaming."""
         async with self.lock:
             state = await self.get_state(experiment_id)
             if state.status == "setup":
@@ -212,6 +214,289 @@ class ExperimentRuntime:
             await self._log_round_result(experiment_id, round_result)
         await self.broadcast_round(experiment_id, round_result)
         return round_result, state
+
+    def start_step(self, experiment_id: str) -> int:
+        """Start a round as a background task, returning the upcoming round number."""
+        # Peek at current state to get the round number
+        # The actual work runs in the background
+        asyncio.create_task(self._step_streaming(experiment_id))
+        return 0  # Will be replaced by the broadcast
+
+    async def _step_streaming(self, experiment_id: str) -> None:
+        """Run a round phase-by-phase, broadcasting WS events after each phase."""
+        try:
+            async with self.lock:
+                state = await self.get_state(experiment_id)
+                if state.status == "setup":
+                    state.status = "running"
+
+                engine = self.engine
+                round_number = state.current_round + 1
+                state.world_state.round_number = round_number
+                engine._refresh_factions(state)
+
+                # Broadcast immediately so frontend knows a round is in progress
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "phase_change",
+                        round_number=round_number,
+                        phase="gm_plan",
+                        data={"status": "generating"},
+                    ),
+                )
+
+                # --- GM Plan phase ---
+                if not state.auto_approve:
+                    record = await self.get_or_generate_gm_plan(experiment_id)
+                    approved = self.gm_service.approve_plan(record)
+                    state.gm_plan = self.gm_service.apply_plan(approved)
+
+                if (
+                    state.gm_plan
+                    and state.gm_plan.plan.round == round_number
+                    and state.gm_plan.status == "applied"
+                ):
+                    gm_plan = state.gm_plan
+                    gm_result = PhaseResult(
+                        phase="gm_plan",
+                        events=[RoundEvent(
+                            phase="gm_plan",
+                            summary=f"Using approved GM plan '{gm_plan.plan.round_theme}'.",
+                            data={"status": gm_plan.status, "theme": gm_plan.plan.round_theme},
+                        )],
+                    )
+                else:
+                    gm_result, gm_plan = await engine._gm_plan_phase(state, round_number)
+
+                # Broadcast round start + gm plan
+                await self._broadcast_phase_start(experiment_id, round_number, gm_plan)
+                await self._broadcast_phase_result(experiment_id, round_number, gm_result)
+
+                # --- Dawn phase ---
+                dawn_result = engine._dawn_phase(state, gm_plan.plan)
+                await self._broadcast_phase_result(experiment_id, round_number, dawn_result)
+
+                # --- Morning actions (the slow part: 2 actions × N agents) ---
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message("phase_change", round_number=round_number, phase="morning",
+                                  data={"status": "agents_deciding"}),
+                )
+                morning_result, morning_turns = await self._action_phase_streaming(
+                    engine, state, experiment_id, round_number,
+                    phase="morning", actions_per_agent=2,
+                )
+
+                # --- Midday (town meeting) ---
+                midday_result = engine._midday_phase(state)
+                await self._broadcast_phase_result(experiment_id, round_number, midday_result)
+
+                # --- Afternoon actions (1 action × N agents) ---
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message("phase_change", round_number=round_number, phase="afternoon",
+                                  data={"status": "agents_deciding"}),
+                )
+                afternoon_result, afternoon_turns = await self._action_phase_streaming(
+                    engine, state, experiment_id, round_number,
+                    phase="afternoon", actions_per_agent=1,
+                )
+
+                # --- Night phase ---
+                cooperation_ratio = engine._calculate_cooperation_ratio(
+                    [*morning_turns.values(), *afternoon_turns.values()]
+                )
+                night_result = engine._night_phase(state, cooperation_ratio)
+                await self._broadcast_phase_result(experiment_id, round_number, night_result)
+
+                # --- Finalize state ---
+                state.current_round = round_number
+                state.world_state.threat_level = (
+                    night_result.cooperation_ratio or state.world_state.threat_level
+                )
+                engine._update_experiment_status(state)
+                state.recent_events.extend(
+                    event.summary
+                    for phase in [gm_result, dawn_result, morning_result, midday_result, afternoon_result, night_result]
+                    for event in phase.events
+                )
+                state.recent_events = state.recent_events[-20:]
+                state.gm_plan = gm_plan
+
+                round_result = RoundResult(
+                    round_number=round_number,
+                    gm_plan=gm_plan,
+                    phases=[gm_result, dawn_result, morning_result, midday_result, afternoon_result, night_result],
+                    cooperation_ratio=cooperation_ratio,
+                    threat_level=state.world_state.threat_level,
+                    world_state=state.world_state.model_copy(deep=True),
+                    agent_turns={**morning_turns, **afternoon_turns},
+                    created_at=datetime.now(UTC),
+                )
+
+                await self.store.save_state(state)
+                await self.store.record_round_result(experiment_id, round_result)
+                await self._log_round_result(experiment_id, round_result)
+
+            # Broadcast round_end with full state so FE can do a final sync
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "round_end",
+                    round_number=round_number,
+                    data={
+                        "status": state.status,
+                        "current_round": state.current_round,
+                        "total_rounds": state.total_rounds,
+                        "threat_level": state.world_state.threat_level,
+                        "resources": state.world_state.resources.model_dump(mode="json"),
+                        "agents": [
+                            {
+                                "agent_id": a.agent_id,
+                                "name": a.name,
+                                "character_id": a.character_id,
+                                "status": a.status.value if hasattr(a.status, "value") else str(a.status),
+                                "location": a.location,
+                                "suspicion_level": a.suspicion_level,
+                                "faction_id": a.faction_id,
+                                "faction_role": a.faction_role,
+                                "influence": a.influence,
+                            }
+                            for a in state.agents
+                        ],
+                    },
+                ),
+            )
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception("Background step failed for %s", experiment_id)
+
+    async def _action_phase_streaming(
+        self,
+        engine: SimulationEngine,
+        state: SimulationState,
+        experiment_id: str,
+        round_number: int,
+        *,
+        phase: str,
+        actions_per_agent: int,
+    ) -> tuple[PhaseResult, dict[str, list[Any]]]:
+        """Run action phase, broadcasting each agent's decision as it completes."""
+        from app.agents.models import AgentTurnResult
+        from app.engine.models import PhaseResult, RoundEvent, build_agent_context
+
+        all_turns: dict[str, list[AgentTurnResult]] = {}
+        actions: list[tuple[EngineAgentState, AgentTurnResult]] = []
+
+        for agent in engine._active_agents(state):
+            turns = []
+            for _ in range(actions_per_agent):
+                context = build_agent_context(
+                    agent,
+                    experiment_id=state.experiment_id,
+                    world_state=state.world_state,
+                    current_crisis=state.gm_plan.plan.crisis_event.model_dump(mode="json")
+                    if state.gm_plan
+                    else None,
+                    observations=engine._build_observations(agent, state),
+                )
+                turn = await engine.agent_service.decide(context)
+                turns.append(turn)
+                actions.append((agent, turn))
+                agent.memory = turn.updated_memory
+                agent.suspicion_level = turn.suspicion_level
+                if turn.decision.action.location:
+                    agent.location = turn.decision.action.location
+
+                # Broadcast this agent's action immediately
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "agent_action",
+                        round_number=round_number,
+                        phase=phase,
+                        data={
+                            "agent_id": agent.agent_id,
+                            "agent_name": agent.name,
+                            "action": turn.decision.action.model_dump(mode="json"),
+                            "inner_thought": turn.decision.inner_thought,
+                            "cooperation_intent": turn.decision.cooperation_intent,
+                            "goal_progress": turn.decision.goal_progress,
+                        },
+                    ),
+                )
+            all_turns[agent.agent_id] = turns
+
+        result = engine._resolve_actions(state, phase=phase, actions=actions)
+        await self._broadcast_phase_result(experiment_id, round_number, result)
+        return result, all_turns
+
+    async def _broadcast_phase_start(
+        self, experiment_id: str, round_number: int, gm_plan: GMPlanRecord
+    ) -> None:
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "round_start",
+                round_number=round_number,
+                data={"theme": gm_plan.plan.round_theme},
+            ),
+        )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "gm_plan",
+                round_number=round_number,
+                data=gm_plan.model_dump(mode="json"),
+            ),
+        )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "crisis_event",
+                round_number=round_number,
+                phase="dawn",
+                data=gm_plan.plan.crisis_event.model_dump(mode="json"),
+            ),
+        )
+
+    async def _broadcast_phase_result(
+        self, experiment_id: str, round_number: int, phase_result: PhaseResult
+    ) -> None:
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "phase_change",
+                round_number=round_number,
+                phase=phase_result.phase,
+                data={"events": [e.model_dump(mode="json") for e in phase_result.events]},
+            ),
+        )
+        # Broadcast individual event types
+        for event in phase_result.events:
+            kind = event.data.get("kind")
+            msg_type = {
+                "agent_speak": "agent_speak",
+                "meeting_start": "meeting_start",
+                "meeting_speech": "meeting_speech",
+                "meeting_vote": "meeting_vote",
+                "meeting_result": "meeting_result",
+                "faction_update": "faction_update",
+                "cult_activity": "cult_activity",
+                "exile_vote": "exile_vote",
+                "exile_enacted": "exile_result",
+            }.get(kind)  # type: ignore[arg-type]
+            if msg_type:
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        msg_type,
+                        round_number=round_number,
+                        phase=phase_result.phase,
+                        data=event.data,
+                    ),
+                )
 
     async def list_agents(self, experiment_id: str) -> list[EngineAgentState]:
         return (await self.get_state(experiment_id)).agents
