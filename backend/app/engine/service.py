@@ -97,7 +97,6 @@ class SimulationEngine:
         self._refresh_factions(state)
 
         # --- GM Plan phase ---
-        await h.on_phase_start(round_number, "gm_plan")
         if (
             state.gm_plan
             and state.gm_plan.plan.round == round_number
@@ -117,6 +116,7 @@ class SimulationEngine:
         else:
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         await h.on_round_start(round_number, gm_plan)
+        await h.on_phase_start(round_number, "gm_plan")
         await h.on_phase_complete(round_number, gm_result)
 
         # --- Dawn phase ---
