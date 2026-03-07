@@ -298,7 +298,7 @@ async def get_prompt_traces(
     offset: int = Query(default=0, ge=0),
     round_number: int | None = Query(default=None, ge=1),
     agent_id: str | None = None,
-    role: str | None = Query(default=None, pattern="^(gm|agent)$"),
+    role: str | None = Query(default=None, pattern="^(gm|agent|memory)$"),
 ) -> PromptTracePage:
     await _get_state(experiment_id)
     items, total = await runtime.get_prompt_traces(

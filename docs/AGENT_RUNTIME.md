@@ -248,11 +248,15 @@ Per active agent, the backend:
 
 - creates a reflective observation
 - records it in `recent_events`
-- may classify and promote it into `key_memories`
 - may consolidate enough unconsolidated recent events into one higher-level key memory
 - may consolidate relationship history into stable relationship notes
 
 The night pass runs asynchronously across active agents before the round is persisted.
+
+Current implementation note:
+
+- the night reflection itself is recorded with `classify=False`
+- the long-lived change comes from the consolidation passes that run immediately after it
 
 ## Mutation Map
 
@@ -261,8 +265,9 @@ This section answers: “what code path mutates what field?”
 | Field | Main mutation source |
 |------|-----------------------|
 | `memory.recent_events` | decision recording, observations, conversations, night reflection |
-| `memory.key_memories` | selfish decisions, important observations, and night-time consolidation |
+| `memory.key_memories` | selfish decisions and night-time consolidation |
 | `memory.last_consolidated_round` | night-time memory consolidation |
+| `memory.relationship_consolidation_signatures` | relationship consolidation bookkeeping |
 | `relationships` | conversation trust deltas, meeting vote deltas, relationship consolidation |
 | `suspicion_level` | edge-of-map exploration, suspicious thoughts, failed or pressured social outcomes |
 | `location` | chosen action location, exile relocation |
@@ -283,7 +288,6 @@ These primarily come from model output:
 - self-reported suspicion text
 - cooperation intent
 - goal progress text
-- observation promotion into key memory
 - key-memory consolidation summaries
 - relationship-note consolidation
 
