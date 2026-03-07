@@ -30,26 +30,25 @@ async def create_experiment(request: CreateExperimentRequest) -> ExperimentDetai
 
 @router.get("/{experiment_id}", response_model=ExperimentDetail)
 async def get_experiment(experiment_id: str) -> ExperimentDetail:
-    state = _get_state(experiment_id)
+    state = await _get_state(experiment_id)
     return _detail(state)
 
 
 @router.post("/{experiment_id}/start", response_model=ExperimentSummary)
 async def start_experiment(experiment_id: str) -> ExperimentSummary:
-    state = _get_state(experiment_id)
-    runtime.start(experiment_id)
+    state = await runtime.start(experiment_id)
     return _summary(state)
 
 
 @router.post("/{experiment_id}/pause", response_model=ExperimentSummary)
 async def pause_experiment(experiment_id: str) -> ExperimentSummary:
-    state = runtime.pause(experiment_id)
+    state = await runtime.pause(experiment_id)
     return _summary(state)
 
 
 @router.post("/{experiment_id}/step", response_model=StepResponse)
 async def step_experiment(experiment_id: str) -> StepResponse:
-    _get_state(experiment_id)
+    await _get_state(experiment_id)
     round_result, state = await runtime.step(experiment_id)
     return StepResponse(round_result=round_result, experiment=_detail(state))
 
@@ -58,39 +57,39 @@ async def step_experiment(experiment_id: str) -> StepResponse:
 async def inject_observer_event(
     experiment_id: str, request: ObserverEventRequest
 ) -> ExperimentDetail:
-    state = runtime.inject_observer_event(experiment_id, request.description)
+    state = await runtime.inject_observer_event(experiment_id, request.description)
     return _detail(state)
 
 
 @router.get("/{experiment_id}/gm/plan")
 async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
-    _get_state(experiment_id)
+    await _get_state(experiment_id)
     return await runtime.get_or_generate_gm_plan(experiment_id)
 
 
 @router.post("/{experiment_id}/gm/approve")
 async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> GMPlanRecord:
-    _get_state(experiment_id)
+    await _get_state(experiment_id)
     return await runtime.approve_gm_plan(experiment_id, request.modified_plan)
 
 
 @router.put("/{experiment_id}/arc", response_model=ExperimentDetail)
 async def update_arc(experiment_id: str, request: UpdateArcRequest) -> ExperimentDetail:
-    state = runtime.update_arc(experiment_id, request.arc)
+    state = await runtime.update_arc(experiment_id, request.arc)
     return _detail(state)
 
 
 @router.get("/{experiment_id}/agents")
 async def list_agents(experiment_id: str) -> list[EngineAgentState]:
-    _get_state(experiment_id)
-    return runtime.list_agents(experiment_id)
+    await _get_state(experiment_id)
+    return await runtime.list_agents(experiment_id)
 
 
 @router.get("/{experiment_id}/agents/{agent_id}/dossier")
 async def get_agent_dossier(experiment_id: str, agent_id: str) -> EngineAgentState:
-    _get_state(experiment_id)
+    await _get_state(experiment_id)
     try:
-        return runtime.get_agent(experiment_id, agent_id)
+        return await runtime.get_agent(experiment_id, agent_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Agent not found") from exc
 
@@ -105,8 +104,8 @@ async def get_event_log(
     agent_id: str | None = None,
     round_number: int | None = Query(default=None, ge=1),
 ) -> EventLogPage:
-    _get_state(experiment_id)
-    items, total = runtime.get_log(
+    await _get_state(experiment_id)
+    items, total = await runtime.get_log(
         experiment_id,
         limit=limit,
         offset=offset,
@@ -120,7 +119,7 @@ async def get_event_log(
 
 @router.websocket("/{experiment_id}/ws")
 async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
-    _get_state(experiment_id)
+    await _get_state(experiment_id)
     await runtime.connection_manager.connect(experiment_id, websocket)
     try:
         await websocket.send_json(
@@ -137,9 +136,9 @@ async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
         runtime.connection_manager.disconnect(experiment_id, websocket)
 
 
-def _get_state(experiment_id: str) -> SimulationState:
+async def _get_state(experiment_id: str) -> SimulationState:
     try:
-        return runtime.get_state(experiment_id)
+        return await runtime.get_state(experiment_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
 
