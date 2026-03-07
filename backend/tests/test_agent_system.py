@@ -5,7 +5,14 @@ from typing import Any
 import pytest
 
 from app.agents.brain import build_agent_prompt
-from app.agents.models import AgentContext, AgentMemoryState, Observation, PersonalityAxes, PersonalityProfile, SecretGoal
+from app.agents.models import (
+    AgentContext,
+    AgentMemoryState,
+    Observation,
+    PersonalityAxes,
+    PersonalityProfile,
+    SecretGoal,
+)
 from app.agents.registry import get_action_definition
 from app.agents.service import AgentService
 from app.agents.suspicion import apply_suspicion_trigger
@@ -29,7 +36,11 @@ class _StubLLMService(LLMService):
             parsed={
                 "inner_thought": "The town is watching me watch it.",
                 "suspicion": "The fence looks like a stage prop.",
-                "action": {"type": "explore", "target": "perimeter_fence", "location": "perimeter_fence"},
+                "action": {
+                    "type": "explore",
+                    "target": "perimeter_fence",
+                    "location": "perimeter_fence",
+                },
                 "dialogue": None,
                 "goal_progress": "I am one step closer to the truth.",
                 "cooperation_intent": "low",
@@ -65,7 +76,9 @@ def _context() -> AgentContext:
         suspicion_level=12,
         world_state=build_default_world_state(round_number=4),
         current_crisis={"type": "social", "description": "Rumors are spreading."},
-        observations=[Observation(summary="Someone left the bar through the back door.", importance=4)],
+        observations=[
+            Observation(summary="Someone left the bar through the back door.", importance=4)
+        ],
     )
 
 

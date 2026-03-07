@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from app.agents.models import AgentContext, AgentMemoryState, AgentTurnResult, KeyMemory, MemoryEvent
+from app.agents.models import (
+    AgentContext,
+    AgentMemoryState,
+    AgentTurnResult,
+    KeyMemory,
+    MemoryEvent,
+)
 from app.agents.registry import get_action_definition
 from app.agents.suspicion import apply_suspicion_trigger
 from app.llm import LLMService
@@ -52,7 +58,9 @@ class AgentBrain:
         action = get_action_definition(decision.action.type)
 
         updated_memory = context.memory
-        updated_memory = _record_decision_memory(updated_memory, context.world_state.round_number, decision)
+        updated_memory = _record_decision_memory(
+            updated_memory, context.world_state.round_number, decision
+        )
         next_suspicion = context.suspicion_level
         if decision.action.type == "explore" and decision.action.location == "perimeter_fence":
             next_suspicion, _ = apply_suspicion_trigger(

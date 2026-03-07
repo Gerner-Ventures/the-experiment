@@ -31,7 +31,9 @@ class AgentService:
     ) -> AgentMemoryState:
         updated = append_recent_event(
             memory,
-            MemoryEvent(round_number=round_number, summary=summary, emotional_charge=emotional_charge),
+            MemoryEvent(
+                round_number=round_number, summary=summary, emotional_charge=emotional_charge
+            ),
         )
         if important:
             updated = add_key_memory(
@@ -53,7 +55,9 @@ class AgentService:
         trust_delta: float,
         note: str,
     ) -> AgentMemoryState:
-        return update_relationship_memory(memory, other_agent_id=other_agent_id, trust_delta=trust_delta, note=note)
+        return update_relationship_memory(
+            memory, other_agent_id=other_agent_id, trust_delta=trust_delta, note=note
+        )
 
     async def decide(self, context: AgentContext) -> AgentTurnResult:
         return await self.brain.decide(context)
