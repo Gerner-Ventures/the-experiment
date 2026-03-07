@@ -116,6 +116,8 @@ class ExperimentRuntime:
         self.connection_manager = ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.lock = asyncio.Lock()
+        self._step_in_progress = False
+        self._current_task: asyncio.Task[None] | None = None
 
     async def create_experiment(self, request: CreateExperimentRequest) -> SimulationState:
         async with self.lock:
@@ -282,15 +284,19 @@ class ExperimentRuntime:
 
     def start_step(self, experiment_id: str) -> None:
         """Start a round as a background task. Results stream via WS."""
-        if self.lock.locked():
+        if self._step_in_progress:
             raise RuntimeError("A round is already in progress")
-        asyncio.create_task(self._step_streaming(experiment_id))
+        self._step_in_progress = True
+        self._current_task = asyncio.create_task(self._step_streaming(experiment_id))
+        self._current_task.add_done_callback(lambda _: setattr(self, "_step_in_progress", False))
 
     async def _step_streaming(self, experiment_id: str) -> None:
         """Run a round using SimulationEngine.run_round() with a streaming hook."""
+        intended_round = 0
         try:
             async with self.lock:
                 state = await self.get_state(experiment_id)
+                intended_round = state.current_round + 1
                 if state.status == "setup":
                     state.status = "running"
 
@@ -353,7 +359,7 @@ class ExperimentRuntime:
                 experiment_id,
                 self._message(
                     "step_error",
-                    round_number=0,
+                    round_number=intended_round,
                     data={"error": "Round execution failed. Check server logs."},
                 ),
             )
@@ -875,7 +881,10 @@ class _StreamingHook:
             phase=phase_result.phase,
             data={"events": [e.model_dump(mode="json") for e in phase_result.events]},
         ))
-        # Broadcast individual event types for specific WS message consumers
+        # Dual broadcast: phase_change above carries the full event list for the
+        # experiment store.  The individual typed messages below (agent_speak,
+        # meeting_start, etc.) are consumed by dedicated UI components that
+        # subscribe to specific WS message types.  Both are intentional.
         for event in phase_result.events:
             kind = event.data.get("kind")
             msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
