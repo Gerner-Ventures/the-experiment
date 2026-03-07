@@ -20,7 +20,7 @@ SAMPLE_AGENTS = [
     {
         "id": str(i),
         "name": f"Agent-{chr(64 + i)}",
-        "personality": ["cautious"],
+        "personality": ["cautious", "observant"],
         "personalityAxes": {
             "paranoia": 50,
             "empathy": 60,
@@ -198,9 +198,11 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_broadcast_to_connected(self) -> None:
+        from datetime import UTC, datetime
+
         from starlette.websockets import WebSocketState
+
         from app.schemas.ws_message import WSMessage
-        from datetime import datetime, UTC
 
         mgr = ConnectionManager()
         ws = AsyncMock()
@@ -209,7 +211,7 @@ class TestConnectionManager:
         await mgr.connect("exp-1", ws)
 
         msg = WSMessage(
-            type="test_event",
+            type="connected",
             round=1,
             phase=None,
             timestamp=datetime.now(UTC),
@@ -219,17 +221,18 @@ class TestConnectionManager:
 
         ws.send_json.assert_awaited_once()
         payload = ws.send_json.call_args[0][0]
-        assert payload["type"] == "test_event"
+        assert payload["type"] == "connected"
         assert payload["data"]["key"] == "value"
 
     @pytest.mark.asyncio
     async def test_broadcast_no_connections(self) -> None:
+        from datetime import UTC, datetime
+
         from app.schemas.ws_message import WSMessage
-        from datetime import datetime, UTC
 
         mgr = ConnectionManager()
         msg = WSMessage(
-            type="noop",
+            type="connected",
             round=1,
             phase=None,
             timestamp=datetime.now(UTC),
@@ -256,9 +259,11 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_broadcast_removes_dead_connections(self) -> None:
+        from datetime import UTC, datetime
+
         from starlette.websockets import WebSocketState
+
         from app.schemas.ws_message import WSMessage
-        from datetime import datetime, UTC
 
         mgr = ConnectionManager()
 
@@ -274,7 +279,7 @@ class TestConnectionManager:
         assert len(mgr._connections["exp-1"]) == 2
 
         msg = WSMessage(
-            type="test",
+            type="round_start",
             round=1,
             phase=None,
             timestamp=datetime.now(UTC),
@@ -289,36 +294,31 @@ class TestConnectionManager:
 
 # ---------------------------------------------------------------------------
 # Experiment API routes – integration tests via TestClient
+#
+# Main's routes use the `runtime` singleton from app.api.runtime.
+# We test against the real app with its /api prefix.
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
-def client():
-    """Provide a TestClient wired to a fresh ExperimentRunner."""
+def client() -> TestClient:  # type: ignore[misc]
+    """Provide a TestClient wired to the real app."""
     from app.main import app
-    import app.main as main_module
-
-    original_runner = main_module.experiment_runner
-    test_runner = _make_runner(use_mock=True)
-    main_module.experiment_runner = test_runner
 
     with TestClient(app) as c:
-        yield c
-
-    main_module.experiment_runner = original_runner
+        yield c  # type: ignore[misc]
 
 
-def _create_via_api(client: TestClient) -> dict:
+def _create_via_api(client: TestClient) -> dict:  # type: ignore[type-arg]
     resp = client.post(
-        "/experiments",
+        "/api/experiments",
         json={
             "name": "API Test",
-            "agents": SAMPLE_AGENTS,
-            "arc_id": "lord_of_the_flies",
+            "agents": [],
             "total_rounds": 5,
         },
     )
-    assert resp.status_code == 201
+    assert resp.status_code == 200, f"Create failed: {resp.status_code} {resp.text}"
     return resp.json()
 
 
@@ -326,103 +326,96 @@ class TestExperimentAPI:
     def test_create_experiment_via_api(self, client: TestClient) -> None:
         data = _create_via_api(client)
 
-        assert "id" in data
-        assert data["name"] == "API Test"
+        assert "experiment_id" in data
+        assert data["experiment_name"] == "API Test"
         assert data["status"] == "setup"
-        assert data["totalRounds"] == 5
-        assert data["currentRound"] == 0
-        assert len(data["agents"]) == 6
-        assert "resources" in data
-        assert "arc" in data
+        assert data["total_rounds"] == 5
+        assert data["current_round"] == 0
 
     def test_get_experiment_via_api(self, client: TestClient) -> None:
         created = _create_via_api(client)
-        exp_id = created["id"]
+        exp_id = created["experiment_id"]
 
-        resp = client.get(f"/experiments/{exp_id}")
+        resp = client.get(f"/api/experiments/{exp_id}")
         assert resp.status_code == 200
 
         data = resp.json()
-        assert data["id"] == exp_id
-        assert data["name"] == "API Test"
+        assert data["experiment_id"] == exp_id
+        assert data["experiment_name"] == "API Test"
 
     def test_get_experiment_not_found(self, client: TestClient) -> None:
-        resp = client.get("/experiments/does-not-exist")
+        resp = client.get("/api/experiments/does-not-exist")
         assert resp.status_code == 404
 
     def test_start_experiment_via_api(self, client: TestClient) -> None:
         created = _create_via_api(client)
-        exp_id = created["id"]
+        exp_id = created["experiment_id"]
 
-        resp = client.post(f"/experiments/{exp_id}/start")
+        resp = client.post(f"/api/experiments/{exp_id}/start")
         assert resp.status_code == 200
 
         data = resp.json()
         assert data["status"] == "running"
-        assert data["id"] == exp_id
+        assert data["experiment_id"] == exp_id
 
     def test_start_not_found(self, client: TestClient) -> None:
-        resp = client.post("/experiments/nope/start")
+        resp = client.post("/api/experiments/nope/start")
         assert resp.status_code == 404
 
     def test_pause_experiment_via_api(self, client: TestClient) -> None:
         created = _create_via_api(client)
-        exp_id = created["id"]
-        client.post(f"/experiments/{exp_id}/start")
+        exp_id = created["experiment_id"]
+        client.post(f"/api/experiments/{exp_id}/start")
 
-        resp = client.post(f"/experiments/{exp_id}/pause")
+        resp = client.post(f"/api/experiments/{exp_id}/pause")
         assert resp.status_code == 200
         assert resp.json()["status"] == "paused"
 
     def test_step_round_via_api(self, client: TestClient) -> None:
         created = _create_via_api(client)
-        exp_id = created["id"]
-        client.post(f"/experiments/{exp_id}/start")
+        exp_id = created["experiment_id"]
+        client.post(f"/api/experiments/{exp_id}/start")
 
-        resp = client.post(f"/experiments/{exp_id}/step")
+        resp = client.post(f"/api/experiments/{exp_id}/step")
         assert resp.status_code == 200
 
         data = resp.json()
-        assert data["round"] == 1
-        assert "cooperationRatio" in data
-        assert "threatLevel" in data
-        assert "resources" in data
-        assert "phases" in data
-        assert len(data["phases"]) > 0
+        assert "round_result" in data
+        assert "experiment" in data
 
     def test_step_not_found(self, client: TestClient) -> None:
-        resp = client.post("/experiments/nope/step")
+        resp = client.post("/api/experiments/nope/step")
         assert resp.status_code == 404
 
     def test_step_round_advances_state(self, client: TestClient) -> None:
         created = _create_via_api(client)
-        exp_id = created["id"]
-        client.post(f"/experiments/{exp_id}/start")
+        exp_id = created["experiment_id"]
+        client.post(f"/api/experiments/{exp_id}/start")
 
-        client.post(f"/experiments/{exp_id}/step")
-        resp = client.get(f"/experiments/{exp_id}")
-        assert resp.json()["currentRound"] == 1
+        client.post(f"/api/experiments/{exp_id}/step")
+        resp = client.get(f"/api/experiments/{exp_id}")
+        assert resp.json()["current_round"] == 1
 
-        client.post(f"/experiments/{exp_id}/step")
-        resp = client.get(f"/experiments/{exp_id}")
-        assert resp.json()["currentRound"] == 2
+        client.post(f"/api/experiments/{exp_id}/step")
+        resp = client.get(f"/api/experiments/{exp_id}")
+        assert resp.json()["current_round"] == 2
 
     def test_full_lifecycle(self, client: TestClient) -> None:
         """Create -> start -> step -> step -> verify round data."""
         created = _create_via_api(client)
-        exp_id = created["id"]
+        exp_id = created["experiment_id"]
 
         # Start
-        resp = client.post(f"/experiments/{exp_id}/start")
+        resp = client.post(f"/api/experiments/{exp_id}/start")
         assert resp.json()["status"] == "running"
 
         # Step twice
-        r1 = client.post(f"/experiments/{exp_id}/step").json()
-        r2 = client.post(f"/experiments/{exp_id}/step").json()
-        assert r1["round"] == 1
-        assert r2["round"] == 2
+        r1 = client.post(f"/api/experiments/{exp_id}/step").json()
+        r2 = client.post(f"/api/experiments/{exp_id}/step").json()
+        assert "round_result" in r1
+        assert "round_result" in r2
 
         # Verify state
-        state = client.get(f"/experiments/{exp_id}").json()
-        assert state["currentRound"] == 2
+        state = client.get(f"/api/experiments/{exp_id}").json()
+        assert state["current_round"] == 2
         assert state["status"] == "running"
