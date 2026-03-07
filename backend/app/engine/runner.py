@@ -50,6 +50,7 @@ class ExperimentRunner:
 
         engine_agents: list[EngineAgentState] = []
         for agent_data in agents:
+            spawn_tile = resolve_spawn_tile("town_square")
             axes_data = agent_data.get("personalityAxes", {})
             axes = PersonalityAxes(
                 paranoia=axes_data.get("paranoia", 50),
@@ -77,8 +78,8 @@ class ExperimentRunner:
                     goal=goal,
                     memory=AgentMemoryState(),
                     location="town_square",
-                    tile_x=resolve_spawn_tile("town_square")[0],
-                    tile_y=resolve_spawn_tile("town_square")[1],
+                    tile_x=spawn_tile[0],
+                    tile_y=spawn_tile[1],
                     llm_model=agent_data.get("llmModel", "openai/gpt-4o-mini"),
                 )
             )

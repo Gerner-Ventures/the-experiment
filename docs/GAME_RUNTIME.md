@@ -292,6 +292,8 @@ Examples:
 
 Most of these use a short contact range. `shoot` is treated as a longer-range interaction.
 
+`vote` is not proximity-gated during freeform action phases. The canonical vote system still happens in the structured midday meeting, while ad hoc `vote` actions mainly act as meeting-hall positioning or intent signals.
+
 ### Location Sanity Checks
 
 Some actions are restricted to compatible location types.

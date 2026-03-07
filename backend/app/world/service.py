@@ -48,15 +48,16 @@ def _location_entry_tiles(location_id: str) -> frozenset[tuple[int, int]]:
     if location_id == "town_square":
         return frozenset({DEFAULT_SPAWN_TILE})
     if location_id == "perimeter_fence":
+        # Use the inner-edge walkable ring one tile inside the map border as the fence approach zone.
         return frozenset(
             {
-            (tile.x, tile.y)
-            for tile in DEFAULT_WORLD_MAP.tiles
-            if tile.walkable
-            and (
-                tile.x in {1, DEFAULT_WORLD_MAP.width - 2}
-                or tile.y in {1, DEFAULT_WORLD_MAP.height - 2}
-            )
+                (tile.x, tile.y)
+                for tile in DEFAULT_WORLD_MAP.tiles
+                if tile.walkable
+                and (
+                    tile.x in {1, DEFAULT_WORLD_MAP.width - 2}
+                    or tile.y in {1, DEFAULT_WORLD_MAP.height - 2}
+                )
             }
         )
     return frozenset(

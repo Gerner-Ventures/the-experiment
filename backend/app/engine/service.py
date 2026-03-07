@@ -57,7 +57,6 @@ class SimulationEngine:
         "talk",
         "trade",
         "accuse",
-        "vote",
         "attack",
         "threaten",
         "stab",

@@ -292,6 +292,33 @@ async def test_engine_blocks_resource_actions_at_invalid_locations() -> None:
 
 
 @pytest.mark.asyncio
+async def test_engine_allows_vote_without_nearby_agent_when_in_meeting_hall() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("vote", "town_hall"), ("observe", "town_hall"), ("observe", "town_hall")],
+            "a2": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+            "a3": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+        }
+    )
+    state = _state()
+    state.agents[0].location = "town_hall"
+    state.agents[0].tile_x, state.agents[0].tile_y = resolve_spawn_tile("town_hall")
+    state.agents[1].location = "workshop"
+    state.agents[1].tile_x, state.agents[1].tile_y = resolve_spawn_tile("workshop")
+    state.agents[2].location = "well"
+    state.agents[2].tile_x, state.agents[2].tile_y = resolve_spawn_tile("well")
+
+    engine = SimulationEngine(agent_service=service, random_seed=10)
+    result = await engine.run_round(state)
+
+    first_action = next(
+        event for event in result.phases[2].events if event.data.get("agent_id") == "a1"
+    )
+
+    assert first_action.data["action_type"] == "vote"
+
+
+@pytest.mark.asyncio
 async def test_engine_forms_cults_and_applies_exile_results() -> None:
     service = _StubAgentService(
         {
