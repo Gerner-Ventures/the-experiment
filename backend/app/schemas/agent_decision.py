@@ -1,8 +1,47 @@
+from typing import Literal
+
 from app.schemas.common import APIModel
+
+DecisionActionType = Literal[
+    "move",
+    "gather",
+    "repair",
+    "trade",
+    "talk",
+    "hoard",
+    "sabotage",
+    "explore",
+    "accuse",
+    "vote",
+    "rest",
+    "observe",
+    "attack",
+    "threaten",
+    "stab",
+    "shoot",
+    "poison",
+    "dance",
+    "pray",
+    "rally",
+    "mourn",
+    "celebrate",
+    "argue",
+    "pee",
+    "poop",
+    "vomit",
+    "sleep",
+    "eat",
+    "drink",
+    "investigate",
+    "monologue",
+    "panic",
+    "breakdown",
+]
+CooperationIntent = Literal["high", "medium", "low", "none"]
 
 
 class DecisionAction(APIModel):
-    type: str
+    type: DecisionActionType
     target: str | None = None
     location: str | None = None
 
@@ -18,4 +57,4 @@ class AgentDecision(APIModel):
     action: DecisionAction
     dialogue: Dialogue | None = None
     goal_progress: str
-    cooperation_intent: str
+    cooperation_intent: CooperationIntent

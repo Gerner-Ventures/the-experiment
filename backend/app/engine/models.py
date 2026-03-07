@@ -10,8 +10,10 @@ from app.agents.models import (
     AgentMemoryState,
     AgentTurnResult,
     PersonalityProfile,
+    RelationshipMemory,
     SecretGoal,
 )
+from app.db.models import AgentStatus
 from app.gm.models import DirectorArc, GMPlanRecord
 from app.world.models import WorldState
 
@@ -25,12 +27,14 @@ class EngineModel(BaseModel):
 class EngineAgentState(EngineModel):
     agent_id: str
     name: str
+    character_id: str | None = None
+    status: AgentStatus = AgentStatus.IDLE
     personality: PersonalityProfile
     goal: SecretGoal
     memory: AgentMemoryState
     location: str | None = None
     inventory: list[str] = Field(default_factory=list)
-    relationships: dict[str, object] = Field(default_factory=dict)
+    relationships: dict[str, RelationshipMemory] = Field(default_factory=dict)
     suspicion_level: float = Field(ge=0, le=100, default=0)
     llm_model: str = "openai/gpt-4o-mini"
 
@@ -101,12 +105,14 @@ def build_agent_context(
     return AgentContext(
         agent_id=agent.agent_id,
         name=agent.name,
+        character_id=agent.character_id,
+        status=agent.status,
         personality=agent.personality,
         goal=agent.goal,
         memory=agent.memory,
         location=agent.location,
         inventory=agent.inventory,
-        relationships=agent.relationships,  # type: ignore[arg-type]
+        relationships=agent.relationships,
         suspicion_level=agent.suspicion_level,
         world_state=world_state,
         current_crisis=current_crisis,
