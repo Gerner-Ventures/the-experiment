@@ -5,7 +5,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, TypedDict, cast, get_args
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
@@ -1437,7 +1437,7 @@ class ExperimentRuntime:
         return default
 
     def _faction_kind(self, value: object) -> FactionKind | None:
-        if value in {"alliance", "cult"}:
+        if value in get_args(FactionKind):
             return cast(FactionKind, value)
         return None
 
