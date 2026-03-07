@@ -68,8 +68,9 @@ export interface ExperimentDetail extends ExperimentSummary {
 }
 
 export interface StepResponse {
-  round_result: Record<string, unknown>
-  experiment: ExperimentDetail
+  status: string
+  round_number: number
+  experiment_id: string
 }
 
 export interface EventLogItem {
