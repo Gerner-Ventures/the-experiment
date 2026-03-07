@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from app.agents.models import (
     ACTION_TYPES,
     AgentContext,
@@ -11,7 +13,9 @@ from app.agents.models import (
 from app.agents.registry import get_action_definition
 from app.agents.suspicion import apply_suspicion_trigger
 from app.llm import LLMService
-from app.schemas.agent_decision import AgentDecision
+from app.schemas.agent_decision import AgentDecision, DecisionAction
+
+logger = logging.getLogger(__name__)
 
 
 def build_agent_prompt(context: AgentContext) -> str:
@@ -44,21 +48,35 @@ class AgentBrain:
 
     async def decide(self, context: AgentContext) -> AgentTurnResult:
         prompt = build_agent_prompt(context)
-        result = await self.llm_service.generate_agent_decision(
-            messages=[
-                {"role": "system", "content": "Return a structured agent decision."},
-                {"role": "user", "content": prompt},
-            ],
-            response_format=AgentDecision,
-            metadata={
-                "experiment_id": context.experiment_id,
-                "agent_id": context.agent_id,
-                "round_number": context.world_state.round_number,
-            },
-            model_override=None,
-        )
-        parsed = result.parsed or {}
-        decision = AgentDecision.model_validate(parsed)
+        try:
+            result = await self.llm_service.generate_agent_decision(
+                messages=[
+                    {"role": "system", "content": "Return a structured agent decision."},
+                    {"role": "user", "content": prompt},
+                ],
+                response_format=AgentDecision,
+                metadata={
+                    "experiment_id": context.experiment_id,
+                    "agent_id": context.agent_id,
+                    "round_number": context.world_state.round_number,
+                },
+                model_override=None,
+            )
+            parsed = result.parsed or {}
+            decision = AgentDecision.model_validate(parsed)
+        except Exception:
+            logger.warning(
+                "LLM decision failed for agent %s (%s), using fallback observe action",
+                context.name, context.agent_id,
+            )
+            decision = AgentDecision(
+                inner_thought="I need a moment to read the room.",
+                suspicion=None,
+                action=DecisionAction(type="observe", location=context.location),
+                dialogue=None,
+                goal_progress="No clear progress this turn.",
+                cooperation_intent="medium",
+            )
         action = get_action_definition(decision.action.type)
 
         updated_memory = context.memory
