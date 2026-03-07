@@ -40,7 +40,7 @@ def build_agent_prompt(context: AgentContext) -> str:
         f"Observations: {[observation.summary for observation in context.observations]}\n"
         f"Recent events: {[event.summary for event in context.memory.recent_events]}\n"
         f"Key memories: {[memory.meaning for memory in context.memory.key_memories]}\n"
-        f"Relationships: {relationship_lines or ['None']}\n"
+        f"Relationships: {relationship_lines if relationship_lines else 'None'}\n"
         f"Available actions: {list(ACTION_TYPES)}\n"
         "Decide what you do next. Balance short-term social reality, your subjective memories, and your secret goal. "
         "You may misread motives, but you should remain basically competent."

@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+
 from app.agents.brain import AgentBrain
 from app.agents.memory import add_key_memory, append_recent_event, update_relationship_memory
 from app.agents.models import (
@@ -11,12 +14,14 @@ from app.agents.models import (
     KeyMemory,
     MemoryEvent,
     PersonalityProfile,
+    RelationshipMemory,
     SecretGoal,
 )
 from app.llm import LLMService
 
 MEMORY_CONSOLIDATION_MIN_EVENTS = 3
 RELATIONSHIP_CONSOLIDATION_MIN_HISTORY = 3
+logger = logging.getLogger(__name__)
 
 
 class AgentService:
@@ -42,6 +47,7 @@ class AgentService:
         tags: list[str] | None = None,
         goal: SecretGoal | None = None,
         suspicion_level: float = 0,
+        classify: bool = True,
     ) -> AgentMemoryState:
         event = MemoryEvent(
             round_number=round_number,
@@ -53,19 +59,27 @@ class AgentService:
             memory,
             event,
         )
-        if important:
-            updated = add_key_memory(updated, self._build_key_memory(event, None))
-            return updated
+        decision: MemoryPromotionDecision | None = None
+        if important or classify:
+            try:
+                decision = await self.memory_llm_service.classify_memory_event(
+                    event=event,
+                    goal=goal,
+                    suspicion_level=suspicion_level,
+                    recent_key_memories=memory.key_memories,
+                )
+            except Exception:
+                logger.warning(
+                    "failed to classify memory event",
+                    extra={"round_number": round_number, "important": important},
+                    exc_info=True,
+                )
 
-        try:
-            decision = await self.memory_llm_service.classify_memory_event(
-                event=event,
-                goal=goal,
-                suspicion_level=suspicion_level,
-                recent_key_memories=memory.key_memories,
-            )
-        except Exception:
-            decision = None
+        if important:
+            return add_key_memory(updated, self._build_key_memory(event, decision))
+
+        if not classify:
+            return updated
 
         if decision is not None and decision.promote_to_key_memory:
             updated = add_key_memory(updated, self._build_key_memory(event, decision))
@@ -109,6 +123,14 @@ class AgentService:
                 recent_key_memories=memory.key_memories,
             )
         except Exception:
+            logger.warning(
+                "failed to consolidate memory events",
+                extra={
+                    "round_number": unconsolidated_events[-1].round_number,
+                    "event_count": len(unconsolidated_events),
+                },
+                exc_info=True,
+            )
             return memory
 
         updated = memory.model_copy(
@@ -133,6 +155,9 @@ class AgentService:
         for other_agent_id, relationship in relationships.items():
             if len(relationship.history) < RELATIONSHIP_CONSOLIDATION_MIN_HISTORY:
                 continue
+            history_signature = _relationship_history_signature(relationship)
+            if relationship.last_consolidated_history_signature == history_signature:
+                continue
             try:
                 decision = await self.memory_llm_service.consolidate_relationship_memory(
                     other_agent_id=other_agent_id,
@@ -141,14 +166,26 @@ class AgentService:
                     suspicion_level=suspicion_level,
                 )
             except Exception:
-                decision = None
-
-            if decision is None or not decision.update_notes or not decision.notes:
+                logger.warning(
+                    "failed to consolidate relationship memory",
+                    extra={
+                        "other_agent_id": other_agent_id,
+                        "history_length": len(relationship.history),
+                    },
+                    exc_info=True,
+                )
                 continue
 
-            relationships[other_agent_id] = relationship.model_copy(
-                update={"notes": decision.notes}
-            )
+            if decision is None:
+                continue
+
+            relationship_update: dict[str, str] = {
+                "last_consolidated_history_signature": history_signature
+            }
+            if decision.update_notes and decision.notes:
+                relationship_update["notes"] = decision.notes
+
+            relationships[other_agent_id] = relationship.model_copy(update=relationship_update)
             changed = True
 
         if not changed:
@@ -192,6 +229,11 @@ class AgentService:
             confidence=decision.confidence,
             salience_type=decision.salience_type,
         )
+
+
+def _relationship_history_signature(relationship: RelationshipMemory) -> str:
+    history_blob = "\x1f".join(relationship.history)
+    return hashlib.sha1(history_blob.encode("utf-8")).hexdigest()
 
 
 def build_personality_payload(profile: PersonalityProfile) -> dict[str, object]:

@@ -5,6 +5,9 @@ from typing import Any
 
 import pytest
 
+import app.llm.client as llm_client_module
+import app.llm.config as llm_config_module
+from app.core.config import Settings
 from app.llm import LLMClient, LLMService, get_default_model_configs
 from app.llm.models import UsageRecord, LLMUsage
 from app.schemas.agent_decision import AgentDecision
@@ -57,10 +60,12 @@ async def test_defaults_include_gm_and_agent_configs() -> None:
 
 
 def test_router_model_list_includes_memory_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = LLMClient()
-    monkeypatch.setattr(client.settings, "memory_model", "anthropic/claude-3-5-sonnet-20241022")
+    settings = Settings(memory_model="anthropic/claude-3-5-sonnet-20241022")
+    monkeypatch.setattr(llm_client_module, "get_settings", lambda: settings)
+    monkeypatch.setattr(llm_config_module, "get_settings", lambda: settings)
 
-    model_names = {entry["model_name"] for entry in client._build_model_list()}
+    client = LLMClient()
+    model_names = {entry["model_name"] for entry in client.router.model_list}
 
     assert "anthropic/claude-3-5-sonnet-20241022" in model_names
 

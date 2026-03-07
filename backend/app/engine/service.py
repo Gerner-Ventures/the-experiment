@@ -444,6 +444,7 @@ class SimulationEngine:
                     emotional_charge=8,
                     goal=speaker.goal,
                     suspicion_level=speaker.suspicion_level,
+                    classify=False,
                 )
                 listener.memory = await self.agent_service.register_observation(
                     listener.memory,
@@ -452,6 +453,7 @@ class SimulationEngine:
                     emotional_charge=6,
                     goal=listener.goal,
                     suspicion_level=listener.suspicion_level,
+                    classify=False,
                 )
                 speaker.memory = self.agent_service.update_relationship(
                     speaker.memory,
