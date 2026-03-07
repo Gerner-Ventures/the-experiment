@@ -5,6 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import AgentStatus
+from app.llm.models import MemorySalienceType
 from app.schemas.agent_decision import AgentDecision
 from app.world.models import WorldState
 
@@ -164,6 +165,7 @@ class KeyMemory(AgentModel):
     meaning: str
     round_number: int = Field(ge=0)
     confidence: int = Field(ge=0, le=100, default=70)
+    salience_type: MemorySalienceType = "other"
 
 
 class RelationshipMemory(AgentModel):
@@ -176,6 +178,8 @@ class AgentMemoryState(AgentModel):
     recent_events: list[MemoryEvent] = Field(default_factory=list)
     key_memories: list[KeyMemory] = Field(default_factory=list)
     relationship_memory: dict[str, RelationshipMemory] = Field(default_factory=dict)
+    relationship_consolidation_signatures: dict[str, str] = Field(default_factory=dict)
+    last_consolidated_round: int = Field(ge=0, default=0)
 
 
 class ActionDefinition(AgentModel):

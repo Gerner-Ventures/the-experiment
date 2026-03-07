@@ -17,8 +17,8 @@ class LLMClient:
         self.settings = get_settings()
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
-        router_cls = getattr(litellm, "Router")
-        self.router: Any = router_cls(
+        router_cls = cast(Any, getattr(litellm, "Router"))
+        self.router = router_cls(
             model_list=self._build_model_list(),
             fallbacks=self._build_fallbacks(),
             num_retries=self.settings.llm_max_retries,
@@ -59,12 +59,10 @@ class LLMClient:
         return self.model_configs[request.role]
 
     def _build_model_list(self) -> list[dict[str, Any]]:
-        configs = get_default_model_configs()
         unique_models = {
-            configs["gm"].primary_model,
-            *configs["gm"].fallback_models,
-            configs["agent"].primary_model,
-            *configs["agent"].fallback_models,
+            model
+            for config in self.model_configs.values()
+            for model in [config.primary_model, *config.fallback_models]
         }
         return [
             {"model_name": model, "litellm_params": {"model": model}}

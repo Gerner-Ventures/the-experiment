@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import hashlib
+import logging
+from typing import Protocol, cast
+
 from app.agents.brain import AgentBrain
 from app.agents.memory import add_key_memory, append_recent_event, update_relationship_memory
 from app.agents.models import (
@@ -9,18 +13,64 @@ from app.agents.models import (
     KeyMemory,
     MemoryEvent,
     PersonalityProfile,
+    RelationshipMemory,
     SecretGoal,
 )
+from app.llm.models import (
+    MemoryConsolidationDecision,
+    MemoryPromotionDecision,
+    RelationshipConsolidationDecision,
+)
+
+MEMORY_CONSOLIDATION_MIN_EVENTS = 3
+RELATIONSHIP_CONSOLIDATION_MIN_HISTORY = 3
+logger = logging.getLogger(__name__)
+
+
+class MemoryLLMService(Protocol):
+    async def classify_memory_event(
+        self,
+        *,
+        event: MemoryEvent,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+        recent_key_memories: list[KeyMemory],
+    ) -> MemoryPromotionDecision: ...
+
+    async def consolidate_memory_events(
+        self,
+        *,
+        events: list[MemoryEvent],
+        goal: SecretGoal | None,
+        suspicion_level: float,
+        recent_key_memories: list[KeyMemory],
+    ) -> MemoryConsolidationDecision: ...
+
+    async def consolidate_relationship_memory(
+        self,
+        *,
+        other_agent_id: str,
+        relationship: RelationshipMemory,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+    ) -> RelationshipConsolidationDecision: ...
 
 
 class AgentService:
-    def __init__(self, brain: AgentBrain | None = None) -> None:
+    def __init__(
+        self,
+        brain: AgentBrain | None = None,
+        memory_llm_service: MemoryLLMService | None = None,
+    ) -> None:
         self.brain: AgentBrain = brain or AgentBrain()
+        self.memory_llm_service = memory_llm_service or cast(
+            MemoryLLMService, self.brain.llm_service
+        )
 
     def initialize_memory(self) -> AgentMemoryState:
         return AgentMemoryState()
 
-    def register_observation(
+    async def register_observation(
         self,
         memory: AgentMemoryState,
         *,
@@ -28,23 +78,47 @@ class AgentService:
         summary: str,
         emotional_charge: int = 0,
         important: bool = False,
+        tags: list[str] | None = None,
+        goal: SecretGoal | None = None,
+        suspicion_level: float = 0,
+        classify: bool = True,
     ) -> AgentMemoryState:
+        event = MemoryEvent(
+            round_number=round_number,
+            summary=summary,
+            emotional_charge=emotional_charge,
+            tags=tags or [],
+        )
         updated = append_recent_event(
             memory,
-            MemoryEvent(
-                round_number=round_number, summary=summary, emotional_charge=emotional_charge
-            ),
+            event,
         )
+        decision: MemoryPromotionDecision | None = None
+        # Important observations are forced into key memory, but we still try to enrich
+        # them with classifier-derived meaning and salience when that path is available.
+        if important or classify:
+            try:
+                decision = await self.memory_llm_service.classify_memory_event(
+                    event=event,
+                    goal=goal,
+                    suspicion_level=suspicion_level,
+                    recent_key_memories=memory.key_memories,
+                )
+            except Exception:
+                logger.warning(
+                    "failed to classify memory event",
+                    extra={"round_number": round_number, "important": important},
+                    exc_info=True,
+                )
+
         if important:
-            updated = add_key_memory(
-                updated,
-                KeyMemory(
-                    summary=summary,
-                    meaning=summary,
-                    round_number=round_number,
-                    confidence=75,
-                ),
-            )
+            return add_key_memory(updated, self._build_key_memory(event, decision))
+
+        if not classify:
+            return updated
+
+        if decision is not None and decision.promote_to_key_memory:
+            updated = add_key_memory(updated, self._build_key_memory(event, decision))
         return updated
 
     def update_relationship(
@@ -61,6 +135,143 @@ class AgentService:
 
     async def decide(self, context: AgentContext) -> AgentTurnResult:
         return await self.brain.decide(context)
+
+    async def consolidate_memory(
+        self,
+        memory: AgentMemoryState,
+        *,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+    ) -> AgentMemoryState:
+        unconsolidated_events = [
+            event
+            for event in memory.recent_events
+            if event.round_number > memory.last_consolidated_round
+        ]
+        if len(unconsolidated_events) < MEMORY_CONSOLIDATION_MIN_EVENTS:
+            return memory
+
+        try:
+            decision = await self.memory_llm_service.consolidate_memory_events(
+                events=unconsolidated_events,
+                goal=goal,
+                suspicion_level=suspicion_level,
+                recent_key_memories=memory.key_memories,
+            )
+        except Exception:
+            logger.warning(
+                "failed to consolidate memory events",
+                extra={
+                    "round_number": unconsolidated_events[-1].round_number,
+                    "event_count": len(unconsolidated_events),
+                },
+                exc_info=True,
+            )
+            return memory
+
+        updated = memory.model_copy(
+            update={"last_consolidated_round": unconsolidated_events[-1].round_number}
+        )
+        if not decision.create_summary:
+            return updated
+
+        key_memory = self._build_consolidated_key_memory(unconsolidated_events, decision)
+        return add_key_memory(updated, key_memory)
+
+    async def consolidate_relationship_memory(
+        self,
+        memory: AgentMemoryState,
+        *,
+        goal: SecretGoal | None,
+        suspicion_level: float,
+    ) -> AgentMemoryState:
+        relationships = dict(memory.relationship_memory)
+        consolidation_signatures = dict(memory.relationship_consolidation_signatures)
+        changed = False
+
+        for other_agent_id, relationship in relationships.items():
+            if len(relationship.history) < RELATIONSHIP_CONSOLIDATION_MIN_HISTORY:
+                continue
+            history_signature = _relationship_history_signature(relationship)
+            if consolidation_signatures.get(other_agent_id) == history_signature:
+                continue
+            try:
+                decision = await self.memory_llm_service.consolidate_relationship_memory(
+                    other_agent_id=other_agent_id,
+                    relationship=relationship,
+                    goal=goal,
+                    suspicion_level=suspicion_level,
+                )
+            except Exception:
+                logger.warning(
+                    "failed to consolidate relationship memory",
+                    extra={
+                        "other_agent_id": other_agent_id,
+                        "history_length": len(relationship.history),
+                    },
+                    exc_info=True,
+                )
+                continue
+
+            relationship_update: dict[str, object] = {}
+            if decision.update_notes and decision.notes:
+                relationship_update["notes"] = decision.notes
+
+            relationships[other_agent_id] = relationship.model_copy(update=relationship_update)
+            consolidation_signatures[other_agent_id] = history_signature
+            changed = True
+
+        if not changed:
+            return memory
+        return memory.model_copy(
+            update={
+                "relationship_memory": relationships,
+                "relationship_consolidation_signatures": consolidation_signatures,
+            }
+        )
+
+    def _build_key_memory(
+        self,
+        event: MemoryEvent,
+        decision: MemoryPromotionDecision | None,
+    ) -> KeyMemory:
+        if decision is not None:
+            meaning = decision.meaning or event.summary
+            confidence = decision.confidence
+            salience_type = decision.salience_type
+        else:
+            meaning = event.summary
+            confidence = 75
+            salience_type = "other"
+
+        return KeyMemory(
+            summary=event.summary,
+            meaning=meaning,
+            round_number=event.round_number,
+            confidence=confidence,
+            salience_type=salience_type,
+        )
+
+    def _build_consolidated_key_memory(
+        self,
+        events: list[MemoryEvent],
+        decision: MemoryConsolidationDecision,
+    ) -> KeyMemory:
+        latest_round = max(event.round_number for event in events)
+        summary = decision.summary or events[-1].summary
+        meaning = decision.meaning or summary
+        return KeyMemory(
+            summary=summary,
+            meaning=meaning,
+            round_number=latest_round,
+            confidence=decision.confidence,
+            salience_type=decision.salience_type,
+        )
+
+
+def _relationship_history_signature(relationship: RelationshipMemory) -> str:
+    history_blob = "\x1f".join(relationship.history)
+    return hashlib.sha1(history_blob.encode("utf-8")).hexdigest()
 
 
 def build_personality_payload(profile: PersonalityProfile) -> dict[str, object]:
