@@ -178,7 +178,9 @@ class LLMClient:
                     {
                         "schema": request.response_format
                         if isinstance(request.response_format, dict)
-                        else "pydantic_model",
+                        else request.response_format.model_json_schema()
+                        if isinstance(request.response_format, type) and issubclass(request.response_format, BaseModel)
+                        else "unknown",
                         "failed_response": repair_prompt.original_text,
                         "error": repair_prompt.error,
                     }
