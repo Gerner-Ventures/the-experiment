@@ -6,7 +6,7 @@ WORKDIR /app
 RUN pip install poetry && poetry config virtualenvs.in-project true
 
 COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-dev --no-interaction --no-ansi
+RUN poetry install --only main --no-interaction --no-ansi
 
 COPY . .
 
