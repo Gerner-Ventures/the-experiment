@@ -7,6 +7,8 @@ metadata:
     app.kubernetes.io/component: frontend
 spec:
   replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       {{- include "the-experiment.frontendSelectorLabels" . | nindent 6 }}

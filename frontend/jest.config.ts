@@ -2,6 +2,9 @@ import type { Config } from 'jest'
 
 const config: Config = {
   testEnvironment: 'jsdom',
+  testEnvironmentOptions: {
+    customExportConditions: ['node'],
+  },
   transform: {
     '^.+\\.vue$': '@vue/vue3-jest',
     '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.json' }],

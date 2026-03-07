@@ -39,7 +39,24 @@ class SimulationEngine:
         round_number = state.current_round + 1
         state.world_state.round_number = round_number
 
-        gm_result, gm_plan = self._gm_plan_phase(state, round_number)
+        if (
+            state.gm_plan
+            and state.gm_plan.plan.round == round_number
+            and state.gm_plan.status == "applied"
+        ):
+            gm_plan = state.gm_plan
+            gm_result = PhaseResult(
+                phase="gm_plan",
+                events=[
+                    RoundEvent(
+                        phase="gm_plan",
+                        summary=f"Using approved GM plan '{gm_plan.plan.round_theme}'.",
+                        data={"status": gm_plan.status, "theme": gm_plan.plan.round_theme},
+                    )
+                ],
+            )
+        else:
+            gm_result, gm_plan = self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
         morning_result, morning_turns = await self._action_phase(
             state, phase="morning", actions_per_agent=2
@@ -60,6 +77,7 @@ class SimulationEngine:
         state.recent_events.extend(
             event.summary
             for phase in [
+                gm_result,
                 dawn_result,
                 morning_result,
                 midday_result,
