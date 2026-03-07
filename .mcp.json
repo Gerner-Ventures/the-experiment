@@ -4,6 +4,14 @@
       "type": "stdio",
       "command": "canon-mcp",
       "args": []
+    },
+    "canon": {
+      "command": "uvx",
+      "args": [
+        "--from",
+        "gv-canon",
+        "canon-mcp"
+      ]
     }
   }
 }
