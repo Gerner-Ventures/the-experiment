@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +17,7 @@ class Settings(BaseSettings):
     log_level: str = "debug"
     database_url: str = "postgresql+asyncpg://experiment:experiment@localhost:5432/experiment"
     redis_url: str = "redis://localhost:6379/0"
+    platform_url: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
@@ -28,6 +30,19 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2
     llm_default_temperature: float = 0.8
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, value: object) -> object:
+        if isinstance(value, str) and not value.startswith("["):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def _derive_cors_origins(self) -> "Settings":
+        if self.platform_url and self.cors_origins == ["http://localhost:5173"]:
+            self.cors_origins = [self.platform_url]
+        return self
 
 
 @lru_cache
