@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     platform_url: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
+    posthog_key: str | None = None
+    posthog_host: str = "https://us.posthog.com"
     anthropic_api_key: str | None = None
     openai_api_key: str | None = None
     google_api_key: str | None = None

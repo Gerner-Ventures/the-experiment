@@ -14,6 +14,7 @@ from app.agents.models import (
 from app.agents.service import AgentService
 from app.db.models import AgentStatus
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
+from app.engine.service import PreparedAction
 from app.gm import get_preset_arc
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
 from app.world import build_default_world_state, resolve_spawn_tile, tile_distance
@@ -96,6 +97,36 @@ def _state() -> SimulationState:
             _agent("a3", "Eli", "workshop"),
         ],
     )
+
+
+def test_action_outcome_only_marks_observe_and_move_rewrites_as_non_resolved() -> None:
+    agent = _agent("a1", "Mara", "well")
+    engine = SimulationEngine()
+    turn = AgentTurnResult(
+        decision=AgentDecision(
+            inner_thought="A choice is made.",
+            suspicion=None,
+            action=DecisionAction(
+                type=cast(DecisionActionType, "attack"),
+                target="a2",
+                location="well",
+            ),
+            dialogue=None,
+            goal_progress="Incremental movement.",
+            cooperation_intent="low",
+        ),
+        updated_memory=agent.memory,
+        suspicion_level=agent.suspicion_level,
+        prompt="stub",
+    )
+
+    blocked = PreparedAction(agent=agent, turn=turn, action_type="observe", location="well")
+    rerouted = PreparedAction(agent=agent, turn=turn, action_type="move", location="street")
+    resolved = PreparedAction(agent=agent, turn=turn, action_type="repair", location="workshop")
+
+    assert engine._action_outcome(blocked) == "blocked"
+    assert engine._action_outcome(rerouted) == "rerouted"
+    assert engine._action_outcome(resolved) == "resolved"
 
 
 @pytest.mark.asyncio

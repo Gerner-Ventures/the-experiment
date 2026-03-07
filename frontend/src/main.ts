@@ -7,6 +7,7 @@ import { createPinia } from 'pinia'
 import { createRouter, createWebHistory } from 'vue-router'
 import Antd from 'ant-design-vue'
 import App from './App.vue'
+import { initPostHog } from './plugins/posthog'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -21,4 +22,5 @@ const app = createApp(App)
 app.use(createPinia())
 app.use(router)
 app.use(Antd)
+initPostHog()
 app.mount('#app')

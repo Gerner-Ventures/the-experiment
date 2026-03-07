@@ -40,14 +40,48 @@ class _StubAgentService(AgentService):
         )
 
 
-runtime.engine.agent_service = _StubAgentService()
+class _ScriptedAgentService(AgentService):
+    def __init__(self, scripts: dict[str, list[dict[str, str | None]]]) -> None:
+        super().__init__()
+        self.scripts = scripts
+        self.calls: dict[str, int] = {}
+
+    async def decide(self, context: object) -> AgentTurnResult:
+        from app.agents.models import AgentContext
+
+        agent_context = (
+            context if isinstance(context, AgentContext) else AgentContext.model_validate(context)
+        )
+        index = self.calls.get(agent_context.name, 0)
+        script = self.scripts[agent_context.name]
+        current = script[min(index, len(script) - 1)]
+        self.calls[agent_context.name] = index + 1
+        return AgentTurnResult(
+            decision=AgentDecision(
+                inner_thought=str(current.get("inner_thought") or "I have a plan."),
+                suspicion=None,
+                action=DecisionAction(
+                    type=str(current["action_type"]),
+                    target=current.get("target"),
+                    location=current.get("location"),
+                ),
+                dialogue=None,
+                goal_progress=str(current.get("goal_progress") or "No change."),
+                cooperation_intent=str(current.get("cooperation_intent") or "medium"),
+            ),
+            updated_memory=agent_context.memory,
+            suspicion_level=agent_context.suspicion_level,
+            prompt="scripted",
+        )
 
 
 @pytest.fixture(autouse=True)
 def reset_runtime_store() -> None:
     runtime.store = InMemoryExperimentStore()
+    runtime.connection_manager.connections.clear()
     runtime.gm_service.llm_service.client.tracker = UsageTracker()
     runtime.engine.gm_service.llm_service.client.tracker = UsageTracker()
+    runtime.engine.agent_service = _StubAgentService()
 
 
 def _payload() -> dict[str, Any]:
@@ -130,6 +164,23 @@ def test_create_get_and_step_experiment_flow() -> None:
     assert fetched.json()["current_round"] == 1
 
 
+def test_start_and_pause_routes_update_experiment_status() -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    started = client.post(f"{API_PREFIX}/experiments/{experiment_id}/start")
+    assert started.status_code == 200
+    assert started.json()["status"] == "running"
+
+    paused = client.post(f"{API_PREFIX}/experiments/{experiment_id}/pause")
+    assert paused.status_code == 200
+    assert paused.json()["status"] == "paused"
+
+    fetched = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "paused"
+
+
 def test_log_endpoint_filters_and_paginates() -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
@@ -202,11 +253,212 @@ def test_analytics_and_replay_endpoints_return_round_data() -> None:
     replay = client.get(f"{API_PREFIX}/experiments/{experiment_id}/replay")
     assert replay.status_code == 200
     assert replay.json()["rounds"][0]["round_number"] == 1
+    assert "cooperation_score" in replay.json()["rounds"][0]
 
     snapshot = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/snapshot")
     assert snapshot.status_code == 200
     assert snapshot.json()["round_number"] == 1
     assert snapshot.json()["events"]
+
+
+def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "accuse",
+                    "location": "unknown_place",
+                    "goal_progress": "I pushed too hard and got nowhere.",
+                    "cooperation_intent": "low",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I recovered but still found no real lead.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I finished the round empty-handed.",
+                    "cooperation_intent": "medium",
+                },
+            ],
+            "Jon": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I took one step closer to holding the line.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I took one step closer to holding the line.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I took one step closer to holding the line.",
+                    "cooperation_intent": "medium",
+                },
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
+    assert summary.status_code == 200
+    assert summary.json()["cooperation_score"] == 1.0
+
+    log_response = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "agent_action"},
+    )
+    assert log_response.status_code == 200
+    action_items = log_response.json()["items"]
+    assert action_items
+    assert any(item["data"]["requested_action_type"] == "accuse" for item in action_items)
+    assert all(item["data"]["resolved_action_type"] == "observe" for item in action_items)
+
+    rounds = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/rounds")
+    assert rounds.status_code == 200
+    assert rounds.json()["items"][0]["cooperation_score"] == 1.0
+    assert rounds.json()["items"][0]["total_actions"] == len(action_items)
+
+    goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
+    assert goals.status_code == 200
+    goal_items = {item["agent_name"]: item for item in goals.json()["items"]}
+    assert len(goal_items) == 2
+    assert len(goal_items["Mara"]["progress_history"]) == 3
+    assert (
+        goal_items["Mara"]["progress_history"][0]["progress"]
+        == "I pushed too hard and got nowhere."
+    )
+    assert goal_items["Mara"]["outcome"] == "unknown"
+    assert goal_items["Jon"]["outcome"] == "partial"
+
+    suspicion = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/suspicion")
+    assert suspicion.status_code == 200
+    assert len(suspicion.json()["heatmap"]) == 2
+    suspicion_agents = {item["agent_name"]: item for item in suspicion.json()["agents"]}
+    assert set(suspicion_agents) == {"Jon", "Mara"}
+    assert "agent_id" not in suspicion_agents["Mara"]["points"][0]
+    assert suspicion_agents["Mara"]["points"][0]["round_number"] == 1
+
+    gm = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/gm")
+    assert gm.status_code == 200
+    assert gm.json()["items"][0]["round_number"] == 1
+    assert gm.json()["items"][0]["round_theme"]
+    assert gm.json()["items"][0]["narration"]
+
+
+def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents() -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "accuse",
+                    "location": "unknown_place",
+                    "goal_progress": "I pushed too hard and got nowhere.",
+                    "cooperation_intent": "low",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I watched the others settle.",
+                    "cooperation_intent": "medium",
+                },
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I kept my counsel through the afternoon.",
+                    "cooperation_intent": "medium",
+                },
+            ],
+            "Jon": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I kept watch.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
+    assert goals.status_code == 200
+    mara = next(item for item in goals.json()["items"] if item["agent_name"] == "Mara")
+    assert mara["progress_history"][0]["requested_action_type"] == "accuse"
+    assert mara["progress_history"][0]["summary"]
+
+
+def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal() -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I waited in silence.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+            "Jon": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I held still and listened.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
+    assert goals.status_code == 200
+    assert all(item["outcome"] == "unknown" for item in goals.json()["items"])
+
+
+def test_betrayal_and_faction_analytics_expose_timeline_data() -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "sabotage",
+                    "goal_progress": "I finally made the town bend around me.",
+                    "cooperation_intent": "low",
+                }
+            ],
+            "Jon": [
+                {
+                    "action_type": "observe",
+                    "goal_progress": "I kept watch and tracked the fallout.",
+                    "cooperation_intent": "medium",
+                }
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    betrayals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/betrayals")
+    assert betrayals.status_code == 200
+    assert any(item["category"] == "sabotage" for item in betrayals.json()["items"])
+
+    rounds = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/rounds")
+    assert rounds.status_code == 200
+    assert rounds.json()["items"][0]["sabotage_count"] >= 1
+
+    factions = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/factions")
+    assert factions.status_code == 200
+    assert "timeline" in factions.json()
+    assert "membership_changes" in factions.json()
 
 
 def test_usage_and_prompt_trace_endpoints_group_records() -> None:
