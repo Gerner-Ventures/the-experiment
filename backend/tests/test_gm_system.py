@@ -52,7 +52,14 @@ def test_prompt_package_reflects_assertive_gm_brief() -> None:
 def test_rule_based_plan_pushes_drama_even_when_calm() -> None:
     plan = generate_rule_based_plan(_context(3))
     assert plan.round_theme
-    assert plan.crisis_event.type in {"social", "meta", "discovery", "environmental", "resource", "structural"}
+    assert plan.crisis_event.type in {
+        "social",
+        "meta",
+        "discovery",
+        "environmental",
+        "resource",
+        "structural",
+    }
     assert "assertive pacing" in plan.reasoning.lower()
 
 

@@ -79,14 +79,22 @@ class Experiment(TimestampMixin, Base):
         cascade="all, delete-orphan",
         uselist=False,
     )
-    agents: Mapped[list[Agent]] = relationship(back_populates="experiment", cascade="all, delete-orphan")
-    rounds: Mapped[list[Round]] = relationship(back_populates="experiment", cascade="all, delete-orphan")
-    events: Mapped[list[Event]] = relationship(back_populates="experiment", cascade="all, delete-orphan")
+    agents: Mapped[list[Agent]] = relationship(
+        back_populates="experiment", cascade="all, delete-orphan"
+    )
+    rounds: Mapped[list[Round]] = relationship(
+        back_populates="experiment", cascade="all, delete-orphan"
+    )
+    events: Mapped[list[Event]] = relationship(
+        back_populates="experiment", cascade="all, delete-orphan"
+    )
     world_snapshots: Mapped[list[WorldSnapshot]] = relationship(
         back_populates="experiment",
         cascade="all, delete-orphan",
     )
-    gm_plans: Mapped[list[GMPlan]] = relationship(back_populates="experiment", cascade="all, delete-orphan")
+    gm_plans: Mapped[list[GMPlan]] = relationship(
+        back_populates="experiment", cascade="all, delete-orphan"
+    )
 
 
 class Arc(TimestampMixin, Base):

@@ -33,7 +33,9 @@ class LLMClient:
             model=request.model_override or model_config.primary_model,
             messages=cast(Any, request.messages),
             response_format=request.response_format,
-            temperature=request.temperature if request.temperature is not None else model_config.temperature,
+            temperature=request.temperature
+            if request.temperature is not None
+            else model_config.temperature,
             timeout=model_config.timeout_seconds,
             metadata=request.metadata,
         )
@@ -64,7 +66,10 @@ class LLMClient:
             configs["agent"].primary_model,
             *configs["agent"].fallback_models,
         }
-        return [{"model_name": model, "litellm_params": {"model": model}} for model in sorted(unique_models)]
+        return [
+            {"model_name": model, "litellm_params": {"model": model}}
+            for model in sorted(unique_models)
+        ]
 
     def _build_fallbacks(self) -> list[dict[str, list[str]]]:
         fallbacks: list[dict[str, list[str]]] = []
@@ -75,13 +80,17 @@ class LLMClient:
 
     def _build_result(self, response: Any) -> LLMResult:
         message = response.choices[0].message
-        content = message.content if isinstance(message.content, str) else json.dumps(message.content)
+        content = (
+            message.content if isinstance(message.content, str) else json.dumps(message.content)
+        )
         usage = getattr(response, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
         total_tokens = int(getattr(usage, "total_tokens", prompt_tokens + completion_tokens) or 0)
         cost = self._calculate_cost(response)
-        provider = getattr(response, "provider", None) or self._infer_provider(getattr(response, "model", ""))
+        provider = getattr(response, "provider", None) or self._infer_provider(
+            getattr(response, "model", "")
+        )
 
         return LLMResult(
             model=getattr(response, "model", ""),
@@ -135,7 +144,9 @@ class LLMClient:
                 "role": "user",
                 "content": json.dumps(
                     {
-                        "schema": request.response_format if isinstance(request.response_format, dict) else "pydantic_model",
+                        "schema": request.response_format
+                        if isinstance(request.response_format, dict)
+                        else "pydantic_model",
                         "failed_response": repair_prompt.original_text,
                         "error": repair_prompt.error,
                     }

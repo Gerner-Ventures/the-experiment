@@ -16,7 +16,9 @@ def build_prompt_package(context: GMPlanningContext) -> PromptPackage:
     next_act = get_next_act(context.arc, context.round_number)
     transition_note = ""
     if is_act_transition(context.arc, context.round_number):
-        transition_note = "This round begins a new act, so the dramatic turn should feel unmistakable."
+        transition_note = (
+            "This round begins a new act, so the dramatic turn should feel unmistakable."
+        )
 
     system_prompt = (
         "You are the assertive AI Game Master for a social-collapse simulation. "
@@ -66,8 +68,12 @@ def generate_rule_based_plan(context: GMPlanningContext) -> GMPlanData:
         f"{severity} {template.type} turn aimed at {', '.join(crisis_event.affects)}."
     )
     meta_hint = None
-    if template.type in {"discovery", "meta"} or any("watch" in plot.lower() for plot in context.unresolved_plotlines):
-        meta_hint = "Someone in town may be closer to understanding the experiment than they should be."
+    if template.type in {"discovery", "meta"} or any(
+        "watch" in plot.lower() for plot in context.unresolved_plotlines
+    ):
+        meta_hint = (
+            "Someone in town may be closer to understanding the experiment than they should be."
+        )
 
     return GMPlanData(
         round=context.round_number,

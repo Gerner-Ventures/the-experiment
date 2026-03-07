@@ -63,7 +63,9 @@ def calculate_threat_level(
     crisis_pressure = bounded_crisis * 20.0
     baseline = 8.0
 
-    return round(min(100.0, baseline + scarcity_pressure + cooperation_pressure + crisis_pressure), 2)
+    return round(
+        min(100.0, baseline + scarcity_pressure + cooperation_pressure + crisis_pressure), 2
+    )
 
 
 def create_world_snapshot(state: WorldState) -> dict[str, Any]:
