@@ -70,6 +70,8 @@ jobs:
 
       - name: Build and push Docker images
         env:
+          # POSTHOG_KEY may be empty on first deploy before terraform apply.
+          # Both frontend and backend handle an empty key gracefully (PostHog is disabled).
           POSTHOG_KEY: ${{ steps.secrets.outputs.POSTHOG_KEY }}
         run: |
           REGISTRY="registry.digitalocean.com/${{ steps.secrets.outputs.DOCR_REGISTRY_NAME }}"

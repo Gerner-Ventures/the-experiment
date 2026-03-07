@@ -21,8 +21,8 @@ spec:
         - name: postgres
           image: {{ .Values.postgres.image }}
           securityContext:
-            runAsNonRoot: true
-            runAsUser: 70
+            # Postgres entrypoint needs root for initial PVC data-dir setup,
+            # then drops to UID 70 (postgres) via gosu. Do not set runAsNonRoot.
             allowPrivilegeEscalation: false
             capabilities:
               drop: [ALL]

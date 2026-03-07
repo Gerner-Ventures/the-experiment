@@ -50,11 +50,14 @@ async def readiness() -> JSONResponse | dict:
     except Exception:
         checks["redis"] = "unreachable"
 
-    all_ok = all(v == "ok" for v in checks.values())
-    if not all_ok:
+    # Only the database is on the critical request path.
+    # Redis is used for caching/pubsub — report its status but don't fail readiness.
+    db_ok = checks["database"] == "ok"
+    if not db_ok:
         return JSONResponse(
             status_code=503,
-            content={"status": "degraded", "checks": checks},
+            content={"status": "unavailable", "checks": checks},
         )
 
-    return {"status": "ok", "checks": checks}
+    status = "ok" if checks["redis"] == "ok" else "degraded"
+    return {"status": status, "checks": checks}
