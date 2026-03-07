@@ -21,6 +21,8 @@ PhaseName = Literal["gm_plan", "dawn", "morning", "midday", "afternoon", "night"
 ConversationTone = Literal["supportive", "suspicious", "manipulative", "guarded"]
 MeetingStance = Literal["support", "oppose", "hesitant"]
 MeetingVoteChoice = Literal["support", "oppose", "abstain"]
+ExileVoteChoice = Literal["banish", "protect", "abstain"]
+FactionKind = Literal["alliance", "cult"]
 
 
 class EngineModel(BaseModel):
@@ -40,6 +42,9 @@ class EngineAgentState(EngineModel):
     relationships: dict[str, RelationshipMemory] = Field(default_factory=dict)
     suspicion_level: float = Field(ge=0, le=100, default=0)
     llm_model: str = "openai/gpt-4o-mini"
+    faction_id: str | None = None
+    faction_role: Literal["leader", "member"] | None = None
+    influence: float = Field(default=0, ge=0, le=100)
 
 
 class ConflictRecord(EngineModel):
@@ -77,6 +82,8 @@ class SimulationState(EngineModel):
     unresolved_plotlines: list[str] = Field(default_factory=list)
     recent_events: list[str] = Field(default_factory=list)
     gm_plan: GMPlanRecord | None = None
+    factions: list["FactionState"] = Field(default_factory=list)
+    exile_history: list["ExileOutcome"] = Field(default_factory=list)
 
 
 class RoundResult(EngineModel):
@@ -121,6 +128,36 @@ class MeetingVote(EngineModel):
     rationale: str
 
 
+class ExileVote(EngineModel):
+    agent_id: str
+    agent_name: str
+    vote: ExileVoteChoice
+    rationale: str
+
+
+class ExileOutcome(EngineModel):
+    round_number: int = Field(ge=0)
+    target_agent_id: str | None = None
+    target_agent_name: str | None = None
+    votes: dict[str, ExileVoteChoice] = Field(default_factory=dict)
+    vote_rationales: dict[str, str] = Field(default_factory=dict)
+    tally: dict[str, int] = Field(default_factory=dict)
+    enacted: bool = False
+    reason: str | None = None
+
+
+class FactionState(EngineModel):
+    faction_id: str
+    name: str
+    kind: FactionKind
+    leader_id: str
+    member_ids: list[str] = Field(default_factory=list)
+    doctrine: str | None = None
+    influence: float = Field(default=0, ge=0, le=100)
+    formed_round: int = Field(ge=0)
+    pressure: float = Field(default=0, ge=0, le=100)
+
+
 class MeetingOutcome(EngineModel):
     proposal: str
     speeches: list[MeetingSpeech] = Field(default_factory=list)
@@ -129,11 +166,14 @@ class MeetingOutcome(EngineModel):
     tally: dict[str, int] = Field(default_factory=dict)
     passed: bool = False
     summary: str
+    exile: ExileOutcome | None = None
+    faction_pressures: list[str] = Field(default_factory=list)
 
 
 def build_agent_context(
     agent: EngineAgentState,
     *,
+    experiment_id: str | None,
     world_state: WorldState,
     current_crisis: dict[str, object] | None,
     observations: list[dict[str, object]],
@@ -141,6 +181,7 @@ def build_agent_context(
     from app.agents.models import Observation
 
     return AgentContext(
+        experiment_id=experiment_id,
         agent_id=agent.agent_id,
         name=agent.name,
         character_id=agent.character_id,

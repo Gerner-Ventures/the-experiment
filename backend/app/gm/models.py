@@ -61,6 +61,7 @@ class GMPlanData(GMModel):
 
 
 class GMPlanningContext(GMModel):
+    experiment_id: str | None = None
     round_number: int = Field(ge=1)
     total_rounds: int = Field(ge=1)
     arc: DirectorArc

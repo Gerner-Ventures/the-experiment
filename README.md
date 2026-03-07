@@ -59,6 +59,8 @@ cp backend/.env.example backend/.env
 make dev
 ```
 
+To enable local Ruff autofixes before each commit, run `pre-commit install`.
+
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api
 - Health check: http://localhost:8000/api/health

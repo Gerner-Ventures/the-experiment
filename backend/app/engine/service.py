@@ -9,6 +9,7 @@ from app.engine.models import (
     ConflictRecord,
     ConversationOutcome,
     EngineAgentState,
+    FactionState,
     MeetingOutcome,
     PhaseName,
     PhaseResult,
@@ -18,6 +19,7 @@ from app.engine.models import (
     build_agent_context,
 )
 from app.agents.models import AgentTurnResult
+from app.db.models import AgentStatus
 from app.gm.models import GMPlanData, GMPlanRecord
 from app.gm import GMPlanningContext, GMService
 from app.social import SocialService
@@ -42,6 +44,7 @@ class SimulationEngine:
     async def run_round(self, state: SimulationState) -> RoundResult:
         round_number = state.current_round + 1
         state.world_state.round_number = round_number
+        self._refresh_factions(state)
 
         if (
             state.gm_plan
@@ -78,6 +81,7 @@ class SimulationEngine:
         state.world_state.threat_level = (
             night_result.cooperation_ratio or state.world_state.threat_level
         )
+        self._update_experiment_status(state)
         state.recent_events.extend(
             event.summary
             for phase in [
@@ -115,6 +119,7 @@ class SimulationEngine:
         self, state: SimulationState, round_number: int
     ) -> tuple[PhaseResult, GMPlanRecord]:
         context = GMPlanningContext(
+            experiment_id=state.experiment_id,
             round_number=round_number,
             total_rounds=state.total_rounds,
             arc=state.arc,
@@ -180,11 +185,12 @@ class SimulationEngine:
     ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
         actions: list[tuple[EngineAgentState, AgentTurnResult]] = []
-        for agent in state.agents:
+        for agent in self._active_agents(state):
             turns = []
             for _ in range(actions_per_agent):
                 context = build_agent_context(
                     agent,
+                    experiment_id=state.experiment_id,
                     world_state=state.world_state,
                     current_crisis=state.gm_plan.plan.crisis_event.model_dump(mode="json")
                     if state.gm_plan
@@ -207,6 +213,8 @@ class SimulationEngine:
         proposal = self._meeting_proposal(state)
         outcome = self.social_service.run_meeting(state, proposal=proposal)
         self._apply_meeting_relationships(state, outcome)
+        faction_events = self._faction_events(state)
+        exile_events = self._apply_exile_outcome(state, outcome)
 
         events = [
             RoundEvent(
@@ -252,6 +260,8 @@ class SimulationEngine:
                 data={"kind": "meeting_result", **outcome.model_dump(mode="json")},
             )
         )
+        events.extend(exile_events)
+        events.extend(faction_events)
         return PhaseResult(
             phase="midday",
             events=events,
@@ -267,7 +277,7 @@ class SimulationEngine:
             crisis_severity=crisis_severity,
         )
         reflections = []
-        for agent in state.agents:
+        for agent in self._active_agents(state):
             reflection = f"{agent.name} ends the night feeling {self._night_mood(agent.suspicion_level, cooperation_ratio)}."
             agent.memory = self.agent_service.register_observation(
                 agent.memory,
@@ -410,6 +420,8 @@ class SimulationEngine:
             )
 
     def _meeting_proposal(self, state: SimulationState) -> str:
+        if any(agent.suspicion_level >= 70 for agent in self._active_agents(state)):
+            return "Hold an exile vote before the panic spreads any further"
         if state.world_state.threat_level > 50:
             return "Emergency rationing until the next dawn"
         if state.gm_plan and state.gm_plan.plan.crisis_event.type in {"social", "discovery"}:
@@ -447,11 +459,13 @@ class SimulationEngine:
                 for participant_id in outcome.participants:
                     if participant_id not in occupancy:
                         occupancy.append(participant_id)
+        if outcomes:
+            self._refresh_factions(state)
 
     def _apply_meeting_relationships(self, state: SimulationState, outcome: MeetingOutcome) -> None:
-        agents = {agent.agent_id: agent for agent in state.agents}
-        for source in state.agents:
-            for target in state.agents:
+        agents = {agent.agent_id: agent for agent in self._active_agents(state)}
+        for source in self._active_agents(state):
+            for target in self._active_agents(state):
                 if source.agent_id == target.agent_id:
                     continue
                 delta = self.social_service.relationship_delta_for_vote(
@@ -478,6 +492,221 @@ class SimulationEngine:
         for agent_id in agents:
             if agent_id not in hall:
                 hall.append(agent_id)
+        self._refresh_factions(state)
+
+    def _apply_exile_outcome(
+        self, state: SimulationState, outcome: MeetingOutcome
+    ) -> list[RoundEvent]:
+        if outcome.exile is None:
+            return []
+
+        events = [
+            RoundEvent(
+                phase="midday",
+                summary=(
+                    f"The room calls for a vote on exiling "
+                    f"{outcome.exile.target_agent_name or 'an unnamed suspect'}."
+                ),
+                data={"kind": "exile_vote", **outcome.exile.model_dump(mode="json")},
+            )
+        ]
+        if not outcome.exile.enacted or outcome.exile.target_agent_id is None:
+            return events
+
+        for agent in state.agents:
+            if agent.agent_id != outcome.exile.target_agent_id:
+                continue
+            agent.status = AgentStatus.EXILED
+            agent.location = "perimeter_fence"
+            agent.faction_id = None
+            agent.faction_role = None
+            break
+
+        state.exile_history.append(outcome.exile)
+        state.exile_history = state.exile_history[-12:]
+        self._refresh_factions(state)
+        events.append(
+            RoundEvent(
+                phase="midday",
+                summary=f"{outcome.exile.target_agent_name} is exiled by the town.",
+                data={"kind": "exile_enacted", **outcome.exile.model_dump(mode="json")},
+            )
+        )
+        return events
+
+    def _faction_events(self, state: SimulationState) -> list[RoundEvent]:
+        events: list[RoundEvent] = []
+        for faction in state.factions:
+            kind = "cult_activity" if faction.kind == "cult" else "faction_update"
+            summary = (
+                f"{faction.name} consolidates around {len(faction.member_ids)} members."
+                if faction.kind == "alliance"
+                else f"{faction.name} spreads its doctrine through {len(faction.member_ids)} adherents."
+            )
+            events.append(
+                RoundEvent(
+                    phase="midday",
+                    summary=summary,
+                    data={
+                        "kind": kind,
+                        "faction": faction.model_dump(mode="json"),
+                        "faction_kind": faction.kind,
+                    },
+                )
+            )
+        return events
+
+    def _refresh_factions(self, state: SimulationState) -> None:
+        active_agents = self._active_agents(state)
+        assigned: set[str] = set()
+        factions: list[FactionState] = []
+
+        for leader in sorted(active_agents, key=self._influence_score, reverse=True):
+            if leader.agent_id in assigned:
+                continue
+            if not self._is_cult_candidate(leader):
+                continue
+            members = [
+                agent.agent_id
+                for agent in active_agents
+                if agent.agent_id not in assigned and self._supports_leader(agent, leader)
+            ]
+            if len(members) < 2:
+                continue
+            faction = FactionState(
+                faction_id=f"cult:{leader.agent_id}",
+                name=f"{leader.name}'s Circle",
+                kind="cult",
+                leader_id=leader.agent_id,
+                member_ids=members,
+                doctrine=leader.goal.text,
+                influence=min(
+                    100.0,
+                    round(
+                        sum(
+                            self._influence_score(agent)
+                            for agent in active_agents
+                            if agent.agent_id in members
+                        )
+                        / len(members),
+                        2,
+                    ),
+                ),
+                formed_round=state.world_state.round_number,
+                pressure=min(100.0, round(leader.suspicion_level + len(members) * 6, 2)),
+            )
+            factions.append(faction)
+            assigned.update(members)
+
+        remaining = [agent for agent in active_agents if agent.agent_id not in assigned]
+        seen_components: set[str] = set()
+        for agent in remaining:
+            if agent.agent_id in seen_components:
+                continue
+            component = self._alliance_component(agent, remaining)
+            seen_components.update(member.agent_id for member in component)
+            if len(component) < 2:
+                continue
+            leader = max(component, key=self._influence_score)
+            member_ids = [member.agent_id for member in component]
+            influence = min(
+                100.0,
+                round(
+                    sum(self._influence_score(member) for member in component) / len(component), 2
+                ),
+            )
+            factions.append(
+                FactionState(
+                    faction_id=f"alliance:{leader.agent_id}",
+                    name=f"{leader.name}'s Bloc",
+                    kind="alliance",
+                    leader_id=leader.agent_id,
+                    member_ids=member_ids,
+                    doctrine=None,
+                    influence=influence,
+                    formed_round=state.world_state.round_number,
+                    pressure=min(100.0, round(influence + len(component) * 4, 2)),
+                )
+            )
+
+        state.factions = factions
+        for agent in state.agents:
+            agent.faction_id = None
+            agent.faction_role = None
+            agent.influence = round(self._influence_score(agent), 2)
+        faction_map = {
+            member_id: faction for faction in factions for member_id in faction.member_ids
+        }
+        for agent in state.agents:
+            agent_faction = faction_map.get(agent.agent_id)
+            if agent_faction is None:
+                continue
+            agent.faction_id = agent_faction.faction_id
+            agent.faction_role = "leader" if agent.agent_id == agent_faction.leader_id else "member"
+
+    def _is_cult_candidate(self, agent: EngineAgentState) -> bool:
+        return (
+            agent.goal.archetype == "belief_transformation"
+            or "devout" in agent.personality.trait_tags
+        )
+
+    def _supports_leader(self, agent: EngineAgentState, leader: EngineAgentState) -> bool:
+        if agent.agent_id == leader.agent_id:
+            return True
+        trust = agent.relationships.get(leader.agent_id)
+        return (
+            (trust is not None and trust.trust >= -2)
+            or agent.goal.archetype == "belief_transformation"
+            or "devout" in agent.personality.trait_tags
+        )
+
+    def _alliance_component(
+        self, seed: EngineAgentState, candidates: list[EngineAgentState]
+    ) -> list[EngineAgentState]:
+        agents = {agent.agent_id: agent for agent in candidates}
+        stack = [seed.agent_id]
+        visited: set[str] = set()
+        component: list[EngineAgentState] = []
+        while stack:
+            current_id = stack.pop()
+            if current_id in visited:
+                continue
+            visited.add(current_id)
+            current = agents[current_id]
+            component.append(current)
+            for other in candidates:
+                if other.agent_id in visited or other.agent_id == current_id:
+                    continue
+                if self._allied(current, other):
+                    stack.append(other.agent_id)
+        return component
+
+    def _allied(self, left: EngineAgentState, right: EngineAgentState) -> bool:
+        left_trust = left.relationships.get(right.agent_id)
+        right_trust = right.relationships.get(left.agent_id)
+        if left.goal.archetype == right.goal.archetype:
+            return True
+        return (left_trust is not None and left_trust.trust >= 1.0) or (
+            right_trust is not None and right_trust.trust >= 1.0
+        )
+
+    def _influence_score(self, agent: EngineAgentState) -> float:
+        return min(
+            100.0,
+            (agent.personality.axes.dominance * 0.4)
+            + (agent.personality.axes.loyalty * 0.15)
+            + (agent.personality.axes.ambition * 0.2)
+            + max(agent.suspicion_level, 20.0) * 0.25,
+        )
+
+    def _active_agents(self, state: SimulationState) -> list[EngineAgentState]:
+        return [agent for agent in state.agents if agent.status != "exiled"]
+
+    def _update_experiment_status(self, state: SimulationState) -> None:
+        if state.world_state.threat_level >= 100:
+            state.status = "collapsed"
+        elif state.current_round >= state.total_rounds:
+            state.status = "completed"
 
     def _conversation_events(
         self, phase: PhaseName, outcome: ConversationOutcome
@@ -526,6 +755,9 @@ class SimulationEngine:
                     "trade",
                     "rest",
                     "observe",
+                    "pray",
+                    "rally",
+                    "mourn",
                 }:
                     cooperative += 1
         if total == 0:

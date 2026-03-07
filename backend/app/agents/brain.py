@@ -51,6 +51,7 @@ class AgentBrain:
             ],
             response_format=AgentDecision,
             metadata={
+                "experiment_id": context.experiment_id,
                 "agent_id": context.agent_id,
                 "round_number": context.world_state.round_number,
             },

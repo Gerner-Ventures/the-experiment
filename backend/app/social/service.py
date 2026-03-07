@@ -7,6 +7,9 @@ from app.engine.models import (
     ConversationOutcome,
     ConversationTurn,
     EngineAgentState,
+    ExileOutcome,
+    ExileVote,
+    ExileVoteChoice,
     MeetingOutcome,
     MeetingStance,
     MeetingSpeech,
@@ -51,8 +54,9 @@ class SocialService:
     def run_meeting(self, state: SimulationState, *, proposal: str) -> MeetingOutcome:
         speeches: list[MeetingSpeech] = []
         vote_records: list[MeetingVote] = []
+        active_agents = [agent for agent in state.agents if agent.status != "exiled"]
 
-        for agent in state.agents:
+        for agent in active_agents:
             stance = self._meeting_stance(agent, state)
             speeches.append(
                 MeetingSpeech(
@@ -72,11 +76,18 @@ class SocialService:
             "abstain": sum(1 for record in vote_records if record.vote == "abstain"),
         }
         passed = tally["support"] > tally["oppose"]
+        exile = self._run_exile_vote(state, active_agents)
+        faction_pressures = self._faction_pressures(state)
         summary = (
             f"The town meeting {'backs' if passed else 'rejects'} '{proposal}' "
             f"with {tally['support']} support, {tally['oppose']} opposition, "
             f"and {tally['abstain']} abstentions."
         )
+        if exile is not None and exile.target_agent_name is not None:
+            summary = (
+                f"{summary} The room turns on {exile.target_agent_name} and "
+                f"{'banishes them.' if exile.enacted else 'fails to reach exile.'}"
+            )
         return MeetingOutcome(
             proposal=proposal,
             speeches=speeches,
@@ -85,6 +96,8 @@ class SocialService:
             tally=tally,
             passed=passed,
             summary=summary,
+            exile=exile,
+            faction_pressures=faction_pressures,
         )
 
     def conversation_trust_delta(
@@ -178,6 +191,8 @@ class SocialService:
 
     def _meeting_stance(self, agent: EngineAgentState, state: SimulationState) -> MeetingStance:
         crisis_type = state.gm_plan.plan.crisis_event.type if state.gm_plan else "resource"
+        if agent.faction_role == "leader" and agent.faction_id:
+            return "support" if agent.goal.archetype != "social_disruption" else "oppose"
         if agent.personality.axes.loyalty >= 65 or agent.goal.archetype == "communal_survival":
             return "support"
         if agent.personality.axes.paranoia >= 70 or crisis_type in {"social", "discovery"}:
@@ -194,13 +209,21 @@ class SocialService:
         state: SimulationState,
     ) -> str:
         crisis = state.gm_plan.plan.crisis_event.description if state.gm_plan else "the crisis"
+        faction_line = self._faction_line(agent, state)
         if stance == "support":
-            return f"{agent.name} argues that '{proposal}' is the cleanest way to answer {crisis.lower()}."
+            return (
+                f"{agent.name} argues that '{proposal}' is the cleanest way to answer "
+                f"{crisis.lower()}. {faction_line}"
+            ).strip()
         if stance == "oppose":
             return (
-                f"{agent.name} rejects '{proposal}', warning it will only harden the town's panic."
+                f"{agent.name} rejects '{proposal}', warning it will only harden the town's panic. "
+                f"{faction_line}"
             )
-        return f"{agent.name} hedges on '{proposal}', asking who will carry the cost if it fails."
+        return (
+            f"{agent.name} hedges on '{proposal}', asking who will carry the cost if it fails. "
+            f"{faction_line}"
+        )
 
     def _meeting_vote(
         self,
@@ -223,3 +246,118 @@ class SocialService:
             vote=vote,
             rationale=rationale,
         )
+
+    def _run_exile_vote(
+        self,
+        state: SimulationState,
+        active_agents: list[EngineAgentState],
+    ) -> ExileOutcome | None:
+        target = self._select_exile_target(active_agents)
+        if target is None:
+            return None
+
+        vote_records: list[ExileVote] = []
+        for agent in active_agents:
+            vote_records.append(self._exile_vote(agent, target, state))
+
+        tally = {
+            "banish": sum(1 for record in vote_records if record.vote == "banish"),
+            "protect": sum(1 for record in vote_records if record.vote == "protect"),
+            "abstain": sum(1 for record in vote_records if record.vote == "abstain"),
+        }
+        enacted = tally["banish"] > tally["protect"] and tally["banish"] >= max(
+            2, len(active_agents) // 2
+        )
+        return ExileOutcome(
+            round_number=state.world_state.round_number,
+            target_agent_id=target.agent_id,
+            target_agent_name=target.name,
+            votes={record.agent_id: record.vote for record in vote_records},
+            vote_rationales={record.agent_id: record.rationale for record in vote_records},
+            tally=tally,
+            enacted=enacted,
+            reason=(
+                f"{target.name} drew concentrated suspicion and became the focus of a banishment vote."
+            ),
+        )
+
+    def _select_exile_target(
+        self, active_agents: list[EngineAgentState]
+    ) -> EngineAgentState | None:
+        candidates = [agent for agent in active_agents if agent.suspicion_level >= 55]
+        if not candidates:
+            cult_leaders = [
+                agent
+                for agent in active_agents
+                if agent.faction_role == "leader"
+                and agent.faction_id
+                and agent.suspicion_level >= 45
+            ]
+            candidates = cult_leaders
+        if not candidates:
+            return None
+        return max(candidates, key=lambda agent: (agent.suspicion_level, agent.influence))
+
+    def _exile_vote(
+        self,
+        agent: EngineAgentState,
+        target: EngineAgentState,
+        state: SimulationState,
+    ) -> ExileVote:
+        vote: ExileVoteChoice
+        if agent.agent_id == target.agent_id:
+            vote = "protect"
+            rationale = f"{agent.name} fights exile when their own name is on the block."
+        elif target.suspicion_level >= 80:
+            vote = "banish"
+            rationale = (
+                f"{agent.name} decides {target.name}'s instability is too dangerous to ignore."
+            )
+        elif agent.faction_id and agent.faction_id == target.faction_id:
+            vote = "protect"
+            rationale = f"{agent.name} closes ranks with {target.name}'s faction."
+        elif agent.personality.axes.paranoia >= 65 or target.suspicion_level >= 70:
+            vote = "banish"
+            rationale = f"{agent.name} sees exile as the only way to contain {target.name}."
+        elif (
+            agent.goal.archetype == "belief_transformation"
+            and target.faction_id != agent.faction_id
+        ):
+            vote = "banish"
+            rationale = f"{agent.name} treats dissent around {target.name} as a threat to belief."
+        else:
+            vote = "abstain" if state.world_state.threat_level < 50 else "banish"
+            rationale = f"{agent.name} {vote}s after weighing the town's escalating fear."
+
+        return ExileVote(
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
+            vote=vote,
+            rationale=rationale,
+        )
+
+    def _faction_pressures(self, state: SimulationState) -> list[str]:
+        pressures: list[str] = []
+        for faction in state.factions:
+            if faction.kind == "cult":
+                pressures.append(
+                    f"{faction.name} pushes doctrine '{faction.doctrine or 'obedience'}' through the meeting."
+                )
+            else:
+                pressures.append(f"{faction.name} coordinates its members behind the scenes.")
+        return pressures
+
+    def _faction_line(self, agent: EngineAgentState, state: SimulationState) -> str:
+        if not agent.faction_id:
+            return ""
+        faction = next(
+            (item for item in state.factions if item.faction_id == agent.faction_id),
+            None,
+        )
+        if faction is None:
+            return ""
+        if faction.kind == "cult":
+            return f"They frame everything through {faction.name}'s doctrine."
+        if agent.faction_role == "leader":
+            return f"They are clearly steering {faction.name}."
+        return f"They glance toward {faction.name} before committing."

@@ -13,6 +13,23 @@ class UsageTracker:
     def all_records(self) -> list[UsageRecord]:
         return list(self._records)
 
+    def list_records(
+        self,
+        *,
+        experiment_id: str | None = None,
+        round_number: int | None = None,
+        agent_id: str | None = None,
+        role: str | None = None,
+    ) -> list[UsageRecord]:
+        return [
+            record
+            for record in self._records
+            if (experiment_id is None or record.experiment_id == experiment_id)
+            and (round_number is None or record.round_number == round_number)
+            and (agent_id is None or record.agent_id == agent_id)
+            and (role is None or record.role == role)
+        ]
+
     def summarize(
         self,
         *,
@@ -21,13 +38,11 @@ class UsageTracker:
         agent_id: str | None = None,
     ) -> UsageSummary:
         summary = UsageSummary()
-        for record in self._records:
-            if experiment_id is not None and record.experiment_id != experiment_id:
-                continue
-            if round_number is not None and record.round_number != round_number:
-                continue
-            if agent_id is not None and record.agent_id != agent_id:
-                continue
+        for record in self.list_records(
+            experiment_id=experiment_id,
+            round_number=round_number,
+            agent_id=agent_id,
+        ):
             summary.request_count += 1
             summary.prompt_tokens += record.usage.prompt_tokens
             summary.completion_tokens += record.usage.completion_tokens
