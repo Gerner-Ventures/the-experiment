@@ -30,7 +30,7 @@ Important behavior:
 
 - `POST /api/experiments/{id}/step` will move an experiment from `setup` to `running` automatically.
 - The current implementation does not block `step` on prior manual GM approval. If you want to inspect or replace the upcoming GM plan, do it before calling `step`.
-- Experiment state, GM plans, event logs, round snapshots, faction state, and exile history are persisted through the store boundary.
+- Experiment state, GM plans, event logs, round snapshots, faction state, exile history, and sacrifice history are persisted through the store boundary.
 - The WebSocket stream is server-push only. Control actions still go through REST.
 
 ## Typical Flow
@@ -112,10 +112,11 @@ curl -X POST http://localhost:8000/api/experiments \
 Selected response fields:
 
 - `world_state`: current resources, threat, round number, and location occupancy
-- `agents`: full agent state including memory, relationships, faction assignment, and influence
+- `agents`: full agent state including memory, relationships, faction assignment, influence, and terminal metadata like `death_round`/`death_cause`
 - `gm_plan`: current plan record for the upcoming or most recently applied round
 - `factions`: current alliance/cult state
 - `exile_history`: prior exile outcomes
+- `sacrifice_history`: prior ritual self-sacrifice outcomes
 
 ## GM Plan Flow
 

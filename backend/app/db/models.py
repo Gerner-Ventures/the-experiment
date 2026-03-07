@@ -27,6 +27,7 @@ class AgentStatus(str, enum.Enum):
     MOVING = "moving"
     WORKING = "working"
     SNEAKING = "sneaking"
+    DEAD = "dead"
     EXILED = "exiled"
 
 
@@ -79,6 +80,9 @@ class Experiment(TimestampMixin, Base):
     recent_events: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     factions: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
     exile_history: Mapped[list[dict[str, Any]]] = mapped_column(JSON, nullable=False, default=list)
+    sacrifice_history: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
 
     arc: Mapped[Arc | None] = relationship(
         back_populates="experiment",
@@ -178,6 +182,8 @@ class Agent(TimestampMixin, Base):
     faction_id: Mapped[str | None] = mapped_column(String(255))
     faction_role: Mapped[str | None] = mapped_column(String(32))
     influence: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    death_round: Mapped[int | None] = mapped_column(Integer)
+    death_cause: Mapped[str | None] = mapped_column(String(100))
 
     experiment: Mapped[Experiment] = relationship(back_populates="agents")
 

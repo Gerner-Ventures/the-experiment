@@ -23,6 +23,7 @@ MeetingStance = Literal["support", "oppose", "hesitant"]
 MeetingVoteChoice = Literal["support", "oppose", "abstain"]
 ExileVoteChoice = Literal["banish", "protect", "abstain"]
 FactionKind = Literal["alliance", "cult"]
+TerminalActionType = Literal["self_sacrifice"]
 ActionResolutionOutcome = Literal[
     "resolved",
     "blocked",
@@ -55,6 +56,8 @@ class EngineAgentState(EngineModel):
     faction_id: str | None = None
     faction_role: Literal["leader", "member"] | None = None
     influence: float = Field(default=0, ge=0, le=100)
+    death_round: int | None = Field(default=None, ge=0)
+    death_cause: str | None = Field(default=None, max_length=100)
 
 
 class ConflictRecord(EngineModel):
@@ -94,6 +97,7 @@ class SimulationState(EngineModel):
     gm_plan: GMPlanRecord | None = None
     factions: list["FactionState"] = Field(default_factory=list)
     exile_history: list["ExileOutcome"] = Field(default_factory=list)
+    sacrifice_history: list["SacrificeOutcome"] = Field(default_factory=list)
 
 
 class RoundResult(EngineModel):
@@ -171,6 +175,18 @@ class ExileOutcome(EngineModel):
     tally: dict[str, int] = Field(default_factory=dict)
     enacted: bool = False
     reason: str | None = None
+
+
+class SacrificeOutcome(EngineModel):
+    round_number: int = Field(ge=0)
+    agent_id: str
+    agent_name: str
+    location: str
+    action_type: TerminalActionType
+    reason: str
+    threat_delta: float = 0.0
+    resource_effects: dict[str, float] = Field(default_factory=dict)
+    affected_agent_ids: list[str] = Field(default_factory=list)
 
 
 class FactionState(EngineModel):

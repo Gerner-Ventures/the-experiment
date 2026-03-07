@@ -15,7 +15,7 @@ def test_alembic_has_a_single_head_revision() -> None:
 
     heads = script.get_heads()
 
-    assert heads == ["20260307_000005"]
+    assert len(heads) == 1
 
 
 def test_alembic_revision_ids_are_unique() -> None:

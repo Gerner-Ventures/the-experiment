@@ -18,6 +18,7 @@ That object is the source of truth for:
 - GM plan for the current or next round
 - unresolved plotlines and recent events
 - faction and exile history
+- sacrifice history
 
 ## State Model
 
@@ -38,6 +39,7 @@ Key fields:
 - `gm_plan`
 - `factions`
 - `exile_history`
+- `sacrifice_history`
 
 Code reference:
 
@@ -83,6 +85,7 @@ Important runtime fields:
 - `suspicion_level`
 - `faction_id`, `faction_role`
 - `influence`
+- `death_round`, `death_cause`
 
 Suspicion is per-agent, not global.
 
@@ -106,6 +109,7 @@ Current state is stored primarily in the `experiments` row:
 - `recent_events`
 - `factions`
 - `exile_history`
+- `sacrifice_history`
 
 Agent runtime state is stored in `agents` rows, including:
 
@@ -114,6 +118,8 @@ Agent runtime state is stored in `agents` rows, including:
 - relationships JSON
 - suspicion
 - location and status
+- faction role/influence
+- death metadata for terminal outcomes
 
 GM plans are stored in `gm_plans`.
 
@@ -194,6 +200,10 @@ The chosen action updates agent state immediately:
 - suspicion
 - location
 
+If an action resolves as `self_sacrifice`, the engine marks the agent `dead`, records a
+terminal event, appends a `sacrifice_history` entry, and removes the agent from future
+action/meeting/night-active sets.
+
 Actions are then resolved in groups by `(location, action_type)`.
 
 ### 4. Midday
@@ -208,7 +218,7 @@ This phase currently handles:
 - meeting summary
 - relationship changes based on voting alignment
 
-All active agents are added to `town_hall` occupancy.
+Only active agents participate. Dead or exiled agents are excluded from the meeting flow.
 
 ### 5. Afternoon
 
@@ -249,6 +259,7 @@ Agent actions can also modify shared resources:
 - `repair`: decreases materials, increases power
 - `hoard`: decreases shared food
 - `sabotage`: decreases power
+- `self_sacrifice`: increases food and materials, decreases threat, and removes the actor from future active play
 
 Conflicts on the same action/location can produce winner-based resolution with a small chaotic bonus for winners.
 

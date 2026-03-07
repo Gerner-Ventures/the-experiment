@@ -7,7 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.agents.models import PersonalityProfile, SecretGoal
 from app.db.models import AgentStatus
-from app.engine.models import EngineAgentState, ExileOutcome, FactionKind, FactionState, RoundResult
+from app.engine.models import (
+    EngineAgentState,
+    ExileOutcome,
+    FactionKind,
+    FactionState,
+    RoundResult,
+    SacrificeOutcome,
+)
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord
 from app.llm.models import UsageRecord, UsageSummary
 
@@ -59,6 +66,7 @@ class ExperimentDetail(APIRequestModel):
     unresolved_plotlines: list[str] = Field(default_factory=list)
     factions: list[FactionState] = Field(default_factory=list)
     exile_history: list[ExileOutcome] = Field(default_factory=list)
+    sacrifice_history: list[SacrificeOutcome] = Field(default_factory=list)
 
 
 class ObserverEventRequest(APIRequestModel):

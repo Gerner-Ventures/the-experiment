@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import cast
+from typing import cast, get_args
 
 from app.agents.brain import AgentBrain
 from app.agents.models import (
@@ -15,11 +15,14 @@ from app.agents.models import (
 )
 from app.agents.memory import add_key_memory, append_recent_event
 from app.agents.suspicion import apply_suspicion_trigger
+from app.engine.models import TerminalActionType
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType, Dialogue
 
 # Weighted by personality
 COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
 SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
+TERMINAL_ACTIONS = get_args(TerminalActionType)
+NON_TERMINAL_ACTIONS = tuple(action for action in ACTION_TYPES if action not in TERMINAL_ACTIONS)
 
 LOCATIONS = (
     "town_square",
@@ -59,7 +62,7 @@ class MockAgentBrain(AgentBrain):
         elif rng.random() < selfish_weight * 0.5:
             action_type = cast(DecisionActionType, rng.choice(SELFISH_ACTIONS))
         else:
-            action_type = rng.choice(ACTION_TYPES)
+            action_type = rng.choice(NON_TERMINAL_ACTIONS)
 
         location = rng.choice(LOCATIONS)
 
