@@ -5,7 +5,7 @@ import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal, TypedDict, cast
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
@@ -63,6 +63,15 @@ GOAL_ACHIEVED_KEYWORDS = ("achieved", "completed", "fulfilled", "succeeded", "es
 GOAL_FAILED_KEYWORDS = ("no progress", "failed", "stalled", "blocked", "lost", "setback")
 GOAL_PARTIAL_KEYWORDS = ("closer", "progress", "holding", "step", "movement", "advance")
 logger = logging.getLogger(__name__)
+
+
+class CooperationMetrics(TypedDict):
+    score: float
+    cooperative_actions: int
+    total_actions: int
+
+
+GoalOutcome = Literal["achieved", "partial", "failed", "unknown"]
 
 
 class ConnectionManager:
@@ -418,9 +427,15 @@ class ExperimentRuntime:
                 history.append(
                     AgentGoalProgress(
                         round_number=round_number,
-                        phase=goal_record.get("phase") if isinstance(goal_record.get("phase"), str) else None,
-                        requested_action_type=str(goal_record.get("requested_action_type", "observe")),
-                        resolved_action_type=str(goal_record.get("resolved_action_type", "observe")),
+                        phase=goal_record.get("phase")
+                        if isinstance(goal_record.get("phase"), str)
+                        else None,
+                        requested_action_type=str(
+                            goal_record.get("requested_action_type", "observe")
+                        ),
+                        resolved_action_type=str(
+                            goal_record.get("resolved_action_type", "observe")
+                        ),
                         cooperation_intent=str(goal_record.get("cooperation_intent", "none")),
                         progress=progress,
                         summary=str(goal_record.get("summary", progress)),
@@ -434,7 +449,9 @@ class ExperimentRuntime:
                     goal_text=agent.goal.text,
                     goal_archetype=agent.goal.archetype,
                     status=self._status_value(agent.status),
-                    outcome=self._goal_outcome(self._status_value(agent.status), latest_progress, history),
+                    outcome=self._goal_outcome(
+                        self._status_value(agent.status), latest_progress, history
+                    ),
                     latest_progress=latest_progress,
                     progress_history=history,
                 )
@@ -450,40 +467,43 @@ class ExperimentRuntime:
             if item.type == "agent_action":
                 requested_action = self._requested_action_type(item)
                 resolved_action = self._resolved_action_type(item)
-                if requested_action in SABOTAGE_ACTION_TYPES or resolved_action in SABOTAGE_ACTION_TYPES:
+                agent_id = item.agent_id or self._string_or(item.data.get("agent_id"))
+                agent_name = agent_names.get(
+                    agent_id,
+                    self._string_or(item.data.get("agent_name")),
+                )
+                if (
+                    requested_action in SABOTAGE_ACTION_TYPES
+                    or resolved_action in SABOTAGE_ACTION_TYPES
+                ):
                     items.append(
                         BetrayalTimelineItem(
                             round_number=item.round_number or 0,
                             phase=item.phase,
                             category="sabotage",
                             summary=item.summary,
-                            agent_id=item.agent_id or self._string_value(item.data.get("agent_id")),
-                            agent_name=agent_names.get(
-                                item.agent_id or self._string_value(item.data.get("agent_id"), default=""),
-                                self._string_value(item.data.get("agent_name")),
-                            ),
+                            agent_id=agent_id or None,
+                            agent_name=agent_name,
                             requested_action_type=requested_action,
                             resolved_action_type=resolved_action,
                             resolved=resolved_action in SABOTAGE_ACTION_TYPES,
                         )
                     )
-                elif requested_action in HOSTILE_ACTION_TYPES or resolved_action in HOSTILE_ACTION_TYPES:
+                elif (
+                    requested_action in HOSTILE_ACTION_TYPES
+                    or resolved_action in HOSTILE_ACTION_TYPES
+                ):
+                    target_agent_id = self._string_value(item.data.get("target"))
                     items.append(
                         BetrayalTimelineItem(
                             round_number=item.round_number or 0,
                             phase=item.phase,
                             category="hostile_action",
                             summary=item.summary,
-                            agent_id=item.agent_id or self._string_value(item.data.get("agent_id")),
-                            agent_name=agent_names.get(
-                                item.agent_id or self._string_value(item.data.get("agent_id"), default=""),
-                                self._string_value(item.data.get("agent_name")),
-                            ),
-                            target_agent_id=self._string_value(item.data.get("target")),
-                            target_agent_name=agent_names.get(
-                                self._string_value(item.data.get("target"), default=""),
-                                None,
-                            ),
+                            agent_id=agent_id or None,
+                            agent_name=agent_name,
+                            target_agent_id=target_agent_id,
+                            target_agent_name=agent_names.get(target_agent_id or ""),
                             requested_action_type=requested_action,
                             resolved_action_type=resolved_action,
                             resolved=resolved_action in HOSTILE_ACTION_TYPES,
@@ -522,7 +542,11 @@ class ExperimentRuntime:
                 )
         return sorted(
             items,
-            key=lambda entry: (entry.round_number, self._phase_sort_key(entry.phase), entry.summary),
+            key=lambda entry: (
+                entry.round_number,
+                self._phase_sort_key(entry.phase),
+                entry.summary,
+            ),
         )
 
     async def get_suspicion_analytics(self, experiment_id: str) -> SuspicionAnalytics:
@@ -531,8 +555,8 @@ class ExperimentRuntime:
         grouped: defaultdict[str, list[SuspicionPoint]] = defaultdict(list)
         for round_number, data in sorted(round_summaries.items()):
             for entry in self._suspicion_data(data):
-                agent_id = self._string_value(entry.get("agent_id"))
-                agent_name = self._string_value(entry.get("agent_name"))
+                agent_id = self._string_or(entry.get("agent_id"))
+                agent_name = self._string_or(entry.get("agent_name"))
                 point = SuspicionPoint(
                     round_number=round_number,
                     agent_id=agent_id,
@@ -562,8 +586,9 @@ class ExperimentRuntime:
             current_members: dict[str, set[str]] = {}
             current_names: dict[str, str] = {}
             for entry in self._faction_data(data):
-                faction_id = self._string_value(entry.get("faction_id"))
-                faction_name = self._string_value(entry.get("name"))
+                faction_id = self._string_or(entry.get("faction_id"))
+                faction_name = self._string_or(entry.get("name"))
+                faction_kind = self._string_or(entry.get("kind"))
                 members = {str(member_id) for member_id in entry.get("member_ids", [])}
                 current_members[faction_id] = members
                 current_names[faction_id] = faction_name
@@ -572,7 +597,7 @@ class ExperimentRuntime:
                         round_number=round_number,
                         faction_id=faction_id,
                         faction_name=faction_name,
-                        kind=self._string_value(entry.get("kind")),
+                        kind=faction_kind,
                         pressure=self._float_value(entry.get("pressure")),
                         influence=self._float_value(entry.get("influence")),
                         member_ids=sorted(members),
@@ -615,8 +640,8 @@ class ExperimentRuntime:
         return [
             GMRoundTimelineItem(
                 round_number=round_number,
-                round_theme=self._string_value(data.get("gm", {}).get("round_theme")),
-                narration=self._string_value(data.get("gm", {}).get("narration")),
+                round_theme=self._string_or(data.get("gm", {}).get("round_theme")),
+                narration=self._string_or(data.get("gm", {}).get("narration")),
                 crisis_event=self._crisis_event_data(data),
             )
             for round_number, data in sorted(round_summaries.items())
@@ -689,10 +714,8 @@ class ExperimentRuntime:
                     betrayal_count=int(round_summary.get("betrayal_count", 0)),
                     sabotage_count=int(round_summary.get("sabotage_count", 0)),
                     resources=self._resource_data(round_summary),
-                    gm_round_theme=self._string_value(
-                        round_summary.get("gm", {}).get("round_theme")
-                    ),
-                    gm_narration=self._string_value(round_summary.get("gm", {}).get("narration")),
+                    gm_round_theme=self._string_or(round_summary.get("gm", {}).get("round_theme")),
+                    gm_narration=self._string_or(round_summary.get("gm", {}).get("narration")),
                 )
             )
         return ReplayIndex(rounds=rounds, highlights=await self.get_highlights(experiment_id))
@@ -1022,7 +1045,10 @@ class ExperimentRuntime:
         if item.type == "agent_action":
             requested_action = self._requested_action_type(item)
             resolved_action = self._resolved_action_type(item)
-            if requested_action in SABOTAGE_ACTION_TYPES or resolved_action in SABOTAGE_ACTION_TYPES:
+            if (
+                requested_action in SABOTAGE_ACTION_TYPES
+                or resolved_action in SABOTAGE_ACTION_TYPES
+            ):
                 return 8.0 if resolved_action in SABOTAGE_ACTION_TYPES else 5.0
             if requested_action in HOSTILE_ACTION_TYPES or resolved_action in HOSTILE_ACTION_TYPES:
                 return 6.5 if resolved_action in HOSTILE_ACTION_TYPES else 4.0
@@ -1147,12 +1173,16 @@ class ExperimentRuntime:
         await self._log(
             experiment_id,
             event_type="round_end",
-            summary=str(round_summary.get("summary", f"Round {round_result.round_number} concluded.")),
+            summary=str(
+                round_summary.get("summary", f"Round {round_result.round_number} concluded.")
+            ),
             round_number=round_result.round_number,
             data=round_summary,
         )
 
-    def _build_round_summary(self, state: SimulationState, round_result: RoundResult) -> dict[str, Any]:
+    def _build_round_summary(
+        self, state: SimulationState, round_result: RoundResult
+    ) -> dict[str, Any]:
         total_actions = len(round_result.action_resolutions)
         cooperative_actions = sum(
             1
@@ -1179,7 +1209,8 @@ class ExperimentRuntime:
         )
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
         latest_actions = {
-            action.agent_id: action.model_dump(mode="json") for action in round_result.action_resolutions
+            action.agent_id: action.model_dump(mode="json")
+            for action in round_result.action_resolutions
         }
         return {
             "summary": (
@@ -1242,7 +1273,7 @@ class ExperimentRuntime:
             summaries[item.round_number] = item.data
         return summaries
 
-    def _cooperation_data(self, data: dict[str, Any]) -> dict[str, int | float]:
+    def _cooperation_data(self, data: dict[str, Any]) -> CooperationMetrics:
         cooperation = data.get("cooperation", {})
         if isinstance(cooperation, dict):
             return {
@@ -1269,7 +1300,7 @@ class ExperimentRuntime:
     def _crisis_event_data(self, data: dict[str, Any]) -> dict[str, Any]:
         gm = data.get("gm", {})
         if isinstance(gm, dict) and isinstance(gm.get("crisis_event"), dict):
-            return gm["crisis_event"]
+            return cast(dict[str, Any], gm["crisis_event"])
         return {}
 
     def _resource_data(self, data: dict[str, Any]) -> dict[str, float]:
@@ -1337,7 +1368,7 @@ class ExperimentRuntime:
         status: str,
         latest_progress: str | None,
         history: list[AgentGoalProgress],
-    ) -> str:
+    ) -> GoalOutcome:
         progress_text = (latest_progress or "").lower()
         if any(keyword in progress_text for keyword in GOAL_ACHIEVED_KEYWORDS):
             return "achieved"
@@ -1348,6 +1379,11 @@ class ExperimentRuntime:
         return "unknown"
 
     def _string_value(self, value: object, *, default: str | None = None) -> str | None:
+        if isinstance(value, str):
+            return value
+        return default
+
+    def _string_or(self, value: object, default: str = "") -> str:
         if isinstance(value, str):
             return value
         return default

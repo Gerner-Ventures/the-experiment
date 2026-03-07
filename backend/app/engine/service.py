@@ -4,7 +4,7 @@ import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from random import Random
-from typing import cast
+from typing import Literal, cast
 
 from app.agents.memory import append_recent_event
 from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
@@ -13,6 +13,7 @@ from app.agents.service import AgentService
 from app.db.models import AgentStatus
 from app.engine.models import (
     ActionResolution,
+    ActionResolutionOutcome,
     ConflictRecord,
     ConversationOutcome,
     EngineAgentState,
@@ -233,7 +234,7 @@ class SimulationEngine:
         self,
         state: SimulationState,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         actions_per_agent: int,
     ) -> tuple[PhaseResult, dict[str, list[AgentTurnResult]], list[ActionResolution]]:
         all_turns: dict[str, list[AgentTurnResult]] = {}
@@ -397,7 +398,7 @@ class SimulationEngine:
         self,
         state: SimulationState,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         actions: list[PreparedAction],
     ) -> tuple[PhaseResult, list[ActionResolution]]:
         grouped: dict[tuple[str, str], list[PreparedAction]] = {}
@@ -537,11 +538,11 @@ class SimulationEngine:
     def _action_resolution(
         self,
         *,
-        phase: PhaseName,
+        phase: Literal["morning", "afternoon"],
         prepared: PreparedAction,
         resolved_action_type: str,
         summary: str,
-        outcome: str,
+        outcome: ActionResolutionOutcome,
     ) -> ActionResolution:
         dialogue_target = (
             prepared.turn.decision.dialogue.target if prepared.turn.decision.dialogue else None
@@ -562,7 +563,7 @@ class SimulationEngine:
             suspicion_level=prepared.agent.suspicion_level,
         )
 
-    def _action_outcome(self, prepared: PreparedAction) -> str:
+    def _action_outcome(self, prepared: PreparedAction) -> ActionResolutionOutcome:
         requested_action = prepared.turn.decision.action.type
         if requested_action == prepared.action_type:
             return "resolved"
