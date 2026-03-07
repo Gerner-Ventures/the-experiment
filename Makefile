@@ -107,7 +107,7 @@ test-frontend: ## Run frontend type-check
 
 ##@ Linting & Formatting
 
-.PHONY: lint lint-backend lint-frontend format format-backend format-frontend check
+.PHONY: lint lint-backend lint-frontend format format-backend format-frontend check build-frontend
 
 lint: lint-backend lint-frontend ## Run all linters
 
@@ -123,9 +123,12 @@ format-backend: ## Auto-format backend (ruff)
 	cd backend && poetry run ruff format . && poetry run ruff check --fix .
 
 format-frontend: ## Auto-format frontend (ESLint --fix)
-	cd frontend && npx eslint --fix src/
+	cd frontend && npx eslint --fix .
 
-check: lint test ## Run all linters and tests (CI parity)
+check: lint test build-frontend helm-lint ## Run all checks (CI parity)
+
+build-frontend: ## Build frontend for production
+	cd frontend && npm run build
 
 # ============================================================================
 # Database
