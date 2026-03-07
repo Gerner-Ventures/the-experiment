@@ -46,6 +46,7 @@ runtime.engine.agent_service = _StubAgentService()
 @pytest.fixture(autouse=True)
 def reset_runtime_store() -> None:
     runtime.store = InMemoryExperimentStore()
+    runtime.connection_manager.connections.clear()
     runtime.gm_service.llm_service.client.tracker = UsageTracker()
     runtime.engine.gm_service.llm_service.client.tracker = UsageTracker()
 

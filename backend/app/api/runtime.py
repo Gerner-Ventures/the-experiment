@@ -8,6 +8,7 @@ from typing import Any
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
+from starlette.websockets import WebSocketState
 
 from app.agents.models import AgentMemoryState
 from app.api.models import (
@@ -43,14 +44,29 @@ class ConnectionManager:
         self.connections[experiment_id].add(websocket)
 
     def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
-        self.connections[experiment_id].discard(websocket)
+        sockets = self.connections.get(experiment_id)
+        if sockets is None:
+            return
+        sockets.discard(websocket)
+        if not sockets:
+            self.connections.pop(experiment_id, None)
 
     async def broadcast(self, experiment_id: str, payload: dict[str, Any]) -> None:
-        sockets = list(self.connections[experiment_id])
+        sockets = list(self.connections.get(experiment_id, ()))
         if not sockets:
             return
+        encoded_payload = jsonable_encoder(payload)
+        dead_sockets: list[WebSocket] = []
         for socket in sockets:
-            await socket.send_json(jsonable_encoder(payload))
+            try:
+                if socket.client_state == WebSocketState.CONNECTED:
+                    await socket.send_json(encoded_payload)
+                else:
+                    dead_sockets.append(socket)
+            except Exception:
+                dead_sockets.append(socket)
+        for socket in dead_sockets:
+            self.disconnect(experiment_id, socket)
 
 
 class ExperimentRuntime:
