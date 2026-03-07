@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2
     llm_default_temperature: float = 0.8
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str | None = None
+
+    @property
+    def langfuse_enabled(self) -> bool:
+        return self.langfuse_public_key is not None and self.langfuse_secret_key is not None
 
     @field_validator("cors_origins", mode="before")
     @classmethod
