@@ -19,6 +19,7 @@ export default {
     header: 'Experiment Configuration',
     subjectsReady: '{ready}/{total} SUBJECTS READY',
     launchExperiment: 'Launch Experiment',
+    creating: 'Creating...',
   },
 
   agents: {

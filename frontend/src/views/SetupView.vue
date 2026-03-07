@@ -213,7 +213,7 @@ async function beginExperiment() {
               @click="beginExperiment"
             >
               <template #icon><ThunderboltOutlined /></template>
-              {{ isCreating ? 'Creating...' : locale.setup.launchExperiment }}
+              {{ isCreating ? locale.setup.creating : locale.setup.launchExperiment }}
             </Button>
           </Space>
         </header>

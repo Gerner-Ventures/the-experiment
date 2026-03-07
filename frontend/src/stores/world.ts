@@ -20,6 +20,10 @@ export const useWorldStore = defineStore('world', () => {
 
   const isCollapsing = computed(() => threatLevel.value >= 80)
 
+  function setThreatLevel(level: number) {
+    threatLevel.value = level
+  }
+
   function setResources(r: Resources) {
     resources.value = r
   }
@@ -63,7 +67,7 @@ export const useWorldStore = defineStore('world', () => {
   return {
     resources, threatLevel, currentPhase, activeCrisis,
     threatColor, isCollapsing,
-    setResources, onResourceUpdate, onThreatUpdate, onCrisis, onPhaseChange,
+    setResources, setThreatLevel, onResourceUpdate, onThreatUpdate, onCrisis, onPhaseChange,
     $reset,
   }
 })

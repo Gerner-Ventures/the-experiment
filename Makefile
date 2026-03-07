@@ -1,5 +1,13 @@
 .DEFAULT_GOAL := help
 
+# Neon config
+NEON_PROJECT_ID := aged-salad-35688646
+NEON_ORG_ID := org-jolly-haze-41433858
+NEON_PARENT_BRANCH := main
+NEON_DB_NAME := neondb
+NEON_ROLE := neondb_owner
+BRANCH_NAME ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+
 # ============================================================================
 # Help
 # ============================================================================
@@ -39,11 +47,11 @@ env: ## Copy .env.example to backend/.env if missing
 # Development
 # ============================================================================
 
-##@ Development
+##@ Development (Docker)
 
 .PHONY: dev dev-detached stop restart restart-backend restart-frontend status
 
-dev: ## Start all services (docker compose up --build)
+dev: ## Start all services via docker compose
 	docker compose up --build
 
 dev-detached: ## Start all services in background
@@ -64,6 +72,25 @@ restart-frontend: ## Restart only the frontend service
 
 status: ## Show running container status
 	docker compose ps
+
+# ============================================================================
+# Local Development (Doppler + Neon branch)
+# ============================================================================
+
+##@ Local Development
+
+.PHONY: dev-local dev-backend dev-frontend dev-redis
+
+dev-local: dev-redis dev-backend dev-frontend ## Start backend + frontend locally with Doppler secrets
+
+dev-backend: ## Start backend locally (Doppler + Neon branch DB)
+	cd backend && doppler run -p the-experiment -c dev -- poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+dev-frontend: ## Start frontend dev server
+	cd frontend && npm run dev
+
+dev-redis: ## Start local Redis via Docker (background)
+	@docker compose up -d redis
 
 # ============================================================================
 # Logs
@@ -134,17 +161,17 @@ build-frontend: ## Build frontend for production
 # Database
 # ============================================================================
 
-##@ Database
+##@ Database (Docker)
 
 .PHONY: migrate seed db-reset db-shell
 
 migrate: ## Run database migrations (alembic upgrade head)
-	cd backend && poetry run alembic upgrade head
+	cd backend && doppler run -p the-experiment -c dev -- poetry run alembic upgrade head
 
 seed: ## Seed the database
-	cd backend && poetry run python -m app.db.seed
+	cd backend && doppler run -p the-experiment -c dev -- poetry run python -m app.db.seed
 
-db-reset: ## Reset database (destroy + recreate + migrate + seed)
+db-reset: ## Reset local Docker database (destroy + recreate + migrate + seed)
 	docker compose down -v --remove-orphans
 	docker compose up -d postgres redis
 	@echo "Waiting for postgres to be ready..."
@@ -155,6 +182,56 @@ db-reset: ## Reset database (destroy + recreate + migrate + seed)
 
 db-shell: ## Open psql shell to the database
 	docker compose exec postgres psql -U experiment experiment
+
+# ============================================================================
+# Neon Branch Database
+# ============================================================================
+
+##@ Neon Branches
+
+.PHONY: neon-create neon-delete neon-list neon-url neon-migrate
+
+neon-create: ## Create a Neon branch for current git branch (from prod)
+	@echo "Creating Neon branch '$(BRANCH_NAME)' from $(NEON_PARENT_BRANCH)..."
+	@CONN=$$(npx neonctl branches create \
+		--project-id $(NEON_PROJECT_ID) \
+		--org-id $(NEON_ORG_ID) \
+		--name $(BRANCH_NAME) \
+		--parent $(NEON_PARENT_BRANCH) \
+		--output json \
+		| python3 -c "import sys,json; d=json.load(sys.stdin); ep=d['endpoints'][0]; print(f\"postgresql+asyncpg://{ep['host']}/{d['branch']['name']}?sslmode=require\")") && \
+	FULL_URL=$$(npx neonctl connection-string \
+		--project-id $(NEON_PROJECT_ID) \
+		--org-id $(NEON_ORG_ID) \
+		--branch $(BRANCH_NAME) \
+		--database-name $(NEON_DB_NAME) \
+		--role-name $(NEON_ROLE)) && \
+	ASYNC_URL=$$(echo "$$FULL_URL" | sed 's|postgresql://|postgresql+asyncpg://|') && \
+	doppler secrets set DATABASE_URL="$$ASYNC_URL" --project the-experiment --config dev && \
+	echo "Neon branch '$(BRANCH_NAME)' created and DATABASE_URL updated in Doppler dev config."
+
+neon-delete: ## Delete the Neon branch for current git branch
+	@echo "Deleting Neon branch '$(BRANCH_NAME)'..."
+	@npx neonctl branches delete $(BRANCH_NAME) \
+		--project-id $(NEON_PROJECT_ID) \
+		--org-id $(NEON_ORG_ID) && \
+	echo "Neon branch '$(BRANCH_NAME)' deleted."
+
+neon-list: ## List all Neon branches
+	@npx neonctl branches list \
+		--project-id $(NEON_PROJECT_ID) \
+		--org-id $(NEON_ORG_ID)
+
+neon-url: ## Show the connection string for current branch
+	@npx neonctl connection-string \
+		--project-id $(NEON_PROJECT_ID) \
+		--org-id $(NEON_ORG_ID) \
+		--branch $(BRANCH_NAME) \
+		--database-name $(NEON_DB_NAME) \
+		--role-name $(NEON_ROLE)
+
+neon-migrate: ## Run alembic migrations against the Neon branch DB
+	cd backend && doppler run -p the-experiment -c dev -- poetry run alembic upgrade head
 
 # ============================================================================
 # Shell Access

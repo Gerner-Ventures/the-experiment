@@ -27,6 +27,7 @@ import { useUIStore } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
+import type { ExperimentStatus } from '@/types/experiment'
 
 const locale = useLocale()
 const route = useRoute()
@@ -61,13 +62,13 @@ async function initExperiment() {
     // Load experiment from backend (already created by SetupView)
     const detail = await api.getExperiment(experimentId)
 
-    const ws_ = detail.world_state as Record<string, unknown>
+    const ws_ = (detail.world_state ?? {}) as Record<string, unknown>
     const resources = ws_.resources as Record<string, number> | undefined
 
     experimentStore.setExperiment({
       id: detail.experiment_id,
       name: detail.experiment_name,
-      status: detail.status as 'setup',
+      status: detail.status as ExperimentStatus,
       currentRound: detail.current_round,
       totalRounds: detail.total_rounds,
     })
@@ -81,7 +82,7 @@ async function initExperiment() {
         power: resources.power ?? 0,
       })
     }
-    worldStore.threatLevel = (ws_.threat_level as number) ?? 0
+    worldStore.setThreatLevel((ws_.threat_level as number) ?? 0)
 
     // Connect WebSocket for live updates
     const wsUrl = api.getWebSocketUrl(detail.experiment_id)
@@ -107,14 +108,22 @@ async function handleStep() {
 
 async function handleStart() {
   if (!experimentStore.id) return
-  await api.startExperiment(experimentStore.id)
-  uiStore.isPlaying = true
+  try {
+    await api.startExperiment(experimentStore.id)
+    uiStore.isPlaying = true
+  } catch (err) {
+    console.error('Start failed:', err)
+  }
 }
 
 async function handlePause() {
   if (!experimentStore.id) return
-  await api.pauseExperiment(experimentStore.id)
-  uiStore.isPlaying = false
+  try {
+    await api.pauseExperiment(experimentStore.id)
+    uiStore.isPlaying = false
+  } catch (err) {
+    console.error('Pause failed:', err)
+  }
 }
 
 async function handleApprovePlan() {

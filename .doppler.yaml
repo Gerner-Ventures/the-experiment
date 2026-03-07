@@ -1,0 +1,3 @@
+setup:
+  - project: the-experiment
+    config: dev
