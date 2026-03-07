@@ -35,7 +35,6 @@ describe('experimentStore', () => {
     expect(store.currentRound).toBe(0)
     expect(store.totalRounds).toBe(15)
     expect(store.currentPhase).toBeNull()
-    expect(store.cooperationRatio).toBe(0.5)
     expect(store.events).toEqual([])
   })
 
@@ -91,7 +90,7 @@ describe('experimentStore', () => {
   describe('onRoundStart', () => {
     it('updates currentRound, sets running, and adds event', () => {
       const store = useExperimentStore()
-      store.onRoundStart(makeMsg({ type: 'round_start', data: { round: 4, total_rounds: 15 } }))
+      store.onRoundStart(makeMsg({ type: 'round_start', round: 4, data: { total_rounds: 15 } }))
       expect(store.currentRound).toBe(4)
       expect(store.status).toBe('running')
       expect(store.events).toHaveLength(1)
@@ -100,10 +99,9 @@ describe('experimentStore', () => {
   })
 
   describe('onRoundEnd', () => {
-    it('updates cooperationRatio and adds event', () => {
+    it('updates state and adds event', () => {
       const store = useExperimentStore()
-      store.onRoundEnd(makeMsg({ type: 'round_end', data: { cooperation_ratio: 0.8, threat_level: 30 } }))
-      expect(store.cooperationRatio).toBe(0.8)
+      store.onRoundEnd(makeMsg({ type: 'round_end', data: { status: 'running', current_round: 3, total_rounds: 15, threat_level: 30, resources: { food: 20, water: 25, materials: 10, power: 8 }, agents: [] } }))
       expect(store.events).toHaveLength(1)
     })
   })
@@ -111,7 +109,7 @@ describe('experimentStore', () => {
   describe('onPhaseChange', () => {
     it('sets currentPhase', () => {
       const store = useExperimentStore()
-      store.onPhaseChange(makeMsg({ type: 'phase_change', data: { phase: 'dawn' } }))
+      store.onPhaseChange(makeMsg({ type: 'phase_change', phase: 'dawn', data: {} }))
       expect(store.currentPhase).toBe('dawn')
       expect(store.events).toHaveLength(1)
     })

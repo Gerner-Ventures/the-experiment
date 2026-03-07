@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
 import type { WSMessage } from '@/types/websocket'
+import { useUIStore } from '@/stores/ui'
 
 export const useAgentStore = defineStore('agent', () => {
   const agents = ref<Map<string, Agent>>(new Map())
@@ -43,11 +44,22 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function onAction(msg: WSMessage) {
-    const data = msg.data as { agent_id: string; action: string; summary: string }
-    const agent = agents.value.get(data.agent_id)
-    if (agent) {
-      agent.status = actionToStatus(data.action)
+    const data = msg.data as {
+      agent_id: string
+      agent_name?: string
+      action: Record<string, unknown> | string
+      inner_thought?: string
+      cooperation_intent?: string
     }
+    const agent = agents.value.get(data.agent_id)
+    const actionType = typeof data.action === 'string'
+      ? data.action
+      : (data.action?.type as string) ?? 'observe'
+    if (agent) {
+      agent.status = actionToStatus(actionType)
+    }
+    const name = data.agent_name ?? agent?.name ?? 'Agent'
+    useUIStore().setSteppingStatus(`${name}: ${actionType}`)
   }
 
   function onMove(msg: WSMessage) {
