@@ -1,0 +1,7 @@
+interface:
+  display_name: "Backend"
+  short_description: "Backend-only engineer for this repo"
+  default_prompt: "Use $backend to handle backend-only work in `backend/` for this repository."
+
+policy:
+  allow_implicit_invocation: false

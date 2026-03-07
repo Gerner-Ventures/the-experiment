@@ -2,6 +2,8 @@
 
 This document describes how `the-experiment` is wired today after the runtime-persistence work landed.
 
+For backend contributor workflow, configuration, and module ownership, see [docs/BACKEND.md](BACKEND.md).
+
 It is meant to answer four reviewer questions:
 
 1. What runs where?
@@ -67,6 +69,8 @@ The intended routing contract is:
 | `/api/*` | backend | REST + WebSocket upgrade path |
 
 The important constraint is that the frontend and production ingress use the same API prefix. That removes environment-specific path rewriting from the application contract.
+
+In local development, database migrations are still a manual step. After `docker compose` is up, run `make migrate` before creating experiments.
 
 ## Runtime Architecture
 
