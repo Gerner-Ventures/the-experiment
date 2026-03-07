@@ -19,11 +19,15 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     platform_url: str | None = None
     cors_origins: list[str] = ["http://localhost:5173"]
+    posthog_key: str | None = None
+    posthog_host: str = "https://us.posthog.com"
     anthropic_api_key: str | None = None
     gm_model: str = "anthropic/claude-sonnet-4-5-20250514"
     gm_fallback_model: str = "anthropic/claude-haiku-4-5-20251001"
     agent_model: str = "anthropic/claude-haiku-4-5-20251001"
     agent_fallback_model: str = "anthropic/claude-sonnet-4-5-20250514"
+    memory_model: str = "anthropic/claude-haiku-4-5-20251001"
+    memory_fallback_model: str = "anthropic/claude-sonnet-4-5-20250514"
     llm_timeout_seconds: float = 45.0
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2

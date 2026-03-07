@@ -69,6 +69,10 @@ jobs:
         run: doctl registry login --expiry-seconds 600
 
       - name: Build and push Docker images
+        env:
+          # POSTHOG_KEY may be empty on first deploy before terraform apply.
+          # Both frontend and backend handle an empty key gracefully (PostHog is disabled).
+          POSTHOG_KEY: ${{ steps.secrets.outputs.POSTHOG_KEY }}
         run: |
           REGISTRY="registry.digitalocean.com/${{ steps.secrets.outputs.DOCR_REGISTRY_NAME }}"
           TAG="sha-${GITHUB_SHA::7}"
@@ -77,7 +81,7 @@ jobs:
           docker push "${REGISTRY}/the-experiment-backend:${TAG}"
           docker push "${REGISTRY}/the-experiment-backend:latest"
 
-          docker build -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
+          docker build --build-arg VITE_POSTHOG_KEY="${POSTHOG_KEY}" -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
           docker push "${REGISTRY}/the-experiment-frontend:${TAG}"
           docker push "${REGISTRY}/the-experiment-frontend:latest"
 
@@ -126,4 +130,4 @@ jobs:
             --set backend.image.tag="${IMAGE_TAG}" \
             --set frontend.image.tag="${IMAGE_TAG}" \
             -n the-experiment --create-namespace \
-            --wait --timeout 5m
+            --atomic --timeout 5m

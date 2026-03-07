@@ -4,6 +4,7 @@ from app.world import (
     build_default_world_state,
     calculate_threat_level,
     create_world_snapshot,
+    resolve_spawn_tile,
     restore_world_snapshot,
 )
 from app.world.models import ResourceState, ResourceTick
@@ -67,3 +68,10 @@ def test_world_snapshot_round_trip() -> None:
     restored = restore_world_snapshot(snapshot)
 
     assert restored == state
+
+
+def test_spawn_tiles_are_distributed_with_spawn_index() -> None:
+    first = resolve_spawn_tile("town_hall", spawn_index=0)
+    second = resolve_spawn_tile("town_hall", spawn_index=1)
+
+    assert first != second

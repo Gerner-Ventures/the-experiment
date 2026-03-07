@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from random import Random
 
+from app.db.models import AgentStatus
 from app.engine.models import (
     ConversationTone,
     ConversationOutcome,
@@ -54,7 +55,7 @@ class SocialService:
     def run_meeting(self, state: SimulationState, *, proposal: str) -> MeetingOutcome:
         speeches: list[MeetingSpeech] = []
         vote_records: list[MeetingVote] = []
-        active_agents = [agent for agent in state.agents if agent.status != "exiled"]
+        active_agents = [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
 
         for agent in active_agents:
             stance = self._meeting_stance(agent, state)

@@ -251,6 +251,8 @@ class SqlAlchemyExperimentStore:
         agent.secret_goal = agent_state.goal.text
         agent.llm_model = agent_state.llm_model
         agent.location = agent_state.location
+        agent.tile_x = agent_state.tile_x
+        agent.tile_y = agent_state.tile_y
         agent.status = agent_state.status
         agent.suspicion_level = agent_state.suspicion_level
         agent.inventory = list(agent_state.inventory)
@@ -314,6 +316,8 @@ class SqlAlchemyExperimentStore:
                     "faction_id": agent.faction_id,
                     "faction_role": agent.faction_role,
                     "influence": agent.influence,
+                    "tile_x": agent.tile_x,
+                    "tile_y": agent.tile_y,
                 }
             )
             for agent in experiment.agents
@@ -343,8 +347,8 @@ class SqlAlchemyExperimentStore:
             unresolved_plotlines=list(experiment.unresolved_plotlines),
             recent_events=list(experiment.recent_events),
             gm_plan=gm_plan,
-            factions=[FactionState.model_validate(f) for f in experiment.factions],
-            exile_history=[ExileOutcome.model_validate(e) for e in experiment.exile_history],
+            factions=[FactionState.model_validate(item) for item in experiment.factions],
+            exile_history=[ExileOutcome.model_validate(item) for item in experiment.exile_history],
         )
 
     def _to_gm_plan_record(self, row: GMPlan) -> GMPlanRecord:

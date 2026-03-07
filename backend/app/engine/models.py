@@ -38,6 +38,8 @@ class EngineAgentState(EngineModel):
     goal: SecretGoal
     memory: AgentMemoryState
     location: str | None = None
+    tile_x: int | None = Field(default=None, ge=0)
+    tile_y: int | None = Field(default=None, ge=0)
     inventory: list[str] = Field(default_factory=list)
     relationships: dict[str, RelationshipMemory] = Field(default_factory=dict)
     suspicion_level: float = Field(ge=0, le=100, default=0)
