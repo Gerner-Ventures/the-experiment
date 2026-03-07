@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, AgentStatus } from '@/types/agent'
+import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
 import type { WSMessage } from '@/types/websocket'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -8,6 +8,20 @@ export const useAgentStore = defineStore('agent', () => {
 
   const agentList = computed(() => Array.from(agents.value.values()))
   const agentCount = computed(() => agents.value.size)
+
+  /** Agent data mapped to AgentConfig format for PixiWorld rendering */
+  const agentConfigs = computed<AgentConfig[]>(() =>
+    agentList.value.map(a => ({
+      id: a.id,
+      name: a.name,
+      characterId: a.characterId,
+      personality: a.personality.traitTags as AgentConfig['personality'],
+      personalityAxes: a.personality.axes,
+      secretGoal: a.secretGoal.text,
+      goalArchetype: a.secretGoal.archetype,
+      llmModel: a.llmModel,
+    }))
+  )
 
   function setAgents(agentData: Array<Record<string, unknown>>) {
     agents.value.clear()
@@ -63,7 +77,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   return {
-    agents, agentList, agentCount,
+    agents, agentList, agentConfigs, agentCount,
     setAgents, getAgent, onAction, onMove, onAgentUpdate, updateAgentFromDossier, resetStatuses,
     $reset,
   }

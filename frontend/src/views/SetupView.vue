@@ -16,6 +16,9 @@ import type { AgentConfig } from '@/types/agent'
 import { useLocale } from '@/locales'
 import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES, GOAL_PRESET_KEYS, GOAL_ARCHETYPE_MAP } from '@/config/agent-options'
 import { CHARACTERS } from '@/config/character-options'
+import { api } from '@/services/api'
+import type { AgentCreatePayload } from '@/services/api'
+import { useExperimentStore } from '@/stores/experiment'
 
 const locale = useLocale()
 const route = useRoute()
@@ -69,24 +72,66 @@ const selectedArc = ref('lord-of-the-flies')
 const totalRounds = ref(15)
 const startingResources = ref(100)
 
+const experimentStore = useExperimentStore()
+const isCreating = ref(false)
+const createError = ref<string | null>(null)
+
 const canBegin = computed(() =>
   agents.value.length >= MIN_AGENTS &&
-  agents.value.every(a => a.name && a.secretGoal)
+  agents.value.every(a => a.name && a.secretGoal) &&
+  !isCreating.value
 )
 
 const readyCount = computed(() =>
   agents.value.filter(a => a.name && a.secretGoal).length
 )
 
-function beginExperiment() {
-  sessionStorage.setItem('experiment-config', JSON.stringify({
-    agents: agents.value,
-    themeId: selectedTheme.value,
-    arc: selectedArc.value,
-    rounds: totalRounds.value,
-    resources: startingResources.value,
-  }))
-  router.push({ name: 'simulation', params: { id: 'demo' } })
+function toAgentPayload(config: AgentConfig): AgentCreatePayload {
+  return {
+    name: config.name,
+    character_id: config.characterId || undefined,
+    personality: {
+      axes: { ...config.personalityAxes },
+      trait_tags: [...config.personality],
+    },
+    goal: {
+      archetype: config.goalArchetype || 'communal_survival',
+      text: config.secretGoal,
+    },
+    llm_model: config.llmModel,
+  }
+}
+
+async function beginExperiment() {
+  if (!canBegin.value) return
+  isCreating.value = true
+  createError.value = null
+
+  try {
+    const experiment = await api.createExperiment({
+      name: `Experiment ${Date.now()}`,
+      agents: agents.value.map(toAgentPayload),
+      preset_arc_id: selectedArc.value,
+      total_rounds: totalRounds.value,
+    })
+
+    experimentStore.setExperiment({
+      id: experiment.experiment_id,
+      name: experiment.experiment_name,
+      status: experiment.status as 'setup',
+      currentRound: experiment.current_round,
+      totalRounds: experiment.total_rounds,
+    })
+
+    // Store theme selection for SimulationView (not sent to backend)
+    sessionStorage.setItem('experiment-theme', selectedTheme.value)
+
+    router.push({ name: 'simulation', params: { id: experiment.experiment_id } })
+  } catch (err) {
+    createError.value = err instanceof Error ? err.message : 'Failed to create experiment'
+  } finally {
+    isCreating.value = false
+  }
 }
 </script>
 
@@ -158,13 +203,17 @@ function beginExperiment() {
             <Typography.Text class="font-mono !text-[10px] !text-white/20">
               {{ locale.setup.subjectsReady.replace('{ready}', String(readyCount)).replace('{total}', String(agents.length)) }}
             </Typography.Text>
+            <Typography.Text v-if="createError" class="font-mono !text-[10px] !text-red-400">
+              {{ createError }}
+            </Typography.Text>
             <Button
               type="primary"
               :disabled="!canBegin"
+              :loading="isCreating"
               @click="beginExperiment"
             >
               <template #icon><ThunderboltOutlined /></template>
-              {{ locale.setup.launchExperiment }}
+              {{ isCreating ? 'Creating...' : locale.setup.launchExperiment }}
             </Button>
           </Space>
         </header>

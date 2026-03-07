@@ -100,6 +100,7 @@ function routeMessage(msg: WSMessage) {
   experimentStore.addEvent(msg)
 
   const router: Partial<Record<WSMessageType, (m: WSMessage) => void>> = {
+    connected: () => { /* connection confirmed, no action needed */ },
     round_start: (m) => experimentStore.onRoundStart(m),
     round_end: (m) => experimentStore.onRoundEnd(m),
     phase_change: (m) => experimentStore.onPhaseChange(m),
@@ -115,6 +116,10 @@ function routeMessage(msg: WSMessage) {
     meeting_speech: (m) => socialStore.onMeetingSpeech(m),
     meeting_vote: (m) => socialStore.onMeetingVote(m),
     meeting_result: (m) => socialStore.onMeetingResult(m),
+    faction_update: (m) => socialStore.onFactionUpdate(m),
+    cult_activity: (m) => socialStore.onCultActivity(m),
+    exile_vote: (m) => socialStore.onExileVote(m),
+    exile_result: (m) => socialStore.onExileResult(m),
     experiment_end: (m) => experimentStore.onEnd(m),
   }
 
