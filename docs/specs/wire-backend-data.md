@@ -28,7 +28,7 @@ Audit all components for hardcoded/mock data and wire to real backend API/WebSoc
 
 ## Acceptance Criteria
 
-- [ ] Stores initialize from API data
+- [ ] Stores initialize from API data, including terminal-state fields and sacrifice history
 - [ ] HUD displays live store data
 - [ ] API endpoints match backend routes
 - [ ] WebSocket handles all message types

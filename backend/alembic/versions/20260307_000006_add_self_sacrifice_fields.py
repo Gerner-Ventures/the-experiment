@@ -36,6 +36,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # PostgreSQL enum values cannot be removed in place, so the added `dead` value remains
+    # on `agent_status` after downgrade unless the enum type is recreated.
     op.drop_column("agents", "death_cause")
     op.drop_column("agents", "death_round")
     op.drop_column("experiments", "sacrifice_history")

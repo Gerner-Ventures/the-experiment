@@ -49,7 +49,7 @@ class EngineAgentState(EngineModel):
     faction_role: Literal["leader", "member"] | None = None
     influence: float = Field(default=0, ge=0, le=100)
     death_round: int | None = Field(default=None, ge=0)
-    death_cause: str | None = None
+    death_cause: str | None = Field(default=None, max_length=100)
 
 
 class ConflictRecord(EngineModel):
@@ -158,11 +158,10 @@ class SacrificeOutcome(EngineModel):
     agent_name: str
     location: str
     action_type: TerminalActionType = "self_sacrifice"
-    enacted: bool = True
     reason: str
     threat_delta: float = 0.0
     resource_effects: dict[str, float] = Field(default_factory=dict)
-    witness_ids: list[str] = Field(default_factory=list)
+    affected_agent_ids: list[str] = Field(default_factory=list)
 
 
 class FactionState(EngineModel):

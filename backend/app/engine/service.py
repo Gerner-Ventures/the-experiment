@@ -557,12 +557,12 @@ class SimulationEngine:
         agent.influence = 0.0
         agent.death_round = state.world_state.round_number
         agent.death_cause = "self_sacrifice"
+        self._remove_agent_from_occupancy(state, agent.agent_id)
 
-        witness_ids: list[str] = []
+        # This is modeled as a town-wide shock event, not a strict proximity-based witness system.
+        affected_agent_ids: list[str] = []
         for witness in self._active_agents(state):
-            if witness.agent_id == agent.agent_id:
-                continue
-            witness_ids.append(witness.agent_id)
+            affected_agent_ids.append(witness.agent_id)
             witness.suspicion_level = min(
                 100.0,
                 round(witness.suspicion_level + self.SELF_SACRIFICE_SUSPICION_DELTA, 2),
@@ -588,7 +588,7 @@ class SimulationEngine:
             ),
             threat_delta=self.SELF_SACRIFICE_THREAT_DELTA,
             resource_effects=dict(self.SELF_SACRIFICE_RESOURCE_EFFECTS),
-            witness_ids=witness_ids,
+            affected_agent_ids=affected_agent_ids,
         )
         state.sacrifice_history.append(outcome)
         state.sacrifice_history = state.sacrifice_history[-12:]
@@ -709,6 +709,7 @@ class SimulationEngine:
             agent.location = "perimeter_fence"
             agent.faction_id = None
             agent.faction_role = None
+            self._remove_agent_from_occupancy(state, agent.agent_id)
             break
 
         state.exile_history.append(outcome.exile)
@@ -1146,6 +1147,11 @@ class SimulationEngine:
     def _set_agent_tile(self, agent: EngineAgentState, tile: tuple[int, int]) -> None:
         agent.tile_x, agent.tile_y = tile
         agent.location = location_label_for_tile(tile)
+
+    def _remove_agent_from_occupancy(self, state: SimulationState, agent_id: str) -> None:
+        for occupants in state.world_state.location_occupancy.values():
+            while agent_id in occupants:
+                occupants.remove(agent_id)
 
     def _summarize_relationships(self, agents: list[EngineAgentState]) -> str:
         fragments: list[str] = []

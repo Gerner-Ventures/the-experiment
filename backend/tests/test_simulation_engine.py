@@ -240,6 +240,45 @@ async def test_self_sacrifice_marks_agent_dead_and_stops_future_turns() -> None:
     assert state.sacrifice_history[0].agent_id == "a1"
     assert state.agents[1].suspicion_level > 0
     assert "a1" not in afternoon_agent_ids
+    assert "a1" not in state.world_state.location_occupancy.get("town_hall", [])
+
+
+@pytest.mark.asyncio
+async def test_multiple_self_sacrifices_are_explicitly_supported() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
+            "a2": [("self_sacrifice", "town_hall"), ("repair", "workshop"), ("repair", "workshop")],
+            "a3": [("observe", "well"), ("observe", "well"), ("repair", "workshop")],
+        }
+    )
+    state = _state()
+    for agent in state.agents[:2]:
+        agent.location = "town_hall"
+        agent.tile_x, agent.tile_y = resolve_spawn_tile("town_hall")
+    engine = SimulationEngine(agent_service=service, random_seed=9)
+
+    result = await engine.run_round(state)
+
+    morning_sacrifices = [
+        event for event in result.phases[2].events if event.data.get("kind") == "self_sacrifice"
+    ]
+    afternoon_agent_ids = {
+        event.data.get("agent_id")
+        for event in result.phases[4].events
+        if isinstance(event.data.get("agent_id"), str)
+    }
+
+    assert len(morning_sacrifices) == 2
+    assert service.calls["a1"] == 1
+    assert service.calls["a2"] == 1
+    assert state.agents[0].status == AgentStatus.DEAD
+    assert state.agents[1].status == AgentStatus.DEAD
+    assert len(state.sacrifice_history) == 2
+    assert "a1" not in afternoon_agent_ids
+    assert "a2" not in afternoon_agent_ids
+    assert "a1" not in state.world_state.location_occupancy.get("town_hall", [])
+    assert "a2" not in state.world_state.location_occupancy.get("town_hall", [])
 
 
 @pytest.mark.asyncio

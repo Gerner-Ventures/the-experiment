@@ -33,7 +33,7 @@ Bridge frontend and backend for a fully playable simulation.
 - [ ] Create experiment from setup screen
 - [ ] Simulation runs all 6 phases per round
 - [ ] Real-time state updates via WebSocket
-- [ ] LLM-driven or mock agent decisions
+- [ ] LLM-driven or mock agent decisions (including terminal actions like self-sacrifice)
 - [ ] Resources deplete, threat changes, crises occur
 - [ ] Game completes after configured rounds
 - [ ] Report shows actual data
