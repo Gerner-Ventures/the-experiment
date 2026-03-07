@@ -19,13 +19,42 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 experiment_status = sa.Enum(
-    "setup", "running", "paused", "completed", "collapsed", name="experiment_status"
+    "setup",
+    "running",
+    "paused",
+    "completed",
+    "collapsed",
+    name="experiment_status",
+    create_type=False,
 )
 agent_status = sa.Enum(
-    "idle", "thinking", "talking", "moving", "working", "sneaking", "exiled", name="agent_status"
+    "idle",
+    "thinking",
+    "talking",
+    "moving",
+    "working",
+    "sneaking",
+    "exiled",
+    name="agent_status",
+    create_type=False,
 )
-resource_pressure = sa.Enum("low", "medium", "high", "critical", name="resource_pressure")
-event_type = sa.Enum("round", "action", "social", "crisis", "system", name="event_type")
+resource_pressure = sa.Enum(
+    "low",
+    "medium",
+    "high",
+    "critical",
+    name="resource_pressure",
+    create_type=False,
+)
+event_type = sa.Enum(
+    "round",
+    "action",
+    "social",
+    "crisis",
+    "system",
+    name="event_type",
+    create_type=False,
+)
 
 
 def upgrade() -> None:
