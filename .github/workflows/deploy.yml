@@ -126,4 +126,4 @@ jobs:
             --set backend.image.tag="${IMAGE_TAG}" \
             --set frontend.image.tag="${IMAGE_TAG}" \
             -n the-experiment --create-namespace \
-            --wait --timeout 5m
+            --atomic --timeout 5m
