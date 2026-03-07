@@ -119,8 +119,7 @@ async def get_gm_plan(experiment_id: str) -> GMPlanRecord:
     "/{experiment_id}/gm/approve",
     summary="Approve or modify a GM plan",
     description=(
-        "Approve the pending GM plan as-is, or submit a modified plan payload to apply "
-        "instead."
+        "Approve the pending GM plan as-is, or submit a modified plan payload to apply " "instead."
     ),
 )
 async def approve_gm_plan(experiment_id: str, request: ApproveGMPlanRequest) -> GMPlanRecord:
