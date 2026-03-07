@@ -382,6 +382,14 @@ Code references:
 - `frontend/src/stores/gm.ts`
 - `frontend/src/stores/world.ts`
 
+## Analytics Persistence
+
+The API runtime now persists report-grade derived analytics at round end:
+
+- `agent_action` log rows include both requested and resolved action types
+- `round_end` log rows include compact round summaries for cooperation, goals, suspicion, factions, and GM context
+- replay and analytics endpoints read from those persisted summaries instead of reconstructing everything from websocket-only state
+
 ## Current Caveats
 
 There are two execution entry points in the repo:
