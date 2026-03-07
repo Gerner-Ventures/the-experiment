@@ -145,9 +145,7 @@ class SocialService:
             trust_delta=self.conversation_trust_delta(speaker, listener),
         )
 
-    def _conversation_tone(
-        self, agent: EngineAgentState
-    ) -> ConversationTone:
+    def _conversation_tone(self, agent: EngineAgentState) -> ConversationTone:
         if agent.personality.axes.paranoia >= 65:
             return "suspicious"
         if agent.personality.axes.empathy >= 65:
@@ -169,20 +167,14 @@ class SocialService:
             else "the day keeps slipping out of control"
         )
         if tone == "supportive":
-            return (
-                f"{speaker.name} tells {listener.name} they need to stay steady while {crisis.lower()}."
-            )
+            return f"{speaker.name} tells {listener.name} they need to stay steady while {crisis.lower()}."
         if tone == "suspicious":
             return (
                 f"{speaker.name} quietly warns {listener.name} that {crisis.lower()} feels staged."
             )
         if tone == "manipulative":
-            return (
-                f"{speaker.name} nudges {listener.name} to remember who benefits if {crisis.lower()}."
-            )
-        return (
-            f"{speaker.name} keeps their voice low with {listener.name}, circling around {crisis.lower()}."
-        )
+            return f"{speaker.name} nudges {listener.name} to remember who benefits if {crisis.lower()}."
+        return f"{speaker.name} keeps their voice low with {listener.name}, circling around {crisis.lower()}."
 
     def _meeting_stance(self, agent: EngineAgentState, state: SimulationState) -> MeetingStance:
         crisis_type = state.gm_plan.plan.crisis_event.type if state.gm_plan else "resource"
@@ -203,16 +195,12 @@ class SocialService:
     ) -> str:
         crisis = state.gm_plan.plan.crisis_event.description if state.gm_plan else "the crisis"
         if stance == "support":
-            return (
-                f"{agent.name} argues that '{proposal}' is the cleanest way to answer {crisis.lower()}."
-            )
+            return f"{agent.name} argues that '{proposal}' is the cleanest way to answer {crisis.lower()}."
         if stance == "oppose":
             return (
                 f"{agent.name} rejects '{proposal}', warning it will only harden the town's panic."
             )
-        return (
-            f"{agent.name} hedges on '{proposal}', asking who will carry the cost if it fails."
-        )
+        return f"{agent.name} hedges on '{proposal}', asking who will carry the cost if it fails."
 
     def _meeting_vote(
         self,
@@ -228,9 +216,7 @@ class SocialService:
         else:
             vote = "support" if state.world_state.threat_level >= 60 else "abstain"
 
-        rationale = (
-            f"{agent.name} votes {vote} on '{proposal}' from a {stance} position."
-        )
+        rationale = f"{agent.name} votes {vote} on '{proposal}' from a {stance} position."
         return MeetingVote(
             agent_id=agent.agent_id,
             agent_name=agent.name,
