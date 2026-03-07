@@ -4,6 +4,7 @@ from app.agents.brain import AgentBrain
 from app.agents.memory import add_key_memory, append_recent_event, update_relationship_memory
 from app.agents.models import (
     AgentContext,
+    MemoryConsolidationDecision,
     AgentMemoryState,
     MemoryPromotionDecision,
     AgentTurnResult,
@@ -13,6 +14,7 @@ from app.agents.models import (
     SecretGoal,
 )
 from app.llm import LLMService
+
 MEMORY_CONSOLIDATION_MIN_EVENTS = 3
 
 

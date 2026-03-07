@@ -180,6 +180,7 @@ class AgentMemoryState(AgentModel):
     recent_events: list[MemoryEvent] = Field(default_factory=list)
     key_memories: list[KeyMemory] = Field(default_factory=list)
     relationship_memory: dict[str, RelationshipMemory] = Field(default_factory=dict)
+    last_consolidated_round: int = Field(ge=0, default=0)
 
 
 class ActionDefinition(AgentModel):
@@ -227,6 +228,12 @@ class AgentTurnResult(AgentModel):
 
 class MemoryPromotionDecision(AgentModel):
     promote_to_key_memory: bool = False
+    meaning: str | None = None
+    salience_type: MemorySalienceType = "other"
+    confidence: int = Field(ge=0, le=100, default=60)
+
+
+class MemoryConsolidationDecision(AgentModel):
     create_summary: bool = False
     summary: str | None = None
     meaning: str | None = None
