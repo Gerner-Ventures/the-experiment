@@ -18,6 +18,9 @@ from app.gm.models import DirectorArc, GMPlanRecord
 from app.world.models import WorldState
 
 PhaseName = Literal["gm_plan", "dawn", "morning", "midday", "afternoon", "night"]
+ConversationTone = Literal["supportive", "suspicious", "manipulative", "guarded"]
+MeetingStance = Literal["support", "oppose", "hesitant"]
+MeetingVoteChoice = Literal["support", "oppose", "abstain"]
 
 
 class EngineModel(BaseModel):
@@ -87,9 +90,44 @@ class RoundResult(EngineModel):
     created_at: datetime
 
 
+class ConversationTurn(EngineModel):
+    speaker_id: str
+    speaker_name: str
+    listener_id: str
+    listener_name: str
+    tone: ConversationTone
+    content: str
+    trust_delta: float = 0
+
+
+class ConversationOutcome(EngineModel):
+    location: str
+    participants: list[str]
+    turns: list[ConversationTurn] = Field(default_factory=list)
+    summary: str
+
+
+class MeetingSpeech(EngineModel):
+    agent_id: str
+    agent_name: str
+    stance: MeetingStance
+    content: str
+
+
+class MeetingVote(EngineModel):
+    agent_id: str
+    agent_name: str
+    vote: MeetingVoteChoice
+    rationale: str
+
+
 class MeetingOutcome(EngineModel):
     proposal: str
-    votes: dict[str, str]
+    speeches: list[MeetingSpeech] = Field(default_factory=list)
+    votes: dict[str, MeetingVoteChoice]
+    vote_rationales: dict[str, str] = Field(default_factory=dict)
+    tally: dict[str, int] = Field(default_factory=dict)
+    passed: bool = False
     summary: str
 
 

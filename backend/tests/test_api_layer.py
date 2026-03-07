@@ -168,11 +168,15 @@ def test_websocket_emits_granular_round_messages() -> None:
             "gm_plan",
             "crisis_event",
             "agent_action",
+            "meeting_start",
+            "meeting_speech",
+            "meeting_vote",
+            "meeting_result",
             "resource_update",
             "threat_update",
             "round_end",
         }
-        for _ in range(24):
+        for _ in range(40):
             message = websocket.receive_json()
             seen_types.add(message["type"])
             if required <= seen_types:
