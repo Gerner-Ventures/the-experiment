@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,6 +16,7 @@ class APIRequestModel(BaseModel):
 
 class AgentCreateRequest(APIRequestModel):
     name: str
+    character_id: str | None = None
     personality: PersonalityProfile
     goal: SecretGoal
     llm_model: str = "openai/gpt-4o-mini"
@@ -68,13 +69,39 @@ class UpdateArcRequest(APIRequestModel):
     arc: DirectorArc
 
 
+EventLogType = Literal[
+    "experiment_created",
+    "experiment_started",
+    "experiment_paused",
+    "observer_event",
+    "arc_updated",
+    "gm_plan_generated",
+    "gm_plan_approved",
+    "gm_plan",
+    "dawn",
+    "morning",
+    "midday",
+    "afternoon",
+    "night",
+    "round_start",
+    "round_end",
+    "phase_change",
+    "agent_action",
+    "agent_move",
+    "crisis_event",
+    "threat_update",
+    "resource_update",
+    "experiment_end",
+]
+
+
 class EventLogItem(APIRequestModel):
     id: str
     experiment_id: str
     round_number: int | None = None
     phase: str | None = None
     agent_id: str | None = None
-    type: str
+    type: EventLogType
     summary: str
     data: dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime

@@ -17,7 +17,9 @@ class _StubAgentService(AgentService):
     async def decide(self, context: object) -> AgentTurnResult:
         from app.agents.models import AgentContext
 
-        agent_context = context if isinstance(context, AgentContext) else AgentContext.model_validate(context)
+        agent_context = (
+            context if isinstance(context, AgentContext) else AgentContext.model_validate(context)
+        )
         return AgentTurnResult(
             decision=AgentDecision(
                 inner_thought="I should keep the town stable.",
@@ -45,6 +47,7 @@ def _payload() -> dict[str, Any]:
         "agents": [
             {
                 "name": "Mara",
+                "character_id": "undertaker_01",
                 "personality": {
                     "axes": {
                         "paranoia": 72,
@@ -91,6 +94,8 @@ def test_create_get_and_step_experiment_flow() -> None:
     created = client.post("/experiments", json=_payload())
     assert created.status_code == 200
     experiment_id = created.json()["experiment_id"]
+    assert created.json()["agents"][0]["character_id"] == "undertaker_01"
+    assert created.json()["agents"][0]["status"] == "idle"
 
     gm_plan = client.get(f"/experiments/{experiment_id}/gm/plan")
     assert gm_plan.status_code == 200
@@ -103,7 +108,10 @@ def test_create_get_and_step_experiment_flow() -> None:
     stepped = client.post(f"/experiments/{experiment_id}/step")
     assert stepped.status_code == 200
     assert stepped.json()["round_result"]["round_number"] == 1
-    assert stepped.json()["round_result"]["gm_plan"]["plan"]["round_theme"] == approved.json()["plan"]["round_theme"]
+    assert (
+        stepped.json()["round_result"]["gm_plan"]["plan"]["round_theme"]
+        == approved.json()["plan"]["round_theme"]
+    )
 
     fetched = client.get(f"/experiments/{experiment_id}")
     assert fetched.status_code == 200
@@ -116,7 +124,9 @@ def test_log_endpoint_filters_and_paginates() -> None:
     client.post(f"/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"/experiments/{experiment_id}/step")
 
-    log_response = client.get(f"/experiments/{experiment_id}/log", params={"limit": 5, "phase": "dawn"})
+    log_response = client.get(
+        f"/experiments/{experiment_id}/log", params={"limit": 5, "phase": "dawn"}
+    )
     assert log_response.status_code == 200
     body = log_response.json()
     assert body["limit"] == 5
@@ -131,4 +141,33 @@ def test_websocket_connects_and_receives_initial_message() -> None:
     with client.websocket_connect(f"/experiments/{experiment_id}/ws") as websocket:
         message = websocket.receive_json()
         assert message["type"] == "connected"
-        assert message["experiment_id"] == experiment_id
+        assert message["data"]["experiment_id"] == experiment_id
+
+
+def test_websocket_emits_granular_round_messages() -> None:
+    created = client.post("/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"/experiments/{experiment_id}/gm/approve", json={})
+
+    with client.websocket_connect(f"/experiments/{experiment_id}/ws") as websocket:
+        websocket.receive_json()
+        stepped = client.post(f"/experiments/{experiment_id}/step")
+        assert stepped.status_code == 200
+
+        seen_types: set[str] = set()
+        required = {
+            "round_start",
+            "gm_plan",
+            "crisis_event",
+            "agent_action",
+            "resource_update",
+            "threat_update",
+            "round_end",
+        }
+        for _ in range(24):
+            message = websocket.receive_json()
+            seen_types.add(message["type"])
+            if required <= seen_types:
+                break
+
+        assert required <= seen_types

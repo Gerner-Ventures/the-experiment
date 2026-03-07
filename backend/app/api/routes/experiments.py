@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
 
 from app.api.models import (
@@ -15,6 +17,7 @@ from app.api.models import (
 from app.api.runtime import runtime
 from app.engine import EngineAgentState, SimulationState
 from app.gm.models import GMPlanRecord
+from app.schemas.ws_message import WSMessage
 
 router = APIRouter(prefix="/experiments", tags=["experiments"])
 
@@ -52,7 +55,9 @@ async def step_experiment(experiment_id: str) -> StepResponse:
 
 
 @router.post("/{experiment_id}/inject", response_model=ExperimentDetail)
-async def inject_observer_event(experiment_id: str, request: ObserverEventRequest) -> ExperimentDetail:
+async def inject_observer_event(
+    experiment_id: str, request: ObserverEventRequest
+) -> ExperimentDetail:
     state = runtime.inject_observer_event(experiment_id, request.description)
     return _detail(state)
 
@@ -118,7 +123,14 @@ async def experiment_ws(experiment_id: str, websocket: WebSocket) -> None:
     _get_state(experiment_id)
     await runtime.connection_manager.connect(experiment_id, websocket)
     try:
-        await websocket.send_json({"type": "connected", "experiment_id": experiment_id})
+        await websocket.send_json(
+            WSMessage(
+                type="connected",
+                round=0,
+                timestamp=datetime.now(UTC),
+                data={"experiment_id": experiment_id},
+            ).model_dump(mode="json")
+        )
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:

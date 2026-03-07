@@ -158,6 +158,7 @@ class SuspicionUpdate(AgentModel):
 class AgentContext(AgentModel):
     agent_id: str
     name: str
+    character_id: str | None = None
     status: AgentStatus = AgentStatus.IDLE
     personality: PersonalityProfile
     goal: SecretGoal

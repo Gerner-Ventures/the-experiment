@@ -10,10 +10,11 @@ from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
 
 from app.agents.models import AgentMemoryState
-from app.api.models import CreateExperimentRequest, EventLogItem
+from app.api.models import CreateExperimentRequest, EventLogItem, EventLogType
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
+from app.schemas.ws_message import WSMessage, WSMessageType
 from app.world import build_default_world_state
 
 
@@ -62,6 +63,7 @@ class ExperimentRuntime:
                     EngineAgentState(
                         agent_id=str(uuid.uuid4()),
                         name=agent.name,
+                        character_id=agent.character_id,
                         personality=agent.personality,
                         goal=agent.goal,
                         memory=AgentMemoryState(),
@@ -104,6 +106,14 @@ class ExperimentRuntime:
         for agent in state.agents:
             agent.suspicion_level = min(100.0, agent.suspicion_level + 6.0)
         self._log(experiment_id, event_type="observer_event", summary=description)
+        self._schedule_broadcast(
+            experiment_id,
+            self._message(
+                "observer_event",
+                round_number=state.current_round,
+                data={"description": description},
+            ),
+        )
         return state
 
     def update_arc(self, experiment_id: str, arc: DirectorArc) -> SimulationState:
@@ -131,16 +141,28 @@ class ExperimentRuntime:
         )
         plan = self.gm_service.generate_plan(context)
         state.gm_plan = plan
-        self._log(experiment_id, event_type="gm_plan_generated", summary=plan.plan.round_theme, round_number=next_round)
+        self._log(
+            experiment_id,
+            event_type="gm_plan_generated",
+            summary=plan.plan.round_theme,
+            round_number=next_round,
+        )
         return plan
 
-    def approve_gm_plan(self, experiment_id: str, modified_plan: GMPlanData | None = None) -> GMPlanRecord:
+    def approve_gm_plan(
+        self, experiment_id: str, modified_plan: GMPlanData | None = None
+    ) -> GMPlanRecord:
         state = self.get_state(experiment_id)
         record = self.get_or_generate_gm_plan(experiment_id)
         approved = self.gm_service.approve_plan(record, modified_plan=modified_plan)
         applied = self.gm_service.apply_plan(approved)
         state.gm_plan = applied
-        self._log(experiment_id, event_type="gm_plan_approved", summary=applied.plan.round_theme, round_number=applied.plan.round)
+        self._log(
+            experiment_id,
+            event_type="gm_plan_approved",
+            summary=applied.plan.round_theme,
+            round_number=applied.plan.round,
+        )
         return applied
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
@@ -188,36 +210,103 @@ class ExperimentRuntime:
     async def broadcast_round(self, experiment_id: str, round_result: RoundResult) -> None:
         await self.connection_manager.broadcast(
             experiment_id,
-            {
-                "type": "round_start",
-                "round": round_result.round_number,
-                "timestamp": datetime.now(UTC),
-                "data": {"theme": round_result.gm_plan.plan.round_theme},
-            },
+            self._message(
+                "round_start",
+                round_number=round_result.round_number,
+                data={"theme": round_result.gm_plan.plan.round_theme},
+            ),
+        )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "gm_plan",
+                round_number=round_result.round_number,
+                data=round_result.gm_plan.model_dump(mode="json"),
+            ),
+        )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "crisis_event",
+                round_number=round_result.round_number,
+                phase="dawn",
+                data=round_result.gm_plan.plan.crisis_event.model_dump(mode="json"),
+            ),
         )
         for phase in round_result.phases:
             await self.connection_manager.broadcast(
                 experiment_id,
-                {
-                    "type": "phase_change",
-                    "round": round_result.round_number,
-                    "phase": phase.phase,
-                    "timestamp": datetime.now(UTC),
-                    "data": {"events": [event.model_dump(mode="json") for event in phase.events]},
-                },
+                self._message(
+                    "phase_change",
+                    round_number=round_result.round_number,
+                    phase=phase.phase,
+                    data={"events": [event.model_dump(mode="json") for event in phase.events]},
+                ),
             )
+        for agent_id, turns in round_result.agent_turns.items():
+            for turn in turns:
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "agent_action",
+                        round_number=round_result.round_number,
+                        data={
+                            "agent_id": agent_id,
+                            "action": turn.decision.action.model_dump(mode="json"),
+                            "cooperation_intent": turn.decision.cooperation_intent,
+                            "goal_progress": turn.decision.goal_progress,
+                        },
+                    ),
+                )
+                if turn.decision.action.location:
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self._message(
+                            "agent_move",
+                            round_number=round_result.round_number,
+                            data={
+                                "agent_id": agent_id,
+                                "location": turn.decision.action.location,
+                            },
+                        ),
+                    )
         await self.connection_manager.broadcast(
             experiment_id,
-            {
-                "type": "round_end",
-                "round": round_result.round_number,
-                "timestamp": datetime.now(UTC),
-                "data": {
+            self._message(
+                "resource_update",
+                round_number=round_result.round_number,
+                data=round_result.world_state.resources.model_dump(),
+            ),
+        )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "threat_update",
+                round_number=round_result.round_number,
+                data={"threat_level": round_result.threat_level},
+            ),
+        )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "round_end",
+                round_number=round_result.round_number,
+                data={
                     "threat_level": round_result.threat_level,
                     "resources": round_result.world_state.resources.model_dump(),
                 },
-            },
+            ),
         )
+        state = self.get_state(experiment_id)
+        if round_result.round_number >= state.total_rounds:
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "experiment_end",
+                    round_number=round_result.round_number,
+                    data={"status": state.status, "total_rounds": state.total_rounds},
+                ),
+            )
 
     def _relationship_summary(self, state: SimulationState) -> str:
         parts = []
@@ -226,7 +315,40 @@ class ExperimentRuntime:
                 parts.append(f"{agent.name} tracks {len(agent.relationships)} relationships.")
         return " ".join(parts) or "Relationships are still taking shape."
 
-    def _log(self, experiment_id: str, *, event_type: str, summary: str, round_number: int | None = None, phase: str | None = None, agent_id: str | None = None, data: dict[str, Any] | None = None) -> None:
+    def _message(
+        self,
+        message_type: WSMessageType,
+        *,
+        round_number: int,
+        data: dict[str, Any],
+        phase: str | None = None,
+    ) -> dict[str, Any]:
+        return WSMessage(
+            type=message_type,
+            round=round_number,
+            phase=phase,
+            timestamp=datetime.now(UTC),
+            data=data,
+        ).model_dump(mode="json")
+
+    def _schedule_broadcast(self, experiment_id: str, payload: dict[str, Any]) -> None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(self.connection_manager.broadcast(experiment_id, payload))
+
+    def _log(
+        self,
+        experiment_id: str,
+        *,
+        event_type: EventLogType,
+        summary: str,
+        round_number: int | None = None,
+        phase: str | None = None,
+        agent_id: str | None = None,
+        data: dict[str, Any] | None = None,
+    ) -> None:
         self.logs[experiment_id].append(
             EventLogItem(
                 id=str(uuid.uuid4()),
