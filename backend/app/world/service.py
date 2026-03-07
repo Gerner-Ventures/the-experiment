@@ -65,12 +65,12 @@ def _location_entry_tiles(location_id: str) -> frozenset[tuple[int, int]]:
     )
 
 
-def resolve_spawn_tile(location_id: str | None) -> tuple[int, int]:
+def resolve_spawn_tile(location_id: str | None, *, spawn_index: int = 0) -> tuple[int, int]:
     candidate_location = location_id or "town_square"
-    tiles = _location_entry_tiles(candidate_location)
+    tiles = sorted(_location_entry_tiles(candidate_location), key=lambda tile: (tile[1], tile[0]))
     if not tiles:
         return DEFAULT_SPAWN_TILE
-    return min(tiles, key=lambda tile: (tile[1], tile[0]))
+    return tiles[spawn_index % len(tiles)]
 
 
 def resolve_location_target(location_id: str | None) -> set[tuple[int, int]]:
@@ -109,8 +109,8 @@ def step_toward(
         if current in goals:
             found_goal = current
             break
-        for neighbor in get_adjacent_walkable_tiles(current):
-            if neighbor not in walkable or neighbor in came_from:
+        for neighbor in get_adjacent_walkable_tiles(current, walkable=walkable):
+            if neighbor in came_from:
                 continue
             came_from[neighbor] = current
             frontier.append(neighbor)
@@ -128,11 +128,13 @@ def step_toward(
     return capped or [start]
 
 
-def get_adjacent_walkable_tiles(tile: tuple[int, int]) -> list[tuple[int, int]]:
+def get_adjacent_walkable_tiles(
+    tile: tuple[int, int], *, walkable: set[tuple[int, int]] | None = None
+) -> list[tuple[int, int]]:
     x, y = tile
     neighbors = [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]
-    walkable = _walkable_tiles()
-    return [neighbor for neighbor in neighbors if neighbor in walkable]
+    walkable_tiles = walkable or _walkable_tiles()
+    return [neighbor for neighbor in neighbors if neighbor in walkable_tiles]
 
 
 @lru_cache(maxsize=None)

@@ -232,6 +232,9 @@ class SimulationEngine:
         actions: list[PreparedAction] = []
         for agent in self._active_agents(state):
             self._ensure_agent_position(agent)
+        # Actions are prepared sequentially, not from a start-of-phase position snapshot.
+        # If one agent moves first, later proximity checks in the same phase will see that
+        # updated tile position.
         for agent in self._active_agents(state):
             turns = []
             for _ in range(actions_per_agent):
@@ -984,6 +987,8 @@ class SimulationEngine:
         requested_action: str,
         note: str,
     ) -> PreparedAction:
+        # Blocked actions immediately affect memory/suspicion so subsequent decisions in the
+        # same round can react to the failed attempt.
         agent.suspicion_level, _ = apply_suspicion_trigger(
             current_level=agent.suspicion_level,
             trigger="failed_action",

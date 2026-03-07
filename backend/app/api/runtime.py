@@ -66,8 +66,12 @@ class ExperimentRuntime:
             experiment_id = str(uuid.uuid4())
             arc = request.arc or get_preset_arc(request.preset_arc_id)
             agents: list[EngineAgentState] = []
+            spawn_counts: dict[str, int] = {}
             for agent in request.agents:
-                spawn_tile = resolve_spawn_tile(agent.location)
+                location = agent.location or "town_square"
+                spawn_index = spawn_counts.get(location, 0)
+                spawn_counts[location] = spawn_index + 1
+                spawn_tile = resolve_spawn_tile(location, spawn_index=spawn_index)
                 agents.append(
                     EngineAgentState(
                         agent_id=str(uuid.uuid4()),
@@ -76,7 +80,7 @@ class ExperimentRuntime:
                         personality=agent.personality,
                         goal=agent.goal,
                         memory=AgentMemoryState(),
-                        location=agent.location,
+                        location=location,
                         tile_x=spawn_tile[0],
                         tile_y=spawn_tile[1],
                         inventory=agent.inventory,

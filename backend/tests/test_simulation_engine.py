@@ -292,7 +292,7 @@ async def test_engine_blocks_resource_actions_at_invalid_locations() -> None:
 
 
 @pytest.mark.asyncio
-async def test_engine_allows_vote_without_nearby_agent_when_in_meeting_hall() -> None:
+async def test_engine_allows_vote_action_in_meeting_hall() -> None:
     service = _StubAgentService(
         {
             "a1": [("vote", "town_hall"), ("observe", "town_hall"), ("observe", "town_hall")],

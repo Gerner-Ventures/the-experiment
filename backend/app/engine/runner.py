@@ -49,8 +49,12 @@ class ExperimentRunner:
         )
 
         engine_agents: list[EngineAgentState] = []
+        spawn_counts: dict[str, int] = {}
         for agent_data in agents:
-            spawn_tile = resolve_spawn_tile("town_square")
+            location = agent_data.get("location", "town_square") or "town_square"
+            spawn_index = spawn_counts.get(location, 0)
+            spawn_counts[location] = spawn_index + 1
+            spawn_tile = resolve_spawn_tile(location, spawn_index=spawn_index)
             axes_data = agent_data.get("personalityAxes", {})
             axes = PersonalityAxes(
                 paranoia=axes_data.get("paranoia", 50),
@@ -77,7 +81,7 @@ class ExperimentRunner:
                     personality=personality,
                     goal=goal,
                     memory=AgentMemoryState(),
-                    location="town_square",
+                    location=location,
                     tile_x=spawn_tile[0],
                     tile_y=spawn_tile[1],
                     llm_model=agent_data.get("llmModel", "openai/gpt-4o-mini"),

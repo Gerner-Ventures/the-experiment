@@ -256,12 +256,16 @@ Conflicts on the same action/location can produce winner-based resolution with a
 
 The engine now applies a validation and normalization pass before action resolution.
 
+One implementation detail matters here: action preparation is sequential inside a phase, not simultaneous from a frozen start-of-phase snapshot. If one agent moves early in the preparation loop, later proximity checks in that same phase will see the updated position.
+
 ### Tile-Based Position
 
 Agents track both:
 
 - a coarse `location` label for events and UI
 - an exact tile position with `tile_x` / `tile_y` for movement and range checks
+
+Initial spawns are distributed across the available entry tiles for a location so agents do not all begin stacked on the exact same coordinate.
 
 ### Movement Cap
 
