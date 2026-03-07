@@ -7,9 +7,11 @@ from unittest.mock import AsyncMock
 import pytest
 from starlette.websockets import WebSocketState
 
-from app.api.models import CreateExperimentRequest
+from app.api.models import CreateExperimentRequest, EventLogItem
 from app.api.runtime import ConnectionManager, ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
+from app.engine.models import ActionResolution, RoundResult
+from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
 
 
 def _request() -> CreateExperimentRequest:
@@ -62,6 +64,24 @@ def _request() -> CreateExperimentRequest:
                 },
             ],
         }
+    )
+
+
+def _gm_plan(round_number: int) -> GMPlanRecord:
+    return GMPlanRecord(
+        status="applied",
+        plan=GMPlanData(
+            round=round_number,
+            round_theme="Test pressure",
+            reasoning="Keep the test deterministic.",
+            crisis_event=CrisisEvent(
+                type="social",
+                description="A tense silence falls over the square.",
+                severity="low",
+            ),
+            resource_modifiers=ResourceDelta(),
+            narration="The town watches itself carefully.",
+        ),
     )
 
 
@@ -131,6 +151,78 @@ async def test_inject_observer_event_updates_plotlines_and_suspicion(
     assert all(agent.suspicion_level == 6.0 for agent in stored.agents)
     assert total == 1
     assert logs[0].summary == "The streetlights blinked in perfect sync."
+
+
+@pytest.mark.asyncio
+async def test_build_round_summary_tolerates_action_records_for_unknown_agents(
+    runtime_instance: ExperimentRuntime,
+) -> None:
+    state = await runtime_instance.create_experiment(_request())
+
+    summary = runtime_instance._build_round_summary(
+        state,
+        RoundResult(
+            round_number=1,
+            gm_plan=_gm_plan(1),
+            phases=[],
+            cooperation_ratio=0.0,
+            threat_level=state.world_state.threat_level,
+            world_state=state.world_state,
+            action_resolutions=[
+                ActionResolution(
+                    phase="morning",
+                    agent_id="missing-agent",
+                    agent_name="Ghost",
+                    location="town_square",
+                    requested_action_type="observe",
+                    resolved_action_type="observe",
+                    cooperation_intent="low",
+                    goal_progress="I was never on the roster.",
+                    summary="Ghost lingers at the edge of the round.",
+                    suspicion_level=0.0,
+                )
+            ],
+            created_at=datetime.now(UTC),
+        ),
+    )
+
+    assert summary["goal_progress"][0]["agent_id"] == "missing-agent"
+    assert summary["goal_progress"][0]["goal_text"] == ""
+    assert summary["goal_progress"][0]["status"] == ""
+
+
+@pytest.mark.asyncio
+async def test_faction_analytics_tolerates_legacy_round_logs_without_kind(
+    runtime_instance: ExperimentRuntime,
+) -> None:
+    state = await runtime_instance.create_experiment(_request())
+    await runtime_instance.store.append_log(
+        EventLogItem(
+            id="legacy-round-end",
+            experiment_id=state.experiment_id,
+            round_number=1,
+            phase="night",
+            type="round_end",
+            summary="Legacy faction snapshot.",
+            data={
+                "factions": [
+                    {
+                        "faction_id": "legacy-faction",
+                        "name": "Unlabeled Circle",
+                        "member_ids": ["a1"],
+                        "pressure": 4.0,
+                        "influence": 8.0,
+                    }
+                ]
+            },
+            timestamp=datetime.now(UTC),
+        )
+    )
+
+    analytics = await runtime_instance.get_faction_analytics(state.experiment_id, state=state)
+
+    assert analytics.timeline[0].faction_id == "legacy-faction"
+    assert analytics.timeline[0].kind is None
 
 
 @pytest.mark.asyncio

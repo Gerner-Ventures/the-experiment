@@ -224,11 +224,13 @@ Additional report-grade analytics endpoints expose persisted derived views for f
   - one round-level item per completed round
   - GM theme, narration, and crisis payload
   - resolved cooperation score, betrayal count, sabotage count
+  - `sabotage_count` is a subset of the broader `betrayal_count`
   - round resources, threat, and dominant faction
 - `GET /api/experiments/{experiment_id}/analytics/goals`
   - one item per agent
   - round-by-round goal progress snapshots
   - a derived final outcome: `achieved`, `partial`, `failed`, or `unknown`
+  - `status` is serialized from `AgentStatus`
 - `GET /api/experiments/{experiment_id}/analytics/betrayals`
   - sabotage actions
   - hostile actions such as `accuse`, `attack`, `threaten`, `stab`, `shoot`, and `poison`
@@ -236,10 +238,12 @@ Additional report-grade analytics endpoints expose persisted derived views for f
 - `GET /api/experiments/{experiment_id}/analytics/suspicion`
   - flat heatmap points for charting
   - grouped per-agent suspicion histories
+  - grouped history points include only `round_number` and `suspicion_level`
 - `GET /api/experiments/{experiment_id}/analytics/factions`
   - current factions
   - faction pressure timeline
   - membership joins/leaves by round
+  - timeline `kind` may be `null` for legacy logs that predate explicit faction-kind persistence
 - `GET /api/experiments/{experiment_id}/analytics/gm`
   - round theme
   - narration

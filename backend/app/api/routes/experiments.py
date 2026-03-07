@@ -204,8 +204,8 @@ async def get_event_log(
     ),
 )
 async def get_analytics_summary(experiment_id: str) -> AnalyticsSummary:
-    await _get_state(experiment_id)
-    return await runtime.get_analytics_summary(experiment_id)
+    state = await _get_state(experiment_id)
+    return await runtime.get_analytics_summary(experiment_id, state=state)
 
 
 @router.get(
@@ -226,8 +226,8 @@ async def get_round_analytics(experiment_id: str) -> RoundAnalyticsPage:
     description="Return per-agent goal progress history and a derived final outcome summary.",
 )
 async def get_goal_analytics(experiment_id: str) -> GoalAnalytics:
-    await _get_state(experiment_id)
-    return GoalAnalytics(items=await runtime.get_goal_analytics(experiment_id))
+    state = await _get_state(experiment_id)
+    return GoalAnalytics(items=await runtime.get_goal_analytics(experiment_id, state=state))
 
 
 @router.get(
@@ -237,8 +237,8 @@ async def get_goal_analytics(experiment_id: str) -> GoalAnalytics:
     description="Return sabotage, hostile-action, and exile timeline entries.",
 )
 async def get_betrayal_analytics(experiment_id: str) -> BetrayalAnalytics:
-    await _get_state(experiment_id)
-    return BetrayalAnalytics(items=await runtime.get_betrayal_analytics(experiment_id))
+    state = await _get_state(experiment_id)
+    return BetrayalAnalytics(items=await runtime.get_betrayal_analytics(experiment_id, state=state))
 
 
 @router.get(
@@ -259,8 +259,10 @@ async def get_suspicion_analytics(experiment_id: str) -> SuspicionAnalytics:
     description="Return relationship edges derived from persisted agent relationship memory.",
 )
 async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytics:
-    await _get_state(experiment_id)
-    return RelationshipAnalytics(items=await runtime.get_relationship_analytics(experiment_id))
+    state = await _get_state(experiment_id)
+    return RelationshipAnalytics(
+        items=await runtime.get_relationship_analytics(experiment_id, state=state)
+    )
 
 
 @router.get(
@@ -270,8 +272,8 @@ async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytic
     description="Return the current alliance/cult state plus faction pressure timeline and membership changes.",
 )
 async def get_faction_analytics(experiment_id: str) -> FactionAnalytics:
-    await _get_state(experiment_id)
-    return await runtime.get_faction_analytics(experiment_id)
+    state = await _get_state(experiment_id)
+    return await runtime.get_faction_analytics(experiment_id, state=state)
 
 
 @router.get(
