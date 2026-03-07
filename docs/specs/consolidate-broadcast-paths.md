@@ -1,12 +1,8 @@
 ---
-priority: P2
-review_status: approved
+title: "Consolidate WS broadcast paths (broadcast_round → RoundHook)"
 status: todo
-tags:
-- stream-2
-- backend
-- refactor
-title: Consolidate WS broadcast paths (broadcast_round → RoundHook)
+priority: P2
+tags: [stream-2, backend, refactor]
 ---
 
 # Consolidate WS Broadcast Paths
@@ -26,7 +22,7 @@ This duplication will drift as new event types or broadcast behaviors are added.
 
 ## Solution
 
-Migrate the legacy `step()` method to use `run_round(state, hook=hook)` with a hook, eliminating `broadcast_round()` entirely. **Status:** Partial — `_step_streaming()` uses hook path, but `step()` still calls `broadcast_round()`. Full migration pending.
+Migrate the legacy `step()` method to use `run_round(state, hook=hook)` with a hook, eliminating `broadcast_round()` entirely.
 
 ### 1. Update `step()` to use `RoundHook`
 
@@ -65,7 +61,8 @@ Both `_step_streaming` and the updated `step()` need to broadcast `round_end` wi
 - [ ] `_broadcast_round_end()` is shared between `step()` and `_step_streaming()`
 - [ ] WS message sequence is identical for both `step()` and `start_step()` paths
 - [ ] All existing tests pass
-- [ ] Frontend receives same events regardless of which endpoint triggered the round
+- [x] Frontend receives same events regardless of which endpoint triggered the round
+<!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
 
 ## Key Files
 
