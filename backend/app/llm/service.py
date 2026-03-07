@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 import json
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
-from app.agents.models import (
-    KeyMemory,
-    MemoryConsolidationDecision,
-    MemoryEvent,
-    MemoryPromotionDecision,
-    RelationshipConsolidationDecision,
-    RelationshipMemory,
-    SecretGoal,
-)
 from app.core.config import get_settings
 from app.llm.client import LLMClient
-from app.llm.models import LLMRequest, LLMResult, UsageSummary
+from app.llm.models import (
+    LLMRequest,
+    LLMResult,
+    MemoryConsolidationDecision,
+    MemoryPromotionDecision,
+    RelationshipConsolidationDecision,
+    UsageSummary,
+)
+
+if TYPE_CHECKING:
+    from app.agents.models import KeyMemory, MemoryEvent, RelationshipMemory, SecretGoal
 
 
 class LLMService:
@@ -79,7 +81,7 @@ class LLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
-    ) -> MemoryPromotionDecision | None:
+    ) -> MemoryPromotionDecision:
         result = await self.client.generate_structured(
             LLMRequest(
                 role="agent",
@@ -113,8 +115,9 @@ class LLMService:
                 metadata={"memory_classifier": True, "round_number": event.round_number},
             )
         )
-        parsed = result.parsed or {}
-        return MemoryPromotionDecision.model_validate(parsed)
+        return MemoryPromotionDecision.model_validate(
+            _require_parsed_result(result, operation="memory classification")
+        )
 
     async def consolidate_memory_events(
         self,
@@ -123,7 +126,7 @@ class LLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
-    ) -> MemoryConsolidationDecision | None:
+    ) -> MemoryConsolidationDecision:
         result = await self.client.generate_structured(
             LLMRequest(
                 role="agent",
@@ -160,8 +163,9 @@ class LLMService:
                 },
             )
         )
-        parsed = result.parsed or {}
-        return MemoryConsolidationDecision.model_validate(parsed)
+        return MemoryConsolidationDecision.model_validate(
+            _require_parsed_result(result, operation="memory consolidation")
+        )
 
     async def consolidate_relationship_memory(
         self,
@@ -170,7 +174,7 @@ class LLMService:
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
-    ) -> RelationshipConsolidationDecision | None:
+    ) -> RelationshipConsolidationDecision:
         result = await self.client.generate_structured(
             LLMRequest(
                 role="agent",
@@ -201,5 +205,12 @@ class LLMService:
                 metadata={"relationship_consolidator": True},
             )
         )
-        parsed = result.parsed or {}
-        return RelationshipConsolidationDecision.model_validate(parsed)
+        return RelationshipConsolidationDecision.model_validate(
+            _require_parsed_result(result, operation="relationship consolidation")
+        )
+
+
+def _require_parsed_result(result: LLMResult, *, operation: str) -> dict[str, object]:
+    if result.parsed is None:
+        raise ValueError(f"{operation} returned no parsed structured payload")
+    return result.parsed

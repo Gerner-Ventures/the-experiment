@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from random import Random
 from typing import cast
@@ -17,7 +18,7 @@ from app.engine.models import (
     SimulationState,
     build_agent_context,
 )
-from app.agents.models import AgentTurnResult
+from app.agents.models import AgentMemoryState, AgentTurnResult
 from app.gm.models import GMPlanData, GMPlanRecord
 from app.gm import GMPlanningContext, GMService
 from app.social import SocialService
@@ -266,28 +267,19 @@ class SimulationEngine:
             cooperation_ratio=cooperation_ratio,
             crisis_severity=crisis_severity,
         )
+        night_updates = await asyncio.gather(
+            *[
+                self._build_night_reflection(
+                    agent,
+                    round_number=state.world_state.round_number,
+                    cooperation_ratio=cooperation_ratio,
+                )
+                for agent in state.agents
+            ]
+        )
         reflections = []
-        for agent in state.agents:
-            reflection = f"{agent.name} ends the night feeling {self._night_mood(agent.suspicion_level, cooperation_ratio)}."
-            agent.memory = await self.agent_service.register_observation(
-                agent.memory,
-                round_number=state.world_state.round_number,
-                summary=reflection,
-                emotional_charge=10,
-                important=agent.suspicion_level > 40,
-                goal=agent.goal,
-                suspicion_level=agent.suspicion_level,
-            )
-            agent.memory = await self.agent_service.consolidate_memory(
-                agent.memory,
-                goal=agent.goal,
-                suspicion_level=agent.suspicion_level,
-            )
-            agent.memory = await self.agent_service.consolidate_relationship_memory(
-                agent.memory,
-                goal=agent.goal,
-                suspicion_level=agent.suspicion_level,
-            )
+        for agent, (reflection, updated_memory) in zip(state.agents, night_updates, strict=True):
+            agent.memory = updated_memory
             agent.relationships = dict(agent.memory.relationship_memory)
             reflections.append(reflection)
         return PhaseResult(
@@ -301,6 +293,35 @@ class SimulationEngine:
             ],
             cooperation_ratio=state.world_state.threat_level,
         )
+
+    async def _build_night_reflection(
+        self,
+        agent: EngineAgentState,
+        *,
+        round_number: int,
+        cooperation_ratio: float,
+    ) -> tuple[str, AgentMemoryState]:
+        reflection = f"{agent.name} ends the night feeling {self._night_mood(agent.suspicion_level, cooperation_ratio)}."
+        updated_memory = await self.agent_service.register_observation(
+            agent.memory,
+            round_number=round_number,
+            summary=reflection,
+            emotional_charge=10,
+            important=agent.suspicion_level > 40,
+            goal=agent.goal,
+            suspicion_level=agent.suspicion_level,
+        )
+        updated_memory = await self.agent_service.consolidate_memory(
+            updated_memory,
+            goal=agent.goal,
+            suspicion_level=agent.suspicion_level,
+        )
+        updated_memory = await self.agent_service.consolidate_relationship_memory(
+            updated_memory,
+            goal=agent.goal,
+            suspicion_level=agent.suspicion_level,
+        )
+        return reflection, updated_memory
 
     async def _resolve_actions(
         self,

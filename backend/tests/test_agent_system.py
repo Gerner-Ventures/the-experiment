@@ -9,13 +9,10 @@ from app.agents.models import (
     AgentContext,
     AgentMemoryState,
     KeyMemory,
-    MemoryConsolidationDecision,
     MemoryEvent,
-    MemoryPromotionDecision,
     Observation,
     PersonalityAxes,
     PersonalityProfile,
-    RelationshipConsolidationDecision,
     RelationshipMemory,
     SecretGoal,
 )
@@ -31,8 +28,13 @@ from app.agents.suspicion import apply_suspicion_trigger
 from app.engine.service import SimulationEngine
 from app.gm import get_preset_arc
 from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
-from app.llm import LLMService
-from app.llm.models import LLMResult
+from app.llm.models import (
+    LLMResult,
+    MemoryConsolidationDecision,
+    MemoryPromotionDecision,
+    RelationshipConsolidationDecision,
+)
+from app.llm.service import LLMService
 from app.world import build_default_world_state
 
 
@@ -101,7 +103,7 @@ class _StubMemoryLLMService(LLMService):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
-    ) -> MemoryPromotionDecision | None:
+    ) -> MemoryPromotionDecision:
         self.classify_calls += 1
         return self._decision
 
@@ -112,7 +114,7 @@ class _StubMemoryLLMService(LLMService):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
-    ) -> MemoryConsolidationDecision | None:
+    ) -> MemoryConsolidationDecision:
         return self._consolidation
 
     async def consolidate_relationship_memory(
@@ -122,7 +124,7 @@ class _StubMemoryLLMService(LLMService):
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
-    ) -> RelationshipConsolidationDecision | None:
+    ) -> RelationshipConsolidationDecision:
         self.relationship_consolidation_calls += 1
         return self._relationship_consolidation
 
@@ -135,7 +137,7 @@ class _FailingMemoryConsolidationLLMService(_StubMemoryLLMService):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
-    ) -> MemoryConsolidationDecision | None:
+    ) -> MemoryConsolidationDecision:
         raise RuntimeError("memory consolidation unavailable")
 
 

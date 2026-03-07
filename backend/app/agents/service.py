@@ -8,8 +8,6 @@ from app.agents.memory import add_key_memory, append_recent_event, update_relati
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
-    MemoryConsolidationDecision,
-    MemoryPromotionDecision,
     AgentTurnResult,
     KeyMemory,
     MemoryEvent,
@@ -17,7 +15,8 @@ from app.agents.models import (
     RelationshipMemory,
     SecretGoal,
 )
-from app.llm import LLMService
+from app.llm.models import MemoryConsolidationDecision, MemoryPromotionDecision
+from app.llm.service import LLMService
 
 MEMORY_CONSOLIDATION_MIN_EVENTS = 3
 RELATIONSHIP_CONSOLIDATION_MIN_HISTORY = 3
@@ -60,6 +59,8 @@ class AgentService:
             event,
         )
         decision: MemoryPromotionDecision | None = None
+        # Important observations are forced into key memory, but we still try to enrich
+        # them with classifier-derived meaning and salience when that path is available.
         if important or classify:
             try:
                 decision = await self.memory_llm_service.classify_memory_event(
@@ -136,7 +137,7 @@ class AgentService:
         updated = memory.model_copy(
             update={"last_consolidated_round": unconsolidated_events[-1].round_number}
         )
-        if decision is None or not decision.create_summary:
+        if not decision.create_summary:
             return updated
 
         key_memory = self._build_consolidated_key_memory(unconsolidated_events, decision)
@@ -176,10 +177,7 @@ class AgentService:
                 )
                 continue
 
-            if decision is None:
-                continue
-
-            relationship_update: dict[str, str] = {
+            relationship_update: dict[str, object] = {
                 "last_consolidated_history_signature": history_signature
             }
             if decision.update_notes and decision.notes:

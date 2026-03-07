@@ -225,24 +225,3 @@ class AgentTurnResult(AgentModel):
     updated_memory: AgentMemoryState
     suspicion_level: float = Field(ge=0, le=100)
     prompt: str
-
-
-class MemoryPromotionDecision(AgentModel):
-    promote_to_key_memory: bool = False
-    meaning: str | None = None
-    salience_type: MemorySalienceType = "other"
-    confidence: int = Field(ge=0, le=100, default=60)
-
-
-class MemoryConsolidationDecision(AgentModel):
-    create_summary: bool = False
-    summary: str | None = None
-    meaning: str | None = None
-    salience_type: MemorySalienceType = "other"
-    confidence: int = Field(ge=0, le=100, default=65)
-
-
-class RelationshipConsolidationDecision(AgentModel):
-    update_notes: bool = False
-    notes: str | None = None
-    confidence: int = Field(ge=0, le=100, default=65)
