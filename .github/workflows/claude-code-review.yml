@@ -15,7 +15,8 @@ jobs:
     # Skip bot PRs (Dependabot, Canon auto-generated doc updates)
     if: >-
       github.event.pull_request.user.login != 'dependabot[bot]' &&
-      github.event.pull_request.user.login != 'canonhq[bot]'
+      github.event.pull_request.user.login != 'canonhq[bot]' &&
+      github.event.pull_request.user.login != 'specwright[bot]'
 
     # Optional: Filter by PR author
     # if: |
