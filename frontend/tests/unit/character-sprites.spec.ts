@@ -3,7 +3,6 @@ import {
   getSpriteById,
   CHARACTER_SPRITES,
   SILLY_ANIMATIONS,
-  type CharacterSprite,
   type PoseName,
 } from '@/config/character-sprites'
 
@@ -120,14 +119,13 @@ describe('character-sprites', () => {
       const idle = renderCharacter(sprite, 'idle')
       const stab = renderCharacter(sprite, 'stab')
 
-      // Stab has pixelOverrides at positions like [13, 12], [13, 13], [13, 11]
-      // These areas should differ from idle
-      const stabHasExtraPixels = stab.flat().filter(c => c !== null).length >
-        idle.flat().filter(c => c !== null).length
-
-      // Stab should generally have more non-null pixels due to weapon overlay
-      // or at least differ from idle
+      // Stab should differ from idle due to weapon overlay and arm position
       expect(stab).not.toEqual(idle)
+
+      // Stab should have extra pixels from the weapon overlay
+      const stabPixels = stab.flat().filter(c => c !== null).length
+      const idlePixels = idle.flat().filter(c => c !== null).length
+      expect(stabPixels).toBeGreaterThanOrEqual(idlePixels)
     })
 
     it('pee pose includes stream pixel overrides', () => {

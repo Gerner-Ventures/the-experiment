@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Card, Button, Typography, Flex, Space, Progress } from 'ant-design-vue'
+import { Card, Button, Typography, Flex, Space } from 'ant-design-vue'
 import { getArcPresets } from '@/config/arc-presets'
 import { useLocale } from '@/locales'
 

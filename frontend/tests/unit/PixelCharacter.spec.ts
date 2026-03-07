@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import PixelCharacter from '@/components/ui/PixelCharacter.vue'
-import { getSpriteById, CHARACTER_SPRITES } from '@/config/character-sprites'
+import { getSpriteById } from '@/config/character-sprites'
 
 // Mock canvas context since jsdom doesn't support canvas
 const mockFillRect = jest.fn()
@@ -12,6 +12,7 @@ const mockCtx = {
   clearRect: mockClearRect,
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 HTMLCanvasElement.prototype.getContext = jest.fn().mockReturnValue(mockCtx) as any
 
 describe('PixelCharacter', () => {

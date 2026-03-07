@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "the-experiment.fullname" . }}-backend
+  labels:
+    {{- include "the-experiment.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backend
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "the-experiment.backendSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "the-experiment.backendSelectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "the-experiment.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: backend
+          image: {{ include "the-experiment.backendImage" . }}
+          imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.config.backendPort }}
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "the-experiment.fullname" . }}
+          {{- if or .Values.secrets.neon.databaseUrl .Values.secrets.neon.existingSecret }}
+            - secretRef:
+                name: {{ include "the-experiment.neonSecretName" . }}
+          {{- end }}
+          {{- if or .Values.secrets.auth0.domain .Values.secrets.auth0.existingSecret }}
+            - secretRef:
+                name: {{ include "the-experiment.auth0SecretName" . }}
+          {{- end }}
+          {{- if or .Values.secrets.litellm.anthropicApiKey .Values.secrets.litellm.existingSecret }}
+            - secretRef:
+                name: {{ include "the-experiment.litellmSecretName" . }}
+          {{- end }}
+          {{- if or .Values.secrets.posthog.apiKey .Values.secrets.posthog.existingSecret }}
+            - secretRef:
+                name: {{ include "the-experiment.posthogSecretName" . }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.backend.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -3,6 +3,7 @@ name = "the-experiment"
 version = "0.1.0"
 description = "AI agent simulation engine — Lord of the Flies meets The Truman Show"
 authors = []
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.12"
@@ -11,10 +12,13 @@ uvicorn = {extras = ["standard"], version = "^0.34.0"}
 sqlalchemy = "^2.0"
 alembic = "^1.14"
 asyncpg = "^0.30.0"
+psycopg = {extras = ["binary"], version = "^3.2"}
 redis = "^5.0"
 litellm = "^1.55"
 pydantic = "^2.10"
+pydantic-settings = "^2.7"
 websockets = "^14.0"
+structlog = "^25.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -33,3 +37,7 @@ line-length = 100
 [tool.mypy]
 python_version = "3.12"
 strict = true
+
+[[tool.mypy.overrides]]
+module = "structlog"
+ignore_missing_imports = true

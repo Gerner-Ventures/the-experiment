@@ -2,7 +2,7 @@
 import { ref, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  Card, Button, Badge, Space, Row, Col, Typography, Divider,
+  Button, Badge, Space, Row, Col, Typography,
 } from 'ant-design-vue'
 import {
   ExperimentOutlined, ThunderboltOutlined,

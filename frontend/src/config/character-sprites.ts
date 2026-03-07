@@ -41,8 +41,6 @@ export interface CharacterSprite {
   accessory: number
 }
 
-type Grid = string[][]
-
 const W = 14
 const H = 18
 
