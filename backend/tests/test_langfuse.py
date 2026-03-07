@@ -193,7 +193,7 @@ class TestLangfuseSpanHelper:
         from app.core import langfuse
 
         langfuse._client = None
-        result = langfuse.span(name="test", trace_id="t1")
+        result = langfuse.span(name="test")
         assert result is None
 
     def test_span_delegates_to_trace_span(self) -> None:
@@ -204,7 +204,6 @@ class TestLangfuseSpanHelper:
 
         result = langfuse.span(
             name="gm_plan",
-            trace_id="t1",
             trace=mock_trace,
             metadata={"round": 1},
         )
@@ -221,7 +220,7 @@ class TestLangfuseSpanHelper:
         mock_trace = MagicMock()
         mock_trace.span.side_effect = RuntimeError("boom")
 
-        result = langfuse.span(name="test", trace_id="t1", trace=mock_trace)
+        result = langfuse.span(name="test", trace=mock_trace)
         assert result is None
 
 
@@ -279,9 +278,9 @@ class TestTraceHierarchyInEngine:
 
             assert "gm_plan" in span_names
             assert "morning" in span_names
-            assert "midday" in span_names
             assert "afternoon" in span_names
             assert "night" in span_names
+            assert "midday" not in span_names  # no LLM calls in midday
         finally:
             lf_module.trace = original_trace  # type: ignore[assignment]
 
@@ -295,6 +294,7 @@ class TestTraceContextPropagation:
         assert ctx == {"trace_id": "t-1", "parent_observation_id": "s-1"}
 
         from app.core.langfuse import _trace_context
+
         _trace_context.reset(token)
 
     def test_get_trace_context_returns_empty_when_unset(self) -> None:
@@ -316,14 +316,43 @@ class TestTraceContextPropagation:
         class FakeResponse:
             def __init__(self) -> None:
                 self.model = "openai/gpt-4o-mini"
-                self.choices = [type("C", (), {"message": type("M", (), {"content": json.dumps({
-                    "inner_thought": "ok", "suspicion": None,
-                    "action": {"type": "observe", "target": "well", "location": "well"},
-                    "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
-                })})()})]
-                self.usage = type("U", (), {
-                    "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
-                })()
+                self.choices = [
+                    type(
+                        "C",
+                        (),
+                        {
+                            "message": type(
+                                "M",
+                                (),
+                                {
+                                    "content": json.dumps(
+                                        {
+                                            "inner_thought": "ok",
+                                            "suspicion": None,
+                                            "action": {
+                                                "type": "observe",
+                                                "target": "well",
+                                                "location": "well",
+                                            },
+                                            "dialogue": None,
+                                            "goal_progress": "none",
+                                            "cooperation_intent": "medium",
+                                        }
+                                    )
+                                },
+                            )()
+                        },
+                    )
+                ]
+                self.usage = type(
+                    "U",
+                    (),
+                    {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 5,
+                        "total_tokens": 15,
+                    },
+                )()
 
             def model_dump(self) -> dict[str, Any]:
                 return {}
@@ -424,8 +453,9 @@ class TestAgentAndMemorySpans:
             await engine.run_round(state)
 
             agent_spans = [
-                c for c in span_calls if isinstance(c.get("name"), str)
-                and c["name"].startswith("agent:")
+                c
+                for c in span_calls
+                if isinstance(c.get("name"), str) and c["name"].startswith("agent:")
             ]
             assert len(agent_spans) >= 2  # at least one per agent
             for s in agent_spans:
@@ -494,15 +524,23 @@ class TestRepairAndStatusMetadata:
             def __init__(self, content: str) -> None:
                 self.model = "openai/gpt-4o-mini"
                 self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
-                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+                self.usage = type(
+                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                )()
+
             def model_dump(self) -> dict[str, Any]:
                 return {}
 
-        good_json = json.dumps({
-            "inner_thought": "ok", "suspicion": None,
-            "action": {"type": "observe", "target": "well", "location": "well"},
-            "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
-        })
+        good_json = json.dumps(
+            {
+                "inner_thought": "ok",
+                "suspicion": None,
+                "action": {"type": "observe", "target": "well", "location": "well"},
+                "dialogue": None,
+                "goal_progress": "none",
+                "cooperation_intent": "medium",
+            }
+        )
 
         class FakeRouter:
             def __init__(self) -> None:
@@ -623,8 +661,12 @@ def _build_engine_and_state() -> tuple[object, object]:
             name=name,
             personality=PersonalityProfile(
                 axes=PersonalityAxes(
-                    paranoia=50, empathy=50, dominance=50,
-                    impulsiveness=50, loyalty=50, ambition=50,
+                    paranoia=50,
+                    empathy=50,
+                    dominance=50,
+                    impulsiveness=50,
+                    loyalty=50,
+                    ambition=50,
                 ),
                 trait_tags=["guarded", "curious"],
                 self_concept="I am here.",

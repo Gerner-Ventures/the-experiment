@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _client: Langfuse | None = None
-_trace_context: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
-    "langfuse_trace_context", default={}
+_trace_context: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar(
+    "langfuse_trace_context", default=None
 )
 
 
@@ -48,15 +48,15 @@ def trace(*, name: str, session_id: str, **kwargs: Any) -> Any:
         return None
 
 
-def set_trace_context(trace_id: str, span_id: str) -> contextvars.Token[dict[str, str]]:
+def set_trace_context(trace_id: str, span_id: str) -> contextvars.Token[dict[str, str] | None]:
     return _trace_context.set({"trace_id": trace_id, "parent_observation_id": span_id})
 
 
 def get_trace_context() -> dict[str, str]:
-    return _trace_context.get()
+    return _trace_context.get() or {}
 
 
-def span(*, name: str, trace_id: str, trace: Any = None, **kwargs: Any) -> Any:
+def span(*, name: str, trace: Any = None, **kwargs: Any) -> Any:
     if trace is None:
         return None
     try:

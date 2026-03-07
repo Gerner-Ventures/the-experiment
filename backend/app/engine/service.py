@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from random import Random
@@ -39,6 +40,8 @@ from app.world.service import (
     step_toward,
     tile_distance,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -126,33 +129,39 @@ class SimulationEngine:
                 ],
             )
         else:
-            gm_span = lf.span(name="gm_plan", trace_id=getattr(trace, "id", ""), trace=trace)
+            gm_span = lf.span(name="gm_plan", trace=trace)
             self._set_phase_context(trace, gm_span)
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
-        morning_span = lf.span(name="morning", trace_id=getattr(trace, "id", ""), trace=trace)
+        morning_span = lf.span(name="morning", trace=trace)
         self._set_phase_context(trace, morning_span)
         morning_result, morning_turns = await self._action_phase(
-            state, phase="morning", actions_per_agent=2,
-            trace=trace, phase_span=morning_span,
+            state,
+            phase="morning",
+            actions_per_agent=2,
+            trace=trace,
+            phase_span=morning_span,
         )
-        lf.span(name="midday", trace_id=getattr(trace, "id", ""), trace=trace)
         midday_result = self._midday_phase(state)
-        afternoon_span = lf.span(
-            name="afternoon", trace_id=getattr(trace, "id", ""), trace=trace
-        )
+        afternoon_span = lf.span(name="afternoon", trace=trace)
         self._set_phase_context(trace, afternoon_span)
         afternoon_result, afternoon_turns = await self._action_phase(
-            state, phase="afternoon", actions_per_agent=1,
-            trace=trace, phase_span=afternoon_span,
+            state,
+            phase="afternoon",
+            actions_per_agent=1,
+            trace=trace,
+            phase_span=afternoon_span,
         )
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
-        night_span = lf.span(name="night", trace_id=getattr(trace, "id", ""), trace=trace)
+        night_span = lf.span(name="night", trace=trace)
         self._set_phase_context(trace, night_span)
         night_result = await self._night_phase(
-            state, cooperation_ratio, trace=trace, night_span=night_span,
+            state,
+            cooperation_ratio,
+            trace=trace,
+            night_span=night_span,
         )
 
         state.current_round = round_number
@@ -162,13 +171,15 @@ class SimulationEngine:
         self._update_experiment_status(state)
         if trace is not None:
             try:
-                trace.update(metadata={
-                    "status": state.status,
-                    "cooperation_ratio": cooperation_ratio,
-                    "threat_level": state.world_state.threat_level,
-                })
+                trace.update(
+                    metadata={
+                        "status": state.status,
+                        "cooperation_ratio": cooperation_ratio,
+                        "threat_level": state.world_state.threat_level,
+                    }
+                )
             except Exception:
-                pass
+                logger.warning("langfuse trace.update failed", exc_info=True)
         state.recent_events.extend(
             event.summary
             for phase in [
@@ -276,6 +287,9 @@ class SimulationEngine:
         actions: list[PreparedAction] = []
         for agent in self._active_agents(state):
             self._ensure_agent_position(agent)
+        # Actions are prepared sequentially, not from a start-of-phase position snapshot.
+        # If one agent moves first, later proximity checks in the same phase will see that
+        # updated tile position.
         for agent in self._active_agents(state):
             agent_span = lf.span(
                 name=f"agent:{agent.name}",
