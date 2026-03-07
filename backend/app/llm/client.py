@@ -7,7 +7,7 @@ import litellm
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
-from app.core.langfuse import get_trace_context
+from app.core.langfuse import get_trace_context, log_event
 from app.llm.config import get_default_model_configs
 from app.llm.models import LLMModelConfig, LLMRequest, LLMResult, LLMUsage, RepairAttempt
 from app.llm.tracker import UsageTracker
@@ -59,6 +59,10 @@ class LLMClient:
         if request.response_format is not None:
             parsed = self._parse_structured_content(result.content, request.response_format)
             if parsed is None:
+                log_event(
+                    name="json_repair_attempted",
+                    metadata={"role": request.role, "original_content": result.content[:500]},
+                )
                 repaired = await self._repair_json(request, result)
                 if repaired is not None:
                     result = repaired

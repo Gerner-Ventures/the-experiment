@@ -394,6 +394,174 @@ class TestTraceContextPropagation:
             lf_module.set_trace_context = original_set  # type: ignore[assignment]
 
 
+class TestAgentAndMemorySpans:
+    """AC 2.4: Agent decision spans include agent_id and agent_name.
+    AC 2.5: Memory operation spans nested under night phase span."""
+
+    @pytest.mark.asyncio
+    async def test_agent_decision_spans_include_agent_metadata(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-a"
+        span_calls: list[dict[str, object]] = []
+
+        def make_capturing_mock(name: str) -> MagicMock:
+            m = MagicMock(id=f"span-{name}")
+            m.span.side_effect = lambda name, **kw: (
+                span_calls.append({"name": name, **kw}) or make_capturing_mock(name)
+            )
+            return m
+
+        def capture_span(name: str, **kwargs: object) -> MagicMock:
+            span_calls.append({"name": name, **kwargs})
+            return make_capturing_mock(name)
+
+        mock_trace_obj.span.side_effect = capture_span
+        original_trace = lf_module.trace
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            agent_spans = [
+                c for c in span_calls if isinstance(c.get("name"), str)
+                and c["name"].startswith("agent:")
+            ]
+            assert len(agent_spans) >= 2  # at least one per agent
+            for s in agent_spans:
+                meta = s.get("metadata", {})
+                assert "agent_id" in meta  # type: ignore[operator]
+                assert "agent_name" in meta  # type: ignore[operator]
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+    @pytest.mark.asyncio
+    async def test_memory_spans_nested_under_night(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-b"
+        span_calls: list[dict[str, object]] = []
+        night_span = MagicMock(id="span-night")
+        night_span_child_calls: list[dict[str, object]] = []
+
+        def capture_span(name: str, **kwargs: object) -> MagicMock:
+            span_calls.append({"name": name, **kwargs})
+            if name == "night":
+                return night_span
+            return MagicMock(id=f"span-{name}")
+
+        def capture_night_child(name: str, **kwargs: object) -> MagicMock:
+            night_span_child_calls.append({"name": name, **kwargs})
+            return MagicMock(id=f"child-{name}")
+
+        mock_trace_obj.span.side_effect = capture_span
+        night_span.span.side_effect = capture_night_child
+        original_trace = lf_module.trace
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            memory_names = [c["name"] for c in night_span_child_calls]
+            assert any("memory" in str(n) or "consolidat" in str(n) for n in memory_names)
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+
+class TestRepairAndStatusMetadata:
+    """AC 4.3: Failed/repaired JSON logged as span events.
+    AC 4.4: Experiment status set as trace metadata on round completion."""
+
+    @pytest.mark.asyncio
+    async def test_repair_attempt_logged_as_span_event(self) -> None:
+        """When JSON repair occurs, a span event should be recorded."""
+        import json
+        from typing import Any
+        from app.core.langfuse import set_trace_context, _trace_context
+
+        calls: list[dict[str, object]] = []
+
+        def mock_log_event(*, name: str, metadata: object = None) -> None:
+            calls.append({"name": name, "metadata": metadata})
+
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        class FakeResponse:
+            def __init__(self, content: str) -> None:
+                self.model = "openai/gpt-4o-mini"
+                self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
+                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+            def model_dump(self) -> dict[str, Any]:
+                return {}
+
+        good_json = json.dumps({
+            "inner_thought": "ok", "suspicion": None,
+            "action": {"type": "observe", "target": "well", "location": "well"},
+            "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
+        })
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.call_count = 0
+
+            async def acompletion(self, **kwargs: Any) -> FakeResponse:
+                self.call_count += 1
+                if self.call_count == 1:
+                    return FakeResponse("not-valid-json")
+                return FakeResponse(good_json)
+
+        client = LLMClient()
+        client.router = FakeRouter()  # type: ignore[assignment]
+        token = set_trace_context(trace_id="t-1", span_id="s-1")
+        try:
+            with patch("app.llm.client.log_event", side_effect=mock_log_event):
+                await client.generate_structured(
+                    LLMRequest(
+                        role="agent",
+                        messages=[{"role": "system", "content": "test"}],
+                        response_format=AgentDecision,
+                        metadata={},
+                    )
+                )
+            assert len(calls) >= 1
+            assert any("repair" in str(c["name"]).lower() for c in calls)
+        finally:
+            _trace_context.reset(token)
+
+    @pytest.mark.asyncio
+    async def test_experiment_status_set_on_trace_after_round(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-status"
+        mock_trace_obj.span.return_value = MagicMock(id="span-x")
+        update_calls: list[dict[str, object]] = []
+
+        def capture_update(**kwargs: object) -> None:
+            update_calls.append(kwargs)
+
+        mock_trace_obj.update = capture_update
+        original_trace = lf_module.trace
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(update_calls) >= 1
+            last_update = update_calls[-1]
+            meta = last_update.get("metadata", {})
+            assert "status" in meta  # type: ignore[operator]
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+
 def _build_engine_and_state() -> tuple["SimulationEngine", "SimulationState"]:
     from app.agents.models import (
         AgentMemoryState,

@@ -64,3 +64,18 @@ def span(*, name: str, trace_id: str, trace: Any = None, **kwargs: Any) -> Any:
     except Exception:
         logger.warning("langfuse span failed", exc_info=True)
         return None
+
+
+def log_event(*, name: str, metadata: dict[str, Any] | None = None) -> None:
+    ctx = get_trace_context()
+    if not ctx or _client is None:
+        return
+    try:
+        _client.event(
+            trace_id=ctx.get("trace_id"),
+            parent_observation_id=ctx.get("parent_observation_id"),
+            name=name,
+            metadata=metadata or {},
+        )
+    except Exception:
+        logger.warning("langfuse event failed", exc_info=True)
