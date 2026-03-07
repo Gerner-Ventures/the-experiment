@@ -100,13 +100,12 @@ async function initExperiment() {
 async function handleStep() {
   if (!experimentStore.id) return
   try {
-    uiStore.isStepping = true
-    uiStore.steppingStatus = locale.hud.steppingGmPlan
+    uiStore.startStepping(locale.hud.steppingRunning)
     await api.stepRound(experimentStore.id)
   } catch (err) {
     console.error('Step failed:', err)
-    uiStore.isStepping = false
-    uiStore.steppingStatus = ''
+    uiStore.clearStepping()
+    waitingForRound = false
   }
 }
 
@@ -199,9 +198,18 @@ onUnmounted(() => {
   socialStore.$reset()
 })
 
-// Redirect to report when experiment completes
+// Clear stepping state if WebSocket disconnects mid-round (prevents stuck UI)
+watch(() => ws.state.value, (state) => {
+  if (state === 'disconnected' && uiStore.isStepping) {
+    uiStore.clearStepping()
+    waitingForRound = false
+  }
+})
+
+// Redirect to report when experiment completes (only when not auto-playing,
+// since the currentRound watcher handles navigation during auto-play)
 watch(() => experimentStore.isComplete, (complete) => {
-  if (complete && experimentStore.id) {
+  if (complete && experimentStore.id && !uiStore.isPlaying) {
     router.push({ name: 'report', params: { id: experimentStore.id } })
   }
 })

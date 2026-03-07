@@ -35,7 +35,7 @@ const emit = defineEmits<{
     <!-- Stepping status -->
     <Transition name="fade">
       <div v-if="isStepping && steppingStatus" class="flex items-center gap-2 text-accent/70">
-        <LoadingOutlined class="text-xs animate-spin" />
+        <LoadingOutlined class="text-xs" />
         <span class="font-mono text-[11px] tracking-wide">{{ steppingStatus }}</span>
       </div>
     </Transition>
