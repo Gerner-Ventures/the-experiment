@@ -178,6 +178,66 @@ export default {
     backToSetup: 'Back to Setup',
   },
 
+  hud: {
+    play: 'Play',
+    pause: 'Pause',
+    step: 'Step one round',
+    resources: 'Resources',
+    threat: 'Threat',
+    threatLow: 'Stable',
+    threatMedium: 'Elevated',
+    threatHigh: 'Dangerous',
+    threatCritical: 'Critical',
+    roundOf: 'Round {current} of {total}',
+    arc: 'Arc',
+    phaseGmPlan: 'Planning',
+    phaseDawn: 'Dawn',
+    phaseMorning: 'Morning',
+    phaseMidday: 'Midday',
+    phaseAfternoon: 'Afternoon',
+    phaseNight: 'Night',
+  },
+
+  gm: {
+    planTitle: 'GM Plan',
+    theme: 'Theme',
+    crisis: 'Crisis Event',
+    resourceModifiers: 'Resource Modifiers',
+    narration: 'Narration',
+    reasoning: 'Reasoning',
+    metaHint: 'Meta Hint',
+    approve: 'Approve Plan',
+    dismiss: 'Dismiss',
+    clickToContinue: 'Click to continue',
+  },
+
+  dossier: {
+    title: 'Agent Dossier',
+    suspicion: 'Suspicion',
+    personality: 'Personality',
+    goal: 'Secret Goal',
+    inventory: 'Inventory',
+    relationships: 'Relationships',
+    trust: 'Trust',
+    selectAgent: 'Click an agent on the map to inspect',
+  },
+
+  social: {
+    meetingTitle: 'Town Meeting',
+    proposal: 'Proposal',
+    support: 'Support',
+    oppose: 'Oppose',
+    continue: 'Continue',
+  },
+
+  log: {
+    title: 'Event Log',
+    search: 'Search events...',
+    filterType: 'Event type',
+    filterPhase: 'Phase',
+    empty: 'No events yet',
+  },
+
   report: {
     title: 'Experiment Report',
     placeholder: 'Post-game analysis renders here',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onUnmounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Button, Badge, Space, Row, Col, Typography,
 } from 'ant-design-vue'
@@ -18,10 +18,14 @@ import { MIN_AGENTS, DEFAULT_LLM_MODEL, DEFAULT_PERSONALITY_AXES, GOAL_PRESET_KE
 import { CHARACTERS } from '@/config/character-options'
 
 const locale = useLocale()
+const route = useRoute()
 const router = useRouter()
 
+// Skip boot sequence if returning from simulation
+const skipBoot = route.query.configure === '1'
+
 // Boot sequence state
-const bootPhase = ref(0) // 0=booting, 1=ready, 2=configuring
+const bootPhase = ref(skipBoot ? 2 : 0) // 0=booting, 1=ready, 2=configuring
 const bootLines = locale.boot.lines
 const currentBootLine = ref(0)
 const systemReady = ref(false)

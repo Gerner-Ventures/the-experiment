@@ -5,14 +5,31 @@ import type { AgentConfig } from '@/types/agent'
 import { usePixiWorld } from '@/composables/usePixiWorld'
 import { getSpriteById } from '@/config/character-sprites'
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   theme: MapTheme
   mapData: MapData
   agents: AgentConfig[]
+  demoMode?: boolean
+}>(), {
+  demoMode: true,
+})
+
+const emit = defineEmits<{
+  agentClick: [agentId: string]
 }>()
 
 const canvasContainer = ref<HTMLElement>()
 const world = usePixiWorld()
+
+/** Fisher-Yates shuffle (unbiased) */
+function shuffle<T>(arr: T[]): T[] {
+  const result = [...arr]
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]]
+  }
+  return result
+}
 
 onMounted(async () => {
   if (!canvasContainer.value) return
@@ -20,9 +37,9 @@ onMounted(async () => {
   await world.mount(canvasContainer.value)
   world.loadMap(props.theme, props.mapData)
 
-  // Spawn agents at random walkable tiles
+  // Spawn agents at random walkable tiles (Fisher-Yates shuffle)
   const walkableTiles = props.mapData.tiles.filter(t => t.walkable && t.tileType !== 'building')
-  const shuffled = [...walkableTiles].sort(() => Math.random() - 0.5)
+  const shuffled = shuffle(walkableTiles)
 
   for (let i = 0; i < props.agents.length; i++) {
     const agent = props.agents[i]
@@ -33,8 +50,15 @@ onMounted(async () => {
     world.spawnAgent(agent.id, agent.name, sprite, { x: tile.x, y: tile.y })
   }
 
-  // Start demo mode
-  world.startDemo()
+  // Set up agent click handler
+  world.onAgentClick((agentId: string) => {
+    emit('agentClick', agentId)
+  })
+
+  // Start demo mode if no backend
+  if (props.demoMode) {
+    world.startDemo()
+  }
 
   // Center on map middle
   world.centerOn(props.mapData.width / 2, props.mapData.height / 2)

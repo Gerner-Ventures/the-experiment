@@ -15,6 +15,9 @@ export interface UsePixiWorld {
   centerOn(tileX: number, tileY: number): void
   setZoom(level: number): void
   getAgents(): Map<string, AgentSpriteObject>
+  moveAgentTo(id: string, tileX: number, tileY: number): void
+  onAgentClick(callback: (agentId: string) => void): void
+  getAgentScreenPosition(id: string): { x: number; y: number } | null
 }
 
 export function usePixiWorld(): UsePixiWorld {
@@ -25,6 +28,8 @@ export function usePixiWorld(): UsePixiWorld {
   let worldContainer: Container | null = null
   const agents = new Map<string, AgentSpriteObject>()
   let canvasEl: HTMLCanvasElement | null = null
+  let agentClickCallback: ((agentId: string) => void) | null = null
+  let resizeObserver: ResizeObserver | null = null
 
   async function mount(container: HTMLElement): Promise<void> {
     app = new Application()
@@ -38,6 +43,17 @@ export function usePixiWorld(): UsePixiWorld {
 
     container.appendChild(app.canvas as HTMLCanvasElement)
     canvasEl = app.canvas as HTMLCanvasElement
+
+    // Resize handling
+    resizeObserver = new ResizeObserver(() => {
+      if (app && camera) {
+        const w = app.screen.width
+        const h = app.screen.height
+        camera.resize(w, h)
+        ambientOverlay?.resize(w, h)
+      }
+    })
+    resizeObserver.observe(container)
 
     worldContainer = new Container()
     worldContainer.sortableChildren = true
@@ -91,6 +107,11 @@ export function usePixiWorld(): UsePixiWorld {
     if (!worldContainer || !isoMap) return
 
     const agentObj = new AgentSpriteObject(id, name, sprite, tile.x, tile.y)
+    agentObj.container.eventMode = 'static'
+    agentObj.container.cursor = 'pointer'
+    agentObj.container.on('pointerdown', () => {
+      if (agentClickCallback) agentClickCallback(id)
+    })
     isoMap.container.addChild(agentObj.container)
     agents.set(id, agentObj)
   }
@@ -120,6 +141,24 @@ export function usePixiWorld(): UsePixiWorld {
     return agents
   }
 
+  function moveAgentTo(id: string, tileX: number, tileY: number) {
+    const agent = agents.get(id)
+    if (agent) {
+      agent.moveTo(tileX, tileY)
+    }
+  }
+
+  function onAgentClick(callback: (agentId: string) => void) {
+    agentClickCallback = callback
+  }
+
+  function getAgentScreenPosition(id: string): { x: number; y: number } | null {
+    const agent = agents.get(id)
+    if (!agent || !worldContainer) return null
+    const globalPos = agent.container.getGlobalPosition()
+    return { x: globalPos.x, y: globalPos.y }
+  }
+
   function destroy() {
     for (const agent of agents.values()) {
       agent.destroy()
@@ -146,8 +185,13 @@ export function usePixiWorld(): UsePixiWorld {
       app = null
     }
 
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
     worldContainer = null
     canvasEl = null
+    agentClickCallback = null
   }
 
   return {
@@ -159,5 +203,8 @@ export function usePixiWorld(): UsePixiWorld {
     centerOn,
     setZoom,
     getAgents,
+    moveAgentTo,
+    onAgentClick,
+    getAgentScreenPosition,
   }
 }

@@ -162,6 +162,9 @@ export class AgentSpriteObject {
   }
 
   startRandomBehavior(getNeighbors: (x: number, y: number) => { x: number; y: number }[]) {
+    // Guard against double-start
+    if (this.actionTimer) return
+
     const doAction = () => {
       if (this.isMoving || this.isAnimating) {
         this.actionTimer = setTimeout(doAction, 500)

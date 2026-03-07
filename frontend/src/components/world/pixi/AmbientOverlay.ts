@@ -82,6 +82,7 @@ export class AmbientOverlay {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   update(_dt: number) {
+    // Code rain uses static Text objects (no per-frame update) for performance
     if (!this.overlayType || this.overlayType === 'code') return
 
     this.graphics.clear()
@@ -108,6 +109,11 @@ export class AmbientOverlay {
           break
       }
     }
+  }
+
+  resize(width: number, height: number) {
+    this.width = width
+    this.height = height
   }
 
   destroy() {

@@ -1,3 +1,6 @@
+// TODO: Replace with API fetch from backend /world/map endpoint when available.
+// This is a temporary copy of backend/app/world/data/default_town.json for
+// frontend-only development. The backend owns this data as source of truth.
 import type { MapData, TileDef, LocationDef } from '@/types/world'
 import rawMapData from '../../backend-data/default_town.json'
 
