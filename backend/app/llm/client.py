@@ -7,6 +7,7 @@ import litellm
 from pydantic import BaseModel, ValidationError
 
 from app.core.config import get_settings
+from app.core.langfuse import get_trace_context
 from app.llm.config import get_default_model_configs
 from app.llm.models import LLMModelConfig, LLMRequest, LLMResult, LLMUsage, RepairAttempt
 from app.llm.tracker import UsageTracker
@@ -38,6 +39,11 @@ class LLMClient:
 
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         model_config = self._resolve_model_config(request)
+        metadata = {
+            **request.metadata,
+            **get_trace_context(),
+            "generation_name": request.role,
+        }
         response = await self.router.acompletion(
             model=request.model_override or model_config.primary_model,
             messages=cast(Any, request.messages),
@@ -46,7 +52,7 @@ class LLMClient:
             if request.temperature is not None
             else model_config.temperature,
             timeout=model_config.timeout_seconds,
-            metadata=request.metadata,
+            metadata=metadata,
         )
         result = self._build_result(response)
 

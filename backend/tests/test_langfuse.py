@@ -287,6 +287,113 @@ class TestTraceHierarchyInEngine:
             lf_module.trace = original_trace  # type: ignore[assignment]
 
 
+class TestTraceContextPropagation:
+    def test_set_and_get_trace_context(self) -> None:
+        from app.core.langfuse import get_trace_context, set_trace_context
+
+        token = set_trace_context(trace_id="t-1", span_id="s-1")
+        ctx = get_trace_context()
+        assert ctx == {"trace_id": "t-1", "parent_observation_id": "s-1"}
+
+        from app.core.langfuse import _trace_context
+        _trace_context.reset(token)
+
+    def test_get_trace_context_returns_empty_when_unset(self) -> None:
+        from app.core.langfuse import get_trace_context
+
+        ctx = get_trace_context()
+        assert ctx == {}
+
+    @pytest.mark.asyncio
+    async def test_llm_client_merges_trace_context_into_metadata(self) -> None:
+        """When trace context is set, generate_structured should include it in the litellm call."""
+        import json
+        from typing import Any
+        from app.core.langfuse import set_trace_context, _trace_context
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.model = "openai/gpt-4o-mini"
+                self.choices = [type("C", (), {"message": type("M", (), {"content": json.dumps({
+                    "inner_thought": "ok", "suspicion": None,
+                    "action": {"type": "observe", "target": "well", "location": "well"},
+                    "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
+                })})()})]
+                self.usage = type("U", (), {
+                    "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15,
+                })()
+
+            def model_dump(self) -> dict[str, Any]:
+                return {}
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.last_metadata: dict[str, Any] = {}
+
+            async def acompletion(self, **kwargs: Any) -> FakeResponse:
+                self.last_metadata = kwargs.get("metadata", {})
+                return FakeResponse()
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        token = set_trace_context(trace_id="t-abc", span_id="s-def")
+        try:
+            await client.generate_structured(
+                LLMRequest(
+                    role="agent",
+                    messages=[{"role": "system", "content": "test"}],
+                    response_format=AgentDecision,
+                    metadata={"experiment_id": "exp-1"},
+                )
+            )
+            assert fake_router.last_metadata["trace_id"] == "t-abc"
+            assert fake_router.last_metadata["parent_observation_id"] == "s-def"
+            assert fake_router.last_metadata["experiment_id"] == "exp-1"
+        finally:
+            _trace_context.reset(token)
+
+    @pytest.mark.asyncio
+    async def test_engine_sets_trace_context_for_agent_decisions(self) -> None:
+        """Engine should set trace context so agent LLM calls get trace_id/span_id."""
+        from app.core import langfuse as lf_module
+        from app.core.langfuse import get_trace_context
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-999"
+        mock_span = MagicMock(id="span-morning")
+        mock_trace_obj.span.return_value = mock_span
+
+        original_trace = lf_module.trace
+        original_span = lf_module.span
+
+        captured_contexts: list[dict[str, str]] = []
+        original_set = lf_module.set_trace_context
+
+        def tracking_set(trace_id: str, span_id: str) -> object:
+            token = original_set(trace_id=trace_id, span_id=span_id)
+            captured_contexts.append({"trace_id": trace_id, "span_id": span_id})
+            return token
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        lf_module.span = lambda **kw: mock_span  # type: ignore[assignment]
+        lf_module.set_trace_context = tracking_set  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            trace_ids = [c["trace_id"] for c in captured_contexts]
+            assert "trace-999" in trace_ids
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+            lf_module.span = original_span  # type: ignore[assignment]
+            lf_module.set_trace_context = original_set  # type: ignore[assignment]
+
+
 def _build_engine_and_state() -> tuple["SimulationEngine", "SimulationState"]:
     from app.agents.models import (
         AgentMemoryState,

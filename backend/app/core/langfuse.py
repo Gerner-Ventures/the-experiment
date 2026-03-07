@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -11,6 +12,9 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _client: Langfuse | None = None
+_trace_context: contextvars.ContextVar[dict[str, str]] = contextvars.ContextVar(
+    "langfuse_trace_context", default={}
+)
 
 
 def init() -> None:
@@ -42,6 +46,14 @@ def trace(*, name: str, session_id: str, **kwargs: Any) -> Any:
     except Exception:
         logger.warning("langfuse trace failed", exc_info=True)
         return None
+
+
+def set_trace_context(trace_id: str, span_id: str) -> contextvars.Token[dict[str, str]]:
+    return _trace_context.set({"trace_id": trace_id, "parent_observation_id": span_id})
+
+
+def get_trace_context() -> dict[str, str]:
+    return _trace_context.get()
 
 
 def span(*, name: str, trace_id: str, trace: Any = None, **kwargs: Any) -> Any:

@@ -87,6 +87,13 @@ class SimulationEngine:
         self.social_service = social_service or SocialService(random_seed=random_seed + 10)
         self.random = Random(random_seed)
 
+    @staticmethod
+    def _set_phase_context(trace: object, span: object) -> None:
+        trace_id = getattr(trace, "id", None) or ""
+        span_id = getattr(span, "id", None) or ""
+        if trace_id:
+            lf.set_trace_context(trace_id=trace_id, span_id=span_id)
+
     async def run_round(self, state: SimulationState) -> RoundResult:
         round_number = state.current_round + 1
         state.world_state.round_number = round_number
@@ -119,23 +126,29 @@ class SimulationEngine:
                 ],
             )
         else:
-            lf.span(name="gm_plan", trace_id=getattr(trace, "id", ""), trace=trace)
+            gm_span = lf.span(name="gm_plan", trace_id=getattr(trace, "id", ""), trace=trace)
+            self._set_phase_context(trace, gm_span)
             gm_result, gm_plan = await self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
-        lf.span(name="morning", trace_id=getattr(trace, "id", ""), trace=trace)
+        morning_span = lf.span(name="morning", trace_id=getattr(trace, "id", ""), trace=trace)
+        self._set_phase_context(trace, morning_span)
         morning_result, morning_turns = await self._action_phase(
             state, phase="morning", actions_per_agent=2
         )
         lf.span(name="midday", trace_id=getattr(trace, "id", ""), trace=trace)
         midday_result = self._midday_phase(state)
-        lf.span(name="afternoon", trace_id=getattr(trace, "id", ""), trace=trace)
+        afternoon_span = lf.span(
+            name="afternoon", trace_id=getattr(trace, "id", ""), trace=trace
+        )
+        self._set_phase_context(trace, afternoon_span)
         afternoon_result, afternoon_turns = await self._action_phase(
             state, phase="afternoon", actions_per_agent=1
         )
         cooperation_ratio = self._calculate_cooperation_ratio(
             [*morning_turns.values(), *afternoon_turns.values()]
         )
-        lf.span(name="night", trace_id=getattr(trace, "id", ""), trace=trace)
+        night_span = lf.span(name="night", trace_id=getattr(trace, "id", ""), trace=trace)
+        self._set_phase_context(trace, night_span)
         night_result = await self._night_phase(state, cooperation_ratio)
 
         state.current_round = round_number
