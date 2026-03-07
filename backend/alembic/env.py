@@ -11,7 +11,20 @@ from app.db import models  # noqa: F401
 
 config = context.config
 settings = get_settings()
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("+asyncpg", "+psycopg"))
+
+
+def _sync_url(url: str) -> str:
+    """Ensure the DATABASE_URL uses the psycopg (v3) sync driver for Alembic."""
+    if url.startswith("postgresql+psycopg://"):
+        return url
+    if url.startswith("postgresql+"):
+        return "postgresql+psycopg://" + url.split("://", 1)[1]
+    if url.startswith("postgresql://"):
+        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+    return url
+
+
+config.set_main_option("sqlalchemy.url", _sync_url(settings.database_url))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
