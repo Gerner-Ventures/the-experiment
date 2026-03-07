@@ -20,6 +20,14 @@ spec:
       containers:
         - name: postgres
           image: {{ .Values.postgres.image }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 70
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - name: postgres
               containerPort: 5432
