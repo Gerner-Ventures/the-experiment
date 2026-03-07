@@ -16,6 +16,7 @@ from app.logging import setup_logging
 setup_logging()
 settings = get_settings()
 
+
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     ph.init()
