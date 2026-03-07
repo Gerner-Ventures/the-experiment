@@ -96,4 +96,3 @@ class MemoryConsolidationDecision(LLMModel):
 class RelationshipConsolidationDecision(LLMModel):
     update_notes: bool = False
     notes: str | None = None
-    confidence: int = Field(ge=0, le=100, default=65)

@@ -92,7 +92,6 @@ class _StubMemoryLLMService:
             or RelationshipConsolidationDecision(
                 update_notes=True,
                 notes="Jon usually tries to steady me when the town starts to spiral.",
-                confidence=79,
             )
         )
 
@@ -545,6 +544,26 @@ async def test_night_reflections_skip_classifier_for_low_suspicion_agents() -> N
     await engine._night_phase(state, cooperation_ratio=0.6)
 
     assert llm_service.classify_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_night_phase_materializes_active_agents_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    llm_service = _StubMemoryLLMService()
+    engine = SimulationEngine(agent_service=AgentService(memory_llm_service=llm_service))
+    state = _engine_state()
+    active_agent_calls = 0
+    original_active_agents = engine._active_agents
+
+    def counting_active_agents(current_state: SimulationState) -> list[EngineAgentState]:
+        nonlocal active_agent_calls
+        active_agent_calls += 1
+        return original_active_agents(current_state)
+
+    monkeypatch.setattr(engine, "_active_agents", counting_active_agents)
+
+    await engine._night_phase(state, cooperation_ratio=0.6)
+
+    assert active_agent_calls == 1
 
 
 def test_action_registry_exposes_expected_actions() -> None:
