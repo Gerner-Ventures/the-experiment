@@ -190,27 +190,27 @@ def test_websocket_emits_granular_round_messages() -> None:
 
 
 def test_analytics_and_replay_endpoints_return_round_data() -> None:
-    created = client.post("/experiments", json=_payload())
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
-    client.post(f"/experiments/{experiment_id}/gm/approve", json={})
-    client.post(f"/experiments/{experiment_id}/step")
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
 
-    summary = client.get(f"/experiments/{experiment_id}/analytics/summary")
+    summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
     assert summary.status_code == 200
     assert summary.json()["rounds_completed"] == 1
 
-    replay = client.get(f"/experiments/{experiment_id}/replay")
+    replay = client.get(f"{API_PREFIX}/experiments/{experiment_id}/replay")
     assert replay.status_code == 200
     assert replay.json()["rounds"][0]["round_number"] == 1
 
-    snapshot = client.get(f"/experiments/{experiment_id}/rounds/1/snapshot")
+    snapshot = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/snapshot")
     assert snapshot.status_code == 200
     assert snapshot.json()["round_number"] == 1
     assert snapshot.json()["events"]
 
 
 def test_usage_and_prompt_trace_endpoints_group_records() -> None:
-    created = client.post("/experiments", json=_payload())
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
     runtime.gm_service.llm_service.client.tracker.record(
         UsageRecord(
@@ -231,12 +231,12 @@ def test_usage_and_prompt_trace_endpoints_group_records() -> None:
         )
     )
 
-    usage = client.get(f"/experiments/{experiment_id}/usage")
+    usage = client.get(f"{API_PREFIX}/experiments/{experiment_id}/usage")
     assert usage.status_code == 200
     assert usage.json()["summary"]["total_tokens"] == 30
     assert usage.json()["by_role"][0]["key"] == "gm"
 
-    traces = client.get(f"/experiments/{experiment_id}/usage/traces")
+    traces = client.get(f"{API_PREFIX}/experiments/{experiment_id}/usage/traces")
     assert traces.status_code == 200
     assert traces.json()["total"] == 1
     assert traces.json()["items"][0]["response_content"] == '{"round_theme":"Pressure builds"}'
