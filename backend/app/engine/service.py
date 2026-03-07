@@ -41,17 +41,31 @@ class SimulationEngine:
 
         gm_result, gm_plan = self._gm_plan_phase(state, round_number)
         dawn_result = self._dawn_phase(state, gm_plan.plan)
-        morning_result, morning_turns = await self._action_phase(state, phase="morning", actions_per_agent=2)
+        morning_result, morning_turns = await self._action_phase(
+            state, phase="morning", actions_per_agent=2
+        )
         midday_result = self._midday_phase(state)
-        afternoon_result, afternoon_turns = await self._action_phase(state, phase="afternoon", actions_per_agent=1)
-        cooperation_ratio = self._calculate_cooperation_ratio([*morning_turns.values(), *afternoon_turns.values()])
+        afternoon_result, afternoon_turns = await self._action_phase(
+            state, phase="afternoon", actions_per_agent=1
+        )
+        cooperation_ratio = self._calculate_cooperation_ratio(
+            [*morning_turns.values(), *afternoon_turns.values()]
+        )
         night_result = self._night_phase(state, cooperation_ratio)
 
         state.current_round = round_number
-        state.world_state.threat_level = night_result.cooperation_ratio or state.world_state.threat_level
+        state.world_state.threat_level = (
+            night_result.cooperation_ratio or state.world_state.threat_level
+        )
         state.recent_events.extend(
             event.summary
-            for phase in [dawn_result, morning_result, midday_result, afternoon_result, night_result]
+            for phase in [
+                dawn_result,
+                morning_result,
+                midday_result,
+                afternoon_result,
+                night_result,
+            ]
             for event in phase.events
         )
         state.recent_events = state.recent_events[-20:]
@@ -60,7 +74,14 @@ class SimulationEngine:
         return RoundResult(
             round_number=round_number,
             gm_plan=gm_plan,
-            phases=[gm_result, dawn_result, morning_result, midday_result, afternoon_result, night_result],
+            phases=[
+                gm_result,
+                dawn_result,
+                morning_result,
+                midday_result,
+                afternoon_result,
+                night_result,
+            ],
             cooperation_ratio=cooperation_ratio,
             threat_level=state.world_state.threat_level,
             world_state=state.world_state.model_copy(deep=True),
@@ -68,7 +89,9 @@ class SimulationEngine:
             created_at=datetime.now(UTC),
         )
 
-    def _gm_plan_phase(self, state: SimulationState, round_number: int) -> tuple[PhaseResult, GMPlanRecord]:
+    def _gm_plan_phase(
+        self, state: SimulationState, round_number: int
+    ) -> tuple[PhaseResult, GMPlanRecord]:
         context = GMPlanningContext(
             round_number=round_number,
             total_rounds=state.total_rounds,
@@ -99,7 +122,9 @@ class SimulationEngine:
         return result, plan
 
     def _dawn_phase(self, state: SimulationState, plan: GMPlanData) -> PhaseResult:
-        world_bias = cast(dict[ResourceName, float], state.world_state.active_modifiers.get("world_bias", {}))
+        world_bias = cast(
+            dict[ResourceName, float], state.world_state.active_modifiers.get("world_bias", {})
+        )
         crisis_modifiers = cast(dict[ResourceName, float], plan.resource_modifiers.model_dump())
         tick = ResourceTick(
             crisis_modifiers=crisis_modifiers,
@@ -139,7 +164,9 @@ class SimulationEngine:
                 context = build_agent_context(
                     agent,
                     world_state=state.world_state,
-                    current_crisis=state.gm_plan.plan.crisis_event.model_dump(mode="json") if state.gm_plan else None,
+                    current_crisis=state.gm_plan.plan.crisis_event.model_dump(mode="json")
+                    if state.gm_plan
+                    else None,
                     observations=self._build_observations(agent, state),
                 )
                 turn = await self.agent_service.decide(context)
@@ -156,7 +183,9 @@ class SimulationEngine:
 
     def _midday_phase(self, state: SimulationState) -> PhaseResult:
         proposal = self._meeting_proposal(state)
-        votes = {agent.agent_id: self.random.choice(["support", "oppose"]) for agent in state.agents}
+        votes = {
+            agent.agent_id: self.random.choice(["support", "oppose"]) for agent in state.agents
+        }
         supporters = [agent_id for agent_id, vote in votes.items() if vote == "support"]
         outcome = MeetingOutcome(
             proposal=proposal,
@@ -165,11 +194,17 @@ class SimulationEngine:
         )
         return PhaseResult(
             phase="midday",
-            events=[RoundEvent(phase="midday", summary=outcome.summary, data=outcome.model_dump(mode="json"))],
+            events=[
+                RoundEvent(
+                    phase="midday", summary=outcome.summary, data=outcome.model_dump(mode="json")
+                )
+            ],
         )
 
     def _night_phase(self, state: SimulationState, cooperation_ratio: float) -> PhaseResult:
-        crisis_severity = _severity_to_float(state.gm_plan.plan.crisis_event.severity) if state.gm_plan else 0.2
+        crisis_severity = (
+            _severity_to_float(state.gm_plan.plan.crisis_event.severity) if state.gm_plan else 0.2
+        )
         state.world_state.threat_level = calculate_threat_level(
             state.world_state.resources,
             cooperation_ratio=cooperation_ratio,
@@ -188,7 +223,13 @@ class SimulationEngine:
             reflections.append(reflection)
         return PhaseResult(
             phase="night",
-            events=[RoundEvent(phase="night", summary="Night consequences settle over the town.", data={"reflections": reflections})],
+            events=[
+                RoundEvent(
+                    phase="night",
+                    summary="Night consequences settle over the town.",
+                    data={"reflections": reflections},
+                )
+            ],
             cooperation_ratio=state.world_state.threat_level,
         )
 
@@ -209,9 +250,18 @@ class SimulationEngine:
             grouped.setdefault(key, []).append((agent, turn))
 
         for (location, action_type), group in grouped.items():
-            if len(group) > 1 and action_type in {"gather", "hoard", "repair", "explore", "accuse", "vote"}:
+            if len(group) > 1 and action_type in {
+                "gather",
+                "hoard",
+                "repair",
+                "explore",
+                "accuse",
+                "vote",
+            }:
                 winner_count = max(1, len(group) // 2)
-                ordered = sorted(group, key=lambda item: (item[0].suspicion_level, self.random.random()))
+                ordered = sorted(
+                    group, key=lambda item: (item[0].suspicion_level, self.random.random())
+                )
                 winners = ordered[:winner_count]
                 losers = ordered[winner_count:]
                 summary = (
@@ -237,13 +287,18 @@ class SimulationEngine:
                         RoundEvent(
                             phase=phase,
                             summary=f"{agent.name} chose to {turn.decision.action.type} at {location}.",
-                            data={"agent_id": agent.agent_id, "action_type": turn.decision.action.type},
+                            data={
+                                "agent_id": agent.agent_id,
+                                "action_type": turn.decision.action.type,
+                            },
                         )
                     )
 
         return PhaseResult(phase=phase, events=events, conflicts=conflicts)
 
-    def _apply_clean_action(self, state: SimulationState, agent: EngineAgentState, action_type: str, location: str) -> None:
+    def _apply_clean_action(
+        self, state: SimulationState, agent: EngineAgentState, action_type: str, location: str
+    ) -> None:
         occupancy = state.world_state.location_occupancy.setdefault(location, [])
         if agent.agent_id not in occupancy:
             occupancy.append(agent.agent_id)
@@ -265,18 +320,28 @@ class SimulationEngine:
         for agent, _ in losers:
             agent.suspicion_level = min(100.0, agent.suspicion_level + 3.0)
 
-    def _apply_resource_effect(self, state: SimulationState, action_type: str, chaotic_bonus: bool = False) -> None:
+    def _apply_resource_effect(
+        self, state: SimulationState, action_type: str, chaotic_bonus: bool = False
+    ) -> None:
         modifier = 0.2 if chaotic_bonus else 0.0
         if action_type == "gather":
-            state.world_state.resources.food = round(state.world_state.resources.food + 0.8 + modifier, 2)
+            state.world_state.resources.food = round(
+                state.world_state.resources.food + 0.8 + modifier, 2
+            )
             state.world_state.resources.water = round(state.world_state.resources.water + 0.5, 2)
         elif action_type == "repair":
-            state.world_state.resources.materials = max(0.0, round(state.world_state.resources.materials - 0.7, 2))
+            state.world_state.resources.materials = max(
+                0.0, round(state.world_state.resources.materials - 0.7, 2)
+            )
             state.world_state.resources.power = round(state.world_state.resources.power + 0.3, 2)
         elif action_type == "hoard":
-            state.world_state.resources.food = max(0.0, round(state.world_state.resources.food - 0.6, 2))
+            state.world_state.resources.food = max(
+                0.0, round(state.world_state.resources.food - 0.6, 2)
+            )
         elif action_type == "sabotage":
-            state.world_state.resources.power = max(0.0, round(state.world_state.resources.power - 0.9, 2))
+            state.world_state.resources.power = max(
+                0.0, round(state.world_state.resources.power - 0.9, 2)
+            )
 
     def _meeting_proposal(self, state: SimulationState) -> str:
         if state.world_state.threat_level > 50:
@@ -291,21 +356,37 @@ class SimulationEngine:
         for turns in turn_groups:
             for turn in turns:
                 total += 1
-                if turn.decision.action.type in {"gather", "repair", "talk", "trade", "rest", "observe"}:
+                if turn.decision.action.type in {
+                    "gather",
+                    "repair",
+                    "talk",
+                    "trade",
+                    "rest",
+                    "observe",
+                }:
                     cooperative += 1
         if total == 0:
             return 0.5
         return round(cooperative / total, 2)
 
-    def _build_observations(self, agent: EngineAgentState, state: SimulationState) -> list[dict[str, object]]:
+    def _build_observations(
+        self, agent: EngineAgentState, state: SimulationState
+    ) -> list[dict[str, object]]:
         observations = [
             {"summary": f"Threat is currently {state.world_state.threat_level}.", "importance": 4},
-            {"summary": f"Resources are {state.world_state.resources.model_dump()}.", "importance": 3},
+            {
+                "summary": f"Resources are {state.world_state.resources.model_dump()}.",
+                "importance": 3,
+            },
         ]
         if state.gm_plan:
-            observations.append({"summary": state.gm_plan.plan.crisis_event.description, "importance": 5})
+            observations.append(
+                {"summary": state.gm_plan.plan.crisis_event.description, "importance": 5}
+            )
         if agent.location == "perimeter_fence":
-            observations.append({"summary": "The fence seems wrong from up close.", "importance": 5})
+            observations.append(
+                {"summary": "The fence seems wrong from up close.", "importance": 5}
+            )
         return observations
 
     def _summarize_relationships(self, agents: list[EngineAgentState]) -> str:

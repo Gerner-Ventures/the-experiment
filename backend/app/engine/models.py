@@ -5,7 +5,13 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.agents.models import AgentContext, AgentMemoryState, AgentTurnResult, PersonalityProfile, SecretGoal
+from app.agents.models import (
+    AgentContext,
+    AgentMemoryState,
+    AgentTurnResult,
+    PersonalityProfile,
+    SecretGoal,
+)
 from app.gm.models import DirectorArc, GMPlanRecord
 from app.world.models import WorldState
 
