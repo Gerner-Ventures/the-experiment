@@ -7,17 +7,22 @@ from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconn
 from app.api.models import (
     AnalyticsSummary,
     ApproveGMPlanRequest,
+    BetrayalAnalytics,
     CreateExperimentRequest,
     EventLogPage,
     ExperimentDetail,
     FactionAnalytics,
+    GMTimelinePage,
+    GoalAnalytics,
     HighlightPage,
     PromptTracePage,
     RelationshipAnalytics,
     ReplayIndex,
+    RoundAnalyticsPage,
     RoundSnapshotResponse,
     ExperimentSummary,
     ObserverEventRequest,
+    SuspicionAnalytics,
     StepResponse,
     UpdateArcRequest,
     UsageReport,
@@ -204,6 +209,50 @@ async def get_analytics_summary(experiment_id: str) -> AnalyticsSummary:
 
 
 @router.get(
+    "/{experiment_id}/analytics/rounds",
+    response_model=RoundAnalyticsPage,
+    summary="Get round analytics",
+    description="Return round-level report data including cooperation, betrayal counts, and GM narration.",
+)
+async def get_round_analytics(experiment_id: str) -> RoundAnalyticsPage:
+    await _get_state(experiment_id)
+    return RoundAnalyticsPage(items=await runtime.get_round_analytics(experiment_id))
+
+
+@router.get(
+    "/{experiment_id}/analytics/goals",
+    response_model=GoalAnalytics,
+    summary="Get goal analytics",
+    description="Return per-agent goal progress history and a derived final outcome summary.",
+)
+async def get_goal_analytics(experiment_id: str) -> GoalAnalytics:
+    await _get_state(experiment_id)
+    return GoalAnalytics(items=await runtime.get_goal_analytics(experiment_id))
+
+
+@router.get(
+    "/{experiment_id}/analytics/betrayals",
+    response_model=BetrayalAnalytics,
+    summary="Get betrayal analytics",
+    description="Return sabotage, hostile-action, and exile timeline entries.",
+)
+async def get_betrayal_analytics(experiment_id: str) -> BetrayalAnalytics:
+    await _get_state(experiment_id)
+    return BetrayalAnalytics(items=await runtime.get_betrayal_analytics(experiment_id))
+
+
+@router.get(
+    "/{experiment_id}/analytics/suspicion",
+    response_model=SuspicionAnalytics,
+    summary="Get suspicion analytics",
+    description="Return the round-by-round suspicion heatmap and per-agent suspicion history.",
+)
+async def get_suspicion_analytics(experiment_id: str) -> SuspicionAnalytics:
+    await _get_state(experiment_id)
+    return await runtime.get_suspicion_analytics(experiment_id)
+
+
+@router.get(
     "/{experiment_id}/analytics/relationships",
     response_model=RelationshipAnalytics,
     summary="Get relationship analytics",
@@ -218,11 +267,22 @@ async def get_relationship_analytics(experiment_id: str) -> RelationshipAnalytic
     "/{experiment_id}/analytics/factions",
     response_model=FactionAnalytics,
     summary="Get faction analytics",
-    description="Return the current alliance and cult state for the experiment.",
+    description="Return the current alliance/cult state plus faction pressure timeline and membership changes.",
 )
 async def get_faction_analytics(experiment_id: str) -> FactionAnalytics:
-    state = await _get_state(experiment_id)
-    return FactionAnalytics(items=state.factions)
+    await _get_state(experiment_id)
+    return await runtime.get_faction_analytics(experiment_id)
+
+
+@router.get(
+    "/{experiment_id}/analytics/gm",
+    response_model=GMTimelinePage,
+    summary="Get GM timeline analytics",
+    description="Return the round-by-round GM narration and crisis timeline.",
+)
+async def get_gm_timeline(experiment_id: str) -> GMTimelinePage:
+    await _get_state(experiment_id)
+    return GMTimelinePage(items=await runtime.get_gm_timeline(experiment_id))
 
 
 @router.get(

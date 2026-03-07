@@ -105,11 +105,11 @@ class TestLangfuseLifecycle:
 
         mock_client = MagicMock()
         langfuse._client = mock_client
-
-        langfuse.shutdown()
-
-        mock_client.flush.assert_called_once()
-        langfuse._client = None
+        try:
+            langfuse.shutdown()
+            mock_client.flush.assert_called_once()
+        finally:
+            langfuse._client = None
 
     def test_shutdown_noop_when_no_client(self) -> None:
         from app.core import langfuse
@@ -133,11 +133,12 @@ class TestLangfuseLifecycle:
         mock_client = MagicMock()
         mock_client.trace.side_effect = RuntimeError("langfuse down")
         langfuse._client = mock_client
-
-        # Should not raise — fire-and-forget
-        result = langfuse.trace(name="test-trace", session_id="exp-1")
-        assert result is None
-        langfuse._client = None
+        try:
+            # Should not raise — fire-and-forget
+            result = langfuse.trace(name="test-trace", session_id="exp-1")
+            assert result is None
+        finally:
+            langfuse._client = None
 
 
 # --- Section 1: litellm Callback Integration ---
