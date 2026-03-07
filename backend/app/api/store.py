@@ -22,7 +22,13 @@ from app.db.models import (
     Round,
     WorldSnapshot,
 )
-from app.engine.models import EngineAgentState, ExileOutcome, FactionState, RoundResult, SimulationState
+from app.engine.models import (
+    EngineAgentState,
+    ExileOutcome,
+    FactionState,
+    RoundResult,
+    SimulationState,
+)
 from app.gm.models import DirectorAct, DirectorArc, GMPlanRecord
 from app.world import build_default_world_state
 from app.world.models import ResourceState, WorldState
