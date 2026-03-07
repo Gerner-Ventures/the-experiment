@@ -174,3 +174,27 @@ async def test_connection_manager_removes_dead_sockets_during_broadcast() -> Non
     live_socket.send_json.assert_awaited_once()
     assert live_socket in manager.connections["exp-1"]
     assert dead_socket not in manager.connections["exp-1"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "socket_state",
+    [WebSocketState.CONNECTING, WebSocketState.DISCONNECTED, WebSocketState.RESPONSE],
+)
+async def test_connection_manager_prunes_non_connected_sockets_before_sending(
+    socket_state: WebSocketState,
+) -> None:
+    manager = ConnectionManager()
+    live_socket = AsyncMock()
+    live_socket.client_state = WebSocketState.CONNECTED
+    non_connected_socket = AsyncMock()
+    non_connected_socket.client_state = socket_state
+
+    await manager.connect("exp-1", live_socket)
+    await manager.connect("exp-1", non_connected_socket)
+    await manager.broadcast("exp-1", {"type": "round_start"})
+
+    live_socket.send_json.assert_awaited_once()
+    non_connected_socket.send_json.assert_not_awaited()
+    assert live_socket in manager.connections["exp-1"]
+    assert non_connected_socket not in manager.connections["exp-1"]

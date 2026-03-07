@@ -131,6 +131,23 @@ def test_create_get_and_step_experiment_flow() -> None:
     assert fetched.json()["current_round"] == 1
 
 
+def test_start_and_pause_routes_update_experiment_status() -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    started = client.post(f"{API_PREFIX}/experiments/{experiment_id}/start")
+    assert started.status_code == 200
+    assert started.json()["status"] == "running"
+
+    paused = client.post(f"{API_PREFIX}/experiments/{experiment_id}/pause")
+    assert paused.status_code == 200
+    assert paused.json()["status"] == "paused"
+
+    fetched = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["status"] == "paused"
+
+
 def test_log_endpoint_filters_and_paginates() -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]

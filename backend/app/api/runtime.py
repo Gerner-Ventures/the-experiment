@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
@@ -34,6 +35,8 @@ from app.llm import UsageRecord, UsageSummary
 from app.schemas.ws_message import WSMessage, WSMessageType
 from app.world import build_default_world_state, resolve_spawn_tile
 
+logger = logging.getLogger(__name__)
+
 
 class ConnectionManager:
     def __init__(self) -> None:
@@ -42,14 +45,25 @@ class ConnectionManager:
     async def connect(self, experiment_id: str, websocket: WebSocket) -> None:
         await websocket.accept()
         self.connections[experiment_id].add(websocket)
+        logger.info(
+            "WS connected: experiment=%s total=%d",
+            experiment_id,
+            len(self.connections[experiment_id]),
+        )
 
     def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
+        # Use `.get()` here so disconnects for unknown experiments do not create empty buckets.
         sockets = self.connections.get(experiment_id)
         if sockets is None:
             return
         sockets.discard(websocket)
         if not sockets:
             self.connections.pop(experiment_id, None)
+        logger.info(
+            "WS disconnected: experiment=%s remaining=%d",
+            experiment_id,
+            len(self.connections.get(experiment_id, ())),
+        )
 
     async def broadcast(self, experiment_id: str, payload: dict[str, Any]) -> None:
         sockets = list(self.connections.get(experiment_id, ()))
@@ -62,8 +76,18 @@ class ConnectionManager:
                 if socket.client_state == WebSocketState.CONNECTED:
                     await socket.send_json(encoded_payload)
                 else:
+                    logger.warning(
+                        "Pruning websocket during broadcast: experiment=%s state=%s",
+                        experiment_id,
+                        socket.client_state,
+                    )
                     dead_sockets.append(socket)
             except Exception:
+                logger.warning(
+                    "Pruning websocket after send failure: experiment=%s",
+                    experiment_id,
+                    exc_info=True,
+                )
                 dead_sockets.append(socket)
         for socket in dead_sockets:
             self.disconnect(experiment_id, socket)
