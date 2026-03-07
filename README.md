@@ -15,6 +15,8 @@ A **Layered Game Master** system controls the narrative:
 
 See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full game loop and mechanics.
 
+Infrastructure and persistence notes live in [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
+
 ## Architecture
 
 ```
