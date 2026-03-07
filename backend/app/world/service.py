@@ -22,11 +22,7 @@ DEFAULT_SPAWN_TILE = (10, 9)
 
 @lru_cache(maxsize=1)
 def _walkable_tiles() -> set[tuple[int, int]]:
-    return {
-        (tile.x, tile.y)
-        for tile in DEFAULT_WORLD_MAP.tiles
-        if tile.walkable
-    }
+    return {(tile.x, tile.y) for tile in DEFAULT_WORLD_MAP.tiles if tile.walkable}
 
 
 @lru_cache(maxsize=1)

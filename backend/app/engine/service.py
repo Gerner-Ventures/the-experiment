@@ -861,11 +861,7 @@ class SimulationEngine:
         return round(cooperative / total, 2)
 
     def _active_agents(self, state: SimulationState) -> list[EngineAgentState]:
-        return [
-            agent
-            for agent in state.agents
-            if agent.status != AgentStatus.EXILED
-        ]
+        return [agent for agent in state.agents if agent.status != AgentStatus.EXILED]
 
     def _build_observations(
         self, agent: EngineAgentState, state: SimulationState
@@ -941,10 +937,7 @@ class SimulationEngine:
         location = agent.location or location_label_for_tile(self._agent_tile(agent))
         location_type = get_location_type(location)
         allowed_location_types = self.ACTION_LOCATION_RULES.get(requested_action)
-        if (
-            allowed_location_types is not None
-            and location_type not in allowed_location_types
-        ):
+        if allowed_location_types is not None and location_type not in allowed_location_types:
             allowed = ", ".join(sorted(allowed_location_types))
             return self._block_action(
                 agent,
