@@ -32,7 +32,6 @@ spec:
       serviceAccountName: {{ include "the-experiment.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      {{- if .Values.postgres.enabled }}
       initContainers:
         - name: migrate
           image: {{ include "the-experiment.backendImage" . }}
@@ -45,10 +44,11 @@ spec:
             - secretRef:
                 name: {{ include "the-experiment.neonSecretName" . }}
           {{- end }}
+          {{- if .Values.postgres.enabled }}
           env:
             - name: DATABASE_URL
               value: {{ include "the-experiment.postgresUrl" . | replace "+asyncpg" "+psycopg" | quote }}
-      {{- end }}
+          {{- end }}
       containers:
         - name: backend
           image: {{ include "the-experiment.backendImage" . }}
