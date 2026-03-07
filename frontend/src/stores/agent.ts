@@ -61,9 +61,11 @@ export const useAgentStore = defineStore('agent', () => {
     }
     const agentName = data.agent_name ?? agent?.name ?? 'Agent'
     const locale = useLocale()
-    useUIStore().steppingStatus = locale.hud.steppingAgent
-      .replace('{name}', agentName)
-      .replace('{action}', actionType)
+    useUIStore().setSteppingStatus(
+      locale.hud.steppingAgent
+        .replace('{name}', agentName)
+        .replace('{action}', actionType),
+    )
   }
 
   function onMove(msg: WSMessage) {

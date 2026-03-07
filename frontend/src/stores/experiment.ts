@@ -26,7 +26,6 @@ export const useExperimentStore = defineStore('experiment', () => {
   const currentRound = ref(0)
   const totalRounds = ref(15)
   const currentPhase = ref<RoundPhase | null>(null)
-  const cooperationRatio = ref(0.5)
   const events = ref<ExperimentEvent[]>([])
 
   const isRunning = computed(() => status.value === 'running')
@@ -70,9 +69,10 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = msg.round ?? currentRound.value
     currentPhase.value = null
     status.value = 'running'
-    const ui = useUIStore()
     const locale = useLocale()
-    ui.steppingStatus = locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value))
+    useUIStore().setSteppingStatus(
+      locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value)),
+    )
     addEvent(msg)
   }
 
@@ -96,16 +96,14 @@ export const useExperimentStore = defineStore('experiment', () => {
     if (data.threat_level != null) worldStore.setThreatLevel(data.threat_level)
     if (data.resources) {
       worldStore.setResources({
-        food: data.resources.food ?? 0,
-        water: data.resources.water ?? 0,
-        materials: data.resources.materials ?? 0,
-        power: data.resources.power ?? 0,
+        food: data.resources.food ?? worldStore.resources.food,
+        water: data.resources.water ?? worldStore.resources.water,
+        materials: data.resources.materials ?? worldStore.resources.materials,
+        power: data.resources.power ?? worldStore.resources.power,
       })
     }
     if (data.agents) agentStore.setAgents(data.agents)
-    const ui = useUIStore()
-    ui.isStepping = false
-    ui.steppingStatus = ''
+    useUIStore().clearStepping()
     addEvent(msg)
   }
 
@@ -113,10 +111,15 @@ export const useExperimentStore = defineStore('experiment', () => {
     const phase = (msg.phase as RoundPhase) ?? null
     currentPhase.value = phase
     const data = msg.data as Record<string, unknown>
+    const worldStore = useWorldStore()
+
+    if (phase) {
+      worldStore.onPhaseChange(phase)
+    }
 
     // phase_change with {status: "starting"} = phase is about to begin (set stepping label)
     // phase_change with {events: [...]} = phase completed (log the event)
-    if (data.status && phase) {
+    if (data.status === 'starting' && phase) {
       const locale = useLocale()
       const labels: Record<string, string> = {
         gm_plan: locale.hud.steppingGmPlan,
@@ -126,7 +129,7 @@ export const useExperimentStore = defineStore('experiment', () => {
         afternoon: locale.hud.steppingAfternoon,
         night: locale.hud.steppingNight,
       }
-      useUIStore().steppingStatus = labels[phase] ?? phase
+      useUIStore().setSteppingStatus(labels[phase] ?? phase)
     }
     if (data.events) {
       addEvent(msg)
@@ -135,6 +138,7 @@ export const useExperimentStore = defineStore('experiment', () => {
 
   function onEnd(msg: WSMessage) {
     status.value = 'completed'
+    useUIStore().clearStepping()
     addEvent(msg)
   }
 
@@ -145,14 +149,13 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = 0
     totalRounds.value = 15
     currentPhase.value = null
-    cooperationRatio.value = 0.5
     events.value = []
     eventCounter = 0
   }
 
   return {
     id, name, status, currentRound, totalRounds, currentPhase,
-    cooperationRatio, events,
+    events,
     isRunning, isComplete, progress,
     setExperiment, addEvent, onRoundStart, onRoundEnd, onPhaseChange, onEnd,
     $reset,
