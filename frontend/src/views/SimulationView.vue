@@ -100,9 +100,13 @@ async function initExperiment() {
 async function handleStep() {
   if (!experimentStore.id) return
   try {
+    uiStore.isStepping = true
+    uiStore.steppingStatus = locale.hud.steppingGmPlan
     await api.stepRound(experimentStore.id)
   } catch (err) {
     console.error('Step failed:', err)
+    uiStore.isStepping = false
+    uiStore.steppingStatus = ''
   }
 }
 
@@ -136,16 +140,35 @@ async function handleApprovePlan() {
   }
 }
 
-// Auto-play mode
+// Auto-play mode: watch for round completion via store updates
 let autoPlayTimer: ReturnType<typeof setTimeout> | null = null
+let waitingForRound = false
 
 watch(() => uiStore.isPlaying, (playing) => {
   if (playing) {
     autoStep()
-  } else if (autoPlayTimer) {
-    clearTimeout(autoPlayTimer)
-    autoPlayTimer = null
+  } else {
+    if (autoPlayTimer) {
+      clearTimeout(autoPlayTimer)
+      autoPlayTimer = null
+    }
+    waitingForRound = false
   }
+})
+
+// When currentRound changes (from WS round_end), schedule next step if auto-playing
+watch(() => experimentStore.currentRound, () => {
+  if (!waitingForRound || !uiStore.isPlaying) return
+  waitingForRound = false
+
+  if (experimentStore.isComplete) {
+    uiStore.isPlaying = false
+    router.push({ name: 'report', params: { id: experimentStore.id! } })
+    return
+  }
+
+  const delay = 3000 / uiStore.playbackSpeed
+  autoPlayTimer = setTimeout(autoStep, delay)
 })
 
 function autoStep() {
@@ -153,10 +176,8 @@ function autoStep() {
     uiStore.isPlaying = false
     return
   }
-  handleStep().then(() => {
-    const delay = 3000 / uiStore.playbackSpeed
-    autoPlayTimer = setTimeout(autoStep, delay)
-  })
+  waitingForRound = true
+  handleStep()
 }
 
 function handleAgentClick(agentId: string) {
@@ -250,6 +271,8 @@ function goBack() {
       <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10">
         <ControlBar
           :is-playing="uiStore.isPlaying"
+          :is-stepping="uiStore.isStepping"
+          :stepping-status="uiStore.steppingStatus"
           :speed="uiStore.playbackSpeed"
           :is-complete="experimentStore.isComplete"
           :has-experiment="experimentCreated"

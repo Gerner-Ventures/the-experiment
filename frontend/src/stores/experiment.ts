@@ -5,6 +5,7 @@ import type { RoundPhase, WSMessage } from '@/types/websocket'
 import { useWorldStore } from '@/stores/world'
 import { useAgentStore } from '@/stores/agent'
 import { useUIStore } from '@/stores/ui'
+import { useLocale } from '@/locales'
 
 export interface ExperimentEvent {
   id: number
@@ -70,7 +71,8 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentPhase.value = null
     status.value = 'running'
     const ui = useUIStore()
-    ui.steppingStatus = `Round ${currentRound.value} started`
+    const locale = useLocale()
+    ui.steppingStatus = locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value))
     addEvent(msg)
   }
 
@@ -110,15 +112,18 @@ export const useExperimentStore = defineStore('experiment', () => {
   function onPhaseChange(msg: WSMessage) {
     const phase = (msg.phase as RoundPhase) ?? null
     currentPhase.value = phase
-    const labels: Record<string, string> = {
-      gm_plan: 'GM planning…',
-      dawn: 'Dawn breaking…',
-      morning: 'Morning actions…',
-      midday: 'Town meeting…',
-      afternoon: 'Afternoon actions…',
-      night: 'Night falling…',
+    if (phase) {
+      const locale = useLocale()
+      const labels: Record<string, string> = {
+        gm_plan: locale.hud.steppingGmPlan,
+        dawn: locale.hud.steppingDawn,
+        morning: locale.hud.steppingMorning,
+        midday: locale.hud.steppingMidday,
+        afternoon: locale.hud.steppingAfternoon,
+        night: locale.hud.steppingNight,
+      }
+      useUIStore().steppingStatus = labels[phase] ?? phase
     }
-    if (phase) useUIStore().steppingStatus = labels[phase] ?? phase
     addEvent(msg)
   }
 

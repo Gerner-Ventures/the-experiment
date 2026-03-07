@@ -6,6 +6,7 @@ import {
   StepForwardOutlined,
   DashboardOutlined,
   UnorderedListOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons-vue'
 import { useLocale } from '@/locales'
 
@@ -13,6 +14,8 @@ const locale = useLocale()
 
 defineProps<{
   isPlaying: boolean
+  isStepping: boolean
+  steppingStatus: string
   speed: number
   isComplete: boolean
   hasExperiment: boolean
@@ -28,7 +31,16 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="flex items-center justify-center gap-3 px-6 py-2.5 bg-base/90 backdrop-blur-sm border-t border-white/[0.06]">
+  <div class="flex flex-col items-center gap-1 px-6 py-2.5 bg-base/90 backdrop-blur-sm border-t border-white/[0.06]">
+    <!-- Stepping status -->
+    <Transition name="fade">
+      <div v-if="isStepping && steppingStatus" class="flex items-center gap-2 text-accent/70">
+        <LoadingOutlined class="text-xs animate-spin" />
+        <span class="font-mono text-[11px] tracking-wide">{{ steppingStatus }}</span>
+      </div>
+    </Transition>
+
+    <div class="flex items-center justify-center gap-3">
     <!-- Log toggle -->
     <Tooltip :title="locale.log.title">
       <Button
@@ -61,15 +73,16 @@ const emit = defineEmits<{
     </Tooltip>
 
     <!-- Step -->
-    <Tooltip :title="locale.hud.step">
+    <Tooltip :title="isStepping ? locale.hud.steppingRunning : locale.hud.step">
       <Button
         shape="circle"
         size="middle"
         class="!inline-flex !items-center !justify-center"
-        :disabled="!hasExperiment || isComplete || isPlaying"
+        :disabled="!hasExperiment || isComplete || isPlaying || isStepping"
+        :loading="isStepping"
         @click="emit('step')"
       >
-        <template #icon><StepForwardOutlined /></template>
+        <template v-if="!isStepping" #icon><StepForwardOutlined /></template>
       </Button>
     </Tooltip>
 
@@ -88,6 +101,7 @@ const emit = defineEmits<{
         @change="(v: number | [number, number]) => emit('speedChange', v as number)"
       />
       <span class="font-mono text-[10px] text-white/30 shrink-0 w-6 text-right">{{ speed }}x</span>
+    </div>
     </div>
   </div>
 </template>

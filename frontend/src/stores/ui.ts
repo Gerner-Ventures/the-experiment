@@ -8,6 +8,8 @@ export const useUIStore = defineStore('ui', () => {
   const activePanel = ref<ActivePanel>('none')
   const playbackSpeed = ref(1)
   const isPlaying = ref(false)
+  const isStepping = ref(false)
+  const steppingStatus = ref('')
   const showNarration = ref(false)
 
   const hasSelectedAgent = computed(() => selectedAgentId.value !== null)
@@ -45,11 +47,13 @@ export const useUIStore = defineStore('ui', () => {
     activePanel.value = 'none'
     playbackSpeed.value = 1
     isPlaying.value = false
+    isStepping.value = false
+    steppingStatus.value = ''
     showNarration.value = false
   }
 
   return {
-    selectedAgentId, activePanel, playbackSpeed, isPlaying, showNarration,
+    selectedAgentId, activePanel, playbackSpeed, isPlaying, isStepping, steppingStatus, showNarration,
     hasSelectedAgent,
     selectAgent, deselectAgent, setPanel, togglePanel,
     setPlaybackSpeed, togglePlaying,
