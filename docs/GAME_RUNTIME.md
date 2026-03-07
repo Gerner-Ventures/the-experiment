@@ -125,6 +125,17 @@ GM plans are stored in `gm_plans`.
 
 At the end of each round, a `world_snapshots` row is also written with the full `WorldState`.
 
+The event log also stores derived round entries that sit alongside the phase events:
+
+- `crisis_event`
+- `agent_action`
+- `resource_update`
+- `threat_update`
+- `round_end`
+
+Those derived entries are what the analytics summary, highlight feed, replay index, and headless
+runner use when they compute cooperation, surface notable moments, or summarize a finished run.
+
 Code references:
 
 - `backend/app/api/store.py`
@@ -403,12 +414,18 @@ The API runtime now persists report-grade derived analytics at round end:
 
 ## Runtime Ownership
 
-There is a single backend execution path:
+There are three execution entry points in the repo:
 
 - FastAPI route handlers in `backend/app/api/routes/experiments.py`
 - `ExperimentRuntime` plus its websocket connection manager in `backend/app/api/runtime.py`
 - `ExperimentStore` implementations in `backend/app/api/store.py`
+- `ExperimentRunner` in `backend/app/engine/runner.py`
+- `python -m app.headless.cli` in `backend/app/headless/cli.py`
 
 `backend/app/main.py` only wires the FastAPI application and middleware; it does not construct a separate runner stack.
+The API runtime plus store boundary is the main current path. The headless runner intentionally
+reuses `ExperimentRuntime` with the in-memory store so it exercises the same orchestration and log
+assembly logic without requiring backend infrastructure. If these paths diverge, this document
+should track the API runtime behavior.
 
 This document describes the current implementation, not a guaranteed long-term contract.

@@ -72,6 +72,19 @@ To enable local Ruff autofixes before each commit, run `pre-commit install`.
 - ReDoc: http://localhost:8000/redoc
 - Backend guide: [docs/BACKEND.md](docs/BACKEND.md)
 
+### Headless Backend Simulation
+
+You can run the backend round loop without starting the backend stack:
+
+```bash
+cd backend
+poetry run python -m app.headless.cli --rounds 2 --seed 11
+```
+
+This uses the in-memory runtime path and prints a round-by-round summary. `mock` mode is the
+default no-setup path; add `--mode live` only when the relevant provider API keys are available in
+your shell environment.
+
 ## Work Streams
 
 Development is split into 3 parallel work streams. See [docs/WORKSTREAMS.md](docs/WORKSTREAMS.md) for the full breakdown.

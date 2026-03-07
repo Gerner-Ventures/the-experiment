@@ -249,6 +249,7 @@ def test_analytics_and_replay_endpoints_return_round_data() -> None:
     summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
     assert summary.status_code == 200
     assert summary.json()["rounds_completed"] == 1
+    assert summary.json()["cooperation_score"] > 0
 
     replay = client.get(f"{API_PREFIX}/experiments/{experiment_id}/replay")
     assert replay.status_code == 200
@@ -259,6 +260,39 @@ def test_analytics_and_replay_endpoints_return_round_data() -> None:
     assert snapshot.status_code == 200
     assert snapshot.json()["round_number"] == 1
     assert snapshot.json()["events"]
+
+    highlights = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/highlights")
+    assert highlights.status_code == 200
+    assert highlights.json()["items"]
+    assert highlights.json()["items"][0]["category"] == "crisis_event"
+
+
+def test_derived_round_logs_are_persisted() -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+
+    agent_actions = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "agent_action"},
+    )
+    assert agent_actions.status_code == 200
+    assert agent_actions.json()["total"] > 0
+
+    crisis_events = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "crisis_event"},
+    )
+    assert crisis_events.status_code == 200
+    assert crisis_events.json()["total"] == 1
+
+    round_end = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "round_end"},
+    )
+    assert round_end.status_code == 200
+    assert round_end.json()["total"] == 1
 
 
 def test_report_grade_analytics_use_resolved_action_outcomes() -> None:

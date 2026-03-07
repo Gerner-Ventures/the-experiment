@@ -132,10 +132,19 @@ class ConnectionManager:
 
 
 class ExperimentRuntime:
-    def __init__(self, *, store: ExperimentStore | None = None) -> None:
-        self.engine = SimulationEngine()
-        self.gm_service = GMService()
-        self.connection_manager = ConnectionManager()
+    def __init__(
+        self,
+        *,
+        store: ExperimentStore | None = None,
+        engine: SimulationEngine | None = None,
+        gm_service: GMService | None = None,
+        connection_manager: ConnectionManager | None = None,
+    ) -> None:
+        self.gm_service = gm_service or (engine.gm_service if engine is not None else GMService())
+        self.engine = engine or SimulationEngine(gm_service=self.gm_service)
+        if gm_service is not None:
+            self.engine.gm_service = gm_service
+        self.connection_manager = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.lock = asyncio.Lock()
 
@@ -1165,6 +1174,7 @@ class ExperimentRuntime:
             "exile_vote": "exile_vote",
             "exile_enacted": "exile_enacted",
         }
+        agent_names = {agent.agent_id: agent.name for agent in state.agents}
         for phase in round_result.phases:
             for event in phase.events:
                 kind = str(event.data.get("kind"))
@@ -1225,242 +1235,6 @@ class ExperimentRuntime:
             round_number=round_result.round_number,
             data=round_summary,
         )
-
-    def _build_round_summary(
-        self, state: SimulationState, round_result: RoundResult
-    ) -> dict[str, Any]:
-        agents_by_id = {agent.agent_id: agent for agent in state.agents}
-        total_actions = len(round_result.action_resolutions)
-        cooperative_actions = sum(
-            1
-            for action in round_result.action_resolutions
-            if action.resolved_action_type in COOPERATIVE_ACTION_TYPES
-        )
-        cooperation_score = round(cooperative_actions / total_actions, 2) if total_actions else 0.0
-        betrayal_count = sum(
-            1
-            for action in round_result.action_resolutions
-            if self._is_betrayal_action(action.requested_action_type, action.resolved_action_type)
-        )
-        betrayal_count += sum(
-            1
-            for phase in round_result.phases
-            for event in phase.events
-            if event.data.get("kind") in {"exile_vote", "exile_enacted"}
-        )
-        sabotage_count = sum(
-            1
-            for action in round_result.action_resolutions
-            if action.requested_action_type in SABOTAGE_ACTION_TYPES
-            or action.resolved_action_type in SABOTAGE_ACTION_TYPES
-        )
-        dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
-        goal_progress: list[dict[str, Any]] = []
-        for action in round_result.action_resolutions:
-            agent = agents_by_id.get(action.agent_id)
-            goal_progress.append(
-                {
-                    "agent_id": action.agent_id,
-                    "agent_name": action.agent_name,
-                    "goal_text": agent.goal.text if agent is not None else "",
-                    "goal_archetype": agent.goal.archetype if agent is not None else "",
-                    "status": self._status_value(agent.status) if agent is not None else "",
-                    "goal_progress": action.goal_progress,
-                    "requested_action_type": action.requested_action_type,
-                    "resolved_action_type": action.resolved_action_type,
-                    "cooperation_intent": action.cooperation_intent,
-                    "phase": action.phase,
-                    "summary": action.summary,
-                }
-            )
-        return {
-            "summary": (
-                f"Round {round_result.round_number} closes with cooperation "
-                f"{cooperation_score:.2f} and threat {round_result.threat_level:.2f}."
-            ),
-            "gm": {
-                "round_theme": round_result.gm_plan.plan.round_theme,
-                "narration": round_result.gm_plan.plan.narration,
-                "crisis_event": round_result.gm_plan.plan.crisis_event.model_dump(mode="json"),
-            },
-            "cooperation": {
-                "score": cooperation_score,
-                "cooperative_actions": cooperative_actions,
-                "total_actions": total_actions,
-            },
-            # `sabotage_count` is a focused subset of these broader betrayal signals.
-            "betrayal_count": betrayal_count,
-            "sabotage_count": sabotage_count,
-            "threat_level": round_result.threat_level,
-            "resources": round_result.world_state.resources.model_dump(mode="json"),
-            "dominant_faction": dominant_faction.name if dominant_faction is not None else None,
-            "factions": [faction.model_dump(mode="json") for faction in state.factions],
-            "suspicion": [
-                {
-                    "agent_id": agent.agent_id,
-                    "agent_name": agent.name,
-                    "suspicion_level": agent.suspicion_level,
-                }
-                for agent in state.agents
-            ],
-            "goal_progress": goal_progress,
-        }
-
-    def _round_summary_data(self, logs: list[EventLogItem]) -> dict[int, dict[str, Any]]:
-        summaries: dict[int, dict[str, Any]] = {}
-        for item in logs:
-            if item.type != "round_end" or item.round_number is None:
-                continue
-            summaries[item.round_number] = item.data
-        return summaries
-
-    def _cooperation_data(self, data: dict[str, Any]) -> CooperationMetrics:
-        cooperation = data.get("cooperation", {})
-        if isinstance(cooperation, dict):
-            return {
-                "score": self._float_value(cooperation.get("score")),
-                "cooperative_actions": int(cooperation.get("cooperative_actions", 0)),
-                "total_actions": int(cooperation.get("total_actions", 0)),
-            }
-        return {"score": 0.0, "cooperative_actions": 0, "total_actions": 0}
-
-    def _goal_progress_index(self, data: dict[str, Any]) -> dict[str, list[dict[str, Any]]]:
-        records: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
-        for item in data.get("goal_progress", []):
-            if not isinstance(item, dict):
-                continue
-            agent_id = item.get("agent_id")
-            if not isinstance(agent_id, str):
-                continue
-            records[agent_id].append(item)
-        return dict(records)
-
-    def _suspicion_data(self, data: dict[str, Any]) -> list[dict[str, Any]]:
-        suspicion = data.get("suspicion", [])
-        return [item for item in suspicion if isinstance(item, dict)]
-
-    def _faction_data(self, data: dict[str, Any]) -> list[dict[str, Any]]:
-        factions = data.get("factions", [])
-        return [item for item in factions if isinstance(item, dict)]
-
-    def _crisis_event_data(self, data: dict[str, Any]) -> dict[str, Any]:
-        gm = data.get("gm", {})
-        if isinstance(gm, dict) and isinstance(gm.get("crisis_event"), dict):
-            return cast(dict[str, Any], gm["crisis_event"])
-        return {}
-
-    def _resource_data(self, data: dict[str, Any]) -> dict[str, float]:
-        resources = data.get("resources", {})
-        if not isinstance(resources, dict):
-            return {}
-        return {
-            key: self._float_value(value)
-            for key, value in resources.items()
-            if isinstance(key, str)
-        }
-
-    def _dominant_faction_name(self, data: dict[str, Any]) -> str | None:
-        dominant_faction = data.get("dominant_faction")
-        return dominant_faction if isinstance(dominant_faction, str) else None
-
-    def _requested_action_type(self, item: EventLogItem) -> str | None:
-        requested_action = item.data.get("requested_action_type")
-        if isinstance(requested_action, str):
-            return requested_action
-        action = item.data.get("action")
-        if isinstance(action, dict):
-            raw_type = action.get("type")
-            return raw_type if isinstance(raw_type, str) else None
-        if isinstance(action, str):
-            return action
-        return None
-
-    def _resolved_action_type(self, item: EventLogItem) -> str | None:
-        resolved_action = item.data.get("resolved_action_type")
-        if isinstance(resolved_action, str):
-            return resolved_action
-        action_type = item.data.get("action_type")
-        if isinstance(action_type, str):
-            return action_type
-        action = item.data.get("action")
-        if isinstance(action, dict):
-            raw_type = action.get("type")
-            return raw_type if isinstance(raw_type, str) else None
-        if isinstance(action, str):
-            return action
-        return None
-
-    def _is_betrayal_action(
-        self,
-        requested_action_type: str | None,
-        resolved_action_type: str | None,
-    ) -> bool:
-        return (
-            requested_action_type in SABOTAGE_ACTION_TYPES
-            or resolved_action_type in SABOTAGE_ACTION_TYPES
-            or requested_action_type in HOSTILE_ACTION_TYPES
-            or resolved_action_type in HOSTILE_ACTION_TYPES
-        )
-
-    def _phase_sort_key(self, phase: str | None) -> int:
-        order = {"gm_plan": 0, "dawn": 1, "morning": 2, "midday": 3, "afternoon": 4, "night": 5}
-        return order.get(phase or "", 99)
-
-    def _status_value(self, status: AgentStatus | str) -> str:
-        return status.value if isinstance(status, AgentStatus) else str(status)
-
-    def _goal_outcome(
-        self,
-        status: str,
-        history: list[AgentGoalProgress],
-    ) -> GoalOutcome:
-        progress_samples = [entry.progress.lower() for entry in history]
-        if any(
-            keyword in progress_text
-            for progress_text in progress_samples
-            for keyword in GOAL_ACHIEVED_KEYWORDS
-        ):
-            return "achieved"
-        if status == "exiled" or any(
-            keyword in progress_text
-            for progress_text in progress_samples
-            for keyword in GOAL_FAILED_KEYWORDS
-        ):
-            return "failed"
-        if any(
-            keyword in progress_text
-            for progress_text in progress_samples
-            for keyword in GOAL_PARTIAL_KEYWORDS
-        ):
-            return "partial"
-        return "unknown"
-
-    def _string_value(self, value: object, *, default: str | None = None) -> str | None:
-        if isinstance(value, str):
-            return value
-        return default
-
-    def _faction_kind(self, value: object) -> FactionKind | None:
-        if value in get_args(FactionKind):
-            return cast(FactionKind, value)
-        return None
-
-    def _string_or(self, value: object, default: str = "") -> str:
-        if isinstance(value, str):
-            return value
-        return default
-
-    def _float_value(self, value: object) -> float:
-        if isinstance(value, bool):
-            return 0.0
-        if isinstance(value, (int, float)):
-            return float(value)
-        if isinstance(value, str):
-            try:
-                return float(value)
-            except ValueError:
-                return 0.0
-        return 0.0
 
 
 runtime = ExperimentRuntime()
