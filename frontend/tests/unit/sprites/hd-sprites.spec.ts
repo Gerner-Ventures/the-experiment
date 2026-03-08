@@ -32,9 +32,6 @@ import type {
   MouthType,
   BrowState,
   PupilDir,
-  PropType,
-  EffectType,
-  StatusEffectType,
 } from '@/config/sprites/hd/types'
 
 // ─── Test data ───
@@ -257,7 +254,7 @@ describe('hd/animations', () => {
 
   it('every pose in every HD animation references a valid HDPoseName in POSE_REGISTRY', () => {
     const validPoses = new Set(Object.keys(POSE_REGISTRY))
-    for (const [name, anim] of Object.entries(HD_ANIMATION_REGISTRY)) {
+    for (const [, anim] of Object.entries(HD_ANIMATION_REGISTRY)) {
       for (const pose of anim.poses) {
         expect(validPoses.has(pose)).toBe(true)
       }
@@ -265,7 +262,7 @@ describe('hd/animations', () => {
   })
 
   it('every HD_ACTION_TO_ANIMATION value maps to an existing HD_ANIMATION_REGISTRY key', () => {
-    for (const [action, animName] of Object.entries(HD_ACTION_TO_ANIMATION)) {
+    for (const [, animName] of Object.entries(HD_ACTION_TO_ANIMATION)) {
       expect(HD_ANIMATION_REGISTRY[animName]).toBeDefined()
     }
   })
