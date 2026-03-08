@@ -64,6 +64,7 @@ Both `_step_streaming` and the updated `step()` need to broadcast `round_end` wi
 - [ ] All existing tests pass
 - [x] Frontend receives same events regardless of which endpoint triggered the round
 <!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
+<!-- canon:realized-in:PR#124 file:backend/app/api/runtime.py -->
 
 ## Key Files
 
