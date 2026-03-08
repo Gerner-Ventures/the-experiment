@@ -25,10 +25,12 @@ Add `pytest-cov` and configure pytest to emit coverage reports.
 
 ### Acceptance Criteria
 
-- [ ] `pytest-cov` added as a dev dependency in `pyproject.toml`
-- [ ] `pytest` invocation in CI produces an XML coverage report (`backend/coverage.xml`)
-- [ ] Coverage collects from `app/` source, excludes `tests/`, `alembic/`
-- [ ] `npm run` / `make` / direct command works locally: `poetry run pytest --cov=app --cov-report=xml`
+- [x] `pytest-cov` added as a dev dependency in `pyproject.toml`
+<!-- canon:realized-in:PR#129 file:backend/pyproject.toml -->
+- [x] `pytest` invocation in CI produces an XML coverage report (`backend/coverage.xml`)
+<!-- canon:realized-in:PR#129 file:.github/workflows/ci.yml -->
+- [x] Coverage collects from `app/` source, excludes `tests/`, `alembic/`
+- [x] `npm run` / `make` / direct command works locally: `poetry run pytest --cov=app --cov-report=xml`
 
 ## 2. Frontend Coverage Collection
 
@@ -36,9 +38,9 @@ Enable Jest coverage output in CI.
 
 ### Acceptance Criteria
 
-- [ ] CI step runs `jest --coverage --coverageReporters=lcov` (or equivalent producing `lcov.info`)
-- [ ] Coverage report written to `frontend/coverage/lcov.info`
-- [ ] Existing `collectCoverageFrom` config in `jest.config.js` is used (covers `src/**/*.{ts,vue}`, excludes `main.ts` and `.d.ts`)
+- [x] CI step runs `jest --coverage --coverageReporters=lcov` (or equivalent producing `lcov.info`)
+- [x] Coverage report written to `frontend/coverage/lcov.info`
+- [x] Existing `collectCoverageFrom` config in `jest.config.js` is used (covers `src/**/*.{ts,vue}`, excludes `main.ts` and `.d.ts`)
 - [ ] Local `npm run test:coverage` continues to work
 
 ## 3. diff-cover Integration
@@ -47,12 +49,13 @@ Add a CI step that checks patch coverage against the PR's base branch.
 
 ### Acceptance Criteria
 
-- [ ] `diff-cover` installed in CI (pip install or pinned in a requirements file)
-- [ ] Frontend step: `diff-cover frontend/coverage/lcov.info --compare-branch=origin/main --fail-under=80`
-- [ ] Backend step: `diff-cover backend/coverage.xml --compare-branch=origin/main --fail-under=80`
-- [ ] CI job fails (blocks merge) if either frontend or backend patch coverage < 80%
-- [ ] Coverage check is skipped when no source files changed in that area (respects existing `dorny/paths-filter`)
-- [ ] diff-cover output is visible in the GH Actions log for debugging
+- [x] `diff-cover` installed in CI (pip install or pinned in a requirements file)
+- [x] Frontend step: `diff-cover frontend/coverage/lcov.info --compare-branch=origin/main --fail-under=80`
+- [x] Backend step: `diff-cover backend/coverage.xml --compare-branch=origin/main --fail-under=80`
+- [x] CI job fails (blocks merge) if either frontend or backend patch coverage < 80%
+- [x] Coverage check is skipped when no source files changed in that area (respects existing `dorny/paths-filter`)
+<!-- canon:realized-in:PR#129 file: -->
+- [x] diff-cover output is visible in the GH Actions log for debugging
 
 ## 4. CI Workflow Updates
 
@@ -60,11 +63,11 @@ Modify `.github/workflows/ci.yml` to wire everything together.
 
 ### Acceptance Criteria
 
-- [ ] Backend job runs pytest with coverage and diff-cover check
-- [ ] Frontend unit test job runs jest with coverage and diff-cover check
-- [ ] Coverage artifacts (XML/lcov) uploaded as GH Actions artifacts for debugging
-- [ ] No change to E2E test job (Playwright does not contribute to unit coverage)
-- [ ] CI passes on `main` branch (no false failures when there's no diff)
+- [x] Backend job runs pytest with coverage and diff-cover check
+- [x] Frontend unit test job runs jest with coverage and diff-cover check
+- [x] Coverage artifacts (XML/lcov) uploaded as GH Actions artifacts for debugging
+- [x] No change to E2E test job (Playwright does not contribute to unit coverage)
+- [x] CI passes on `main` branch (no false failures when there's no diff)
 
 ## 5. Developer Experience
 
@@ -74,7 +77,8 @@ Make it easy for developers to check coverage locally before pushing.
 
 - [ ] `frontend/package.json` retains `test:coverage` script
 - [ ] Backend equivalent documented: `poetry run pytest --cov=app --cov-report=html`
-- [ ] `.gitignore` updated to exclude coverage output dirs (`coverage/`, `htmlcov/`, `*.coverage`)
+- [x] `.gitignore` updated to exclude coverage output dirs (`coverage/`, `htmlcov/`, `*.coverage`)
+<!-- canon:realized-in:PR#129 file:.gitignore -->
 
 ## 6. Identify Coverage Gaps (Post-Setup)
 
