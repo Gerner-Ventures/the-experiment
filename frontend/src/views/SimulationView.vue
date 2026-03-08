@@ -318,13 +318,11 @@ function goBack() {
           :is-playing="uiStore.isPlaying"
           :is-stepping="uiStore.isStepping"
           :stepping-status="uiStore.steppingStatus"
-          :speed="uiStore.playbackSpeed"
           :is-complete="experimentStore.isComplete"
           :has-experiment="experimentCreated"
           @step="handleStep"
           @play="handleStart"
           @pause="handlePause"
-          @speed-change="uiStore.setPlaybackSpeed"
           @toggle-log="uiStore.togglePanel('log')"
         />
       </div>
