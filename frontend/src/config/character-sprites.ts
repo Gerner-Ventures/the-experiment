@@ -734,6 +734,8 @@ export function getSpriteById(id: string): CharacterSprite | undefined {
 export const SPRITE_W = 14
 export const SPRITE_H = 18
 export const PIXEL_SCALE = 2
+/** Uniform scale for sprites in the relationship web graph */
+export const SPRITE_SCALE = 3
 
 /**
  * Render a character sprite to an offscreen canvas.

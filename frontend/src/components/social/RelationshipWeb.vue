@@ -5,7 +5,7 @@ import { useElementSize } from '@vueuse/core'
 import { useForceGraph, type ForceGraphNode, type ForceGraphLink } from '@/composables/useForceGraph'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
-import { getSpriteById, renderSpriteToCanvas } from '@/config/character-sprites'
+import { getSpriteById, renderSpriteToCanvas, SPRITE_W as RAW_SPRITE_W, SPRITE_H as RAW_SPRITE_H, SPRITE_SCALE } from '@/config/character-sprites'
 
 const props = defineProps<{
   visible: boolean
@@ -25,8 +25,9 @@ const { nodes, links, buildGraph, pause, resume, onDragStart, onDragMove, onDrag
 const hoveredNode = ref<string | null>(null)
 let draggingNode: ForceGraphNode | null = null
 
-const SPRITE_W = 14
-const SPRITE_H = 18
+/** Uniform display size for all agent sprites in the graph */
+const DISPLAY_W = RAW_SPRITE_W * SPRITE_SCALE
+const DISPLAY_H = RAW_SPRITE_H * SPRITE_SCALE
 
 // Cache rendered sprite data URLs
 const spriteDataUrls = new Map<string, string>()
@@ -43,19 +44,7 @@ function getSpriteDataUrl(characterId: string): string {
   return url
 }
 
-/** Sprite display size scales with relationship count (more relationships = larger) */
-function spriteScale(node: ForceGraphNode): number {
-  // Base scale 2x, up to 5x for heavily connected agents
-  return 2 + Math.min(3, node.relationshipCount * 0.5)
-}
-
-function spriteDisplayW(node: ForceGraphNode): number {
-  return SPRITE_W * spriteScale(node)
-}
-
-function spriteDisplayH(node: ForceGraphNode): number {
-  return SPRITE_H * spriteScale(node)
-}
+const hoveredLink = ref<ForceGraphLink | null>(null)
 
 function handleNodeClick(node: ForceGraphNode) {
   uiStore.selectAgent(node.id)
@@ -112,7 +101,7 @@ watch(() => props.visible, (isVisible) => {
   <Drawer
     :open="visible"
     placement="right"
-    :width="500"
+    :width="640"
     :closable="true"
     :mask-closable="true"
     class="relationship-web-drawer"
@@ -143,18 +132,37 @@ watch(() => props.visible, (isVisible) => {
         class="w-full h-full"
       >
         <!-- Edges -->
-        <line
+        <g
           v-for="(link, i) in links"
           :key="'link-' + i"
-          :x1="linkSource(link).x"
-          :y1="linkSource(link).y"
-          :x2="linkTarget(link).x"
-          :y2="linkTarget(link).y"
-          :stroke="link.color"
-          :stroke-width="link.thickness"
-          :stroke-dasharray="link.dashed ? '6 3' : undefined"
-          :opacity="0.7"
-        />
+          @mouseenter="hoveredLink = link"
+          @mouseleave="hoveredLink = null"
+        >
+          <line
+            :x1="linkSource(link).x"
+            :y1="linkSource(link).y"
+            :x2="linkTarget(link).x"
+            :y2="linkTarget(link).y"
+            :stroke="link.color"
+            :stroke-width="hoveredLink === link ? link.thickness + 2 : link.thickness"
+            :stroke-dasharray="link.dashed ? '6 3' : undefined"
+            :opacity="hoveredLink === link ? 1 : 0.6"
+            class="transition-opacity"
+          />
+          <!-- Trust label on hover -->
+          <text
+            v-if="hoveredLink === link"
+            :x="((linkSource(link).x ?? 0) + (linkTarget(link).x ?? 0)) / 2"
+            :y="((linkSource(link).y ?? 0) + (linkTarget(link).y ?? 0)) / 2 - 6"
+            text-anchor="middle"
+            fill="white"
+            font-family="'JetBrains Mono Variable', monospace"
+            font-size="10"
+            font-weight="bold"
+          >
+            {{ link.trust > 0 ? '+' : '' }}{{ Math.round(link.trust) }}
+          </text>
+        </g>
 
         <!-- Nodes: agent sprites -->
         <g
@@ -169,28 +177,28 @@ watch(() => props.visible, (isVisible) => {
         >
           <!-- Archetype color glow behind sprite -->
           <circle
-            :r="Math.max(spriteDisplayW(node), spriteDisplayH(node)) / 2 + 4"
+            :r="Math.max(DISPLAY_W, DISPLAY_H) / 2 + 6"
             :fill="node.color"
-            :opacity="hoveredNode === node.id ? 0.3 : 0.15"
+            :opacity="hoveredNode === node.id ? 0.35 : 0.15"
           />
           <!-- Sprite image -->
           <image
             v-if="getSpriteDataUrl(node.characterId)"
             :href="getSpriteDataUrl(node.characterId)"
-            :x="-spriteDisplayW(node) / 2"
-            :y="-spriteDisplayH(node) / 2"
-            :width="spriteDisplayW(node)"
-            :height="spriteDisplayH(node)"
+            :x="-DISPLAY_W / 2"
+            :y="-DISPLAY_H / 2"
+            :width="DISPLAY_W"
+            :height="DISPLAY_H"
             image-rendering="pixelated"
             :opacity="hoveredNode === node.id ? 1 : 0.9"
           />
           <!-- Hover outline -->
           <rect
             v-if="hoveredNode === node.id"
-            :x="-spriteDisplayW(node) / 2 - 2"
-            :y="-spriteDisplayH(node) / 2 - 2"
-            :width="spriteDisplayW(node) + 4"
-            :height="spriteDisplayH(node) + 4"
+            :x="-DISPLAY_W / 2 - 2"
+            :y="-DISPLAY_H / 2 - 2"
+            :width="DISPLAY_W + 4"
+            :height="DISPLAY_H + 4"
             fill="none"
             stroke="white"
             stroke-width="1"
@@ -198,18 +206,19 @@ watch(() => props.visible, (isVisible) => {
           />
           <!-- Name label -->
           <text
-            :y="spriteDisplayH(node) / 2 + 12"
+            :y="DISPLAY_H / 2 + 14"
             text-anchor="middle"
-            fill="rgba(255,255,255,0.7)"
+            fill="rgba(255,255,255,0.8)"
             font-family="'JetBrains Mono Variable', monospace"
-            font-size="10"
+            font-size="11"
+            font-weight="bold"
           >
             {{ node.name }}
           </text>
           <!-- Relationship count badge -->
           <text
             v-if="node.relationshipCount > 0"
-            :y="-spriteDisplayH(node) / 2 - 4"
+            :y="-DISPLAY_H / 2 - 6"
             text-anchor="middle"
             :fill="node.color"
             font-family="'JetBrains Mono Variable', monospace"

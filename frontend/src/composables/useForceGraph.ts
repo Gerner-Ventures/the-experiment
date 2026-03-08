@@ -10,7 +10,7 @@ import {
   type SimulationLinkDatum,
 } from 'd3-force'
 import { useAgentStore } from '@/stores/agent'
-import { SPRITE_H } from '@/config/character-sprites'
+import { SPRITE_H, SPRITE_SCALE } from '@/config/character-sprites'
 import type { GoalArchetype } from '@/types/agent'
 import {
   ARCHETYPE_COLORS,
@@ -123,13 +123,17 @@ export function useForceGraph(containerWidth: Ref<number>, containerHeight: Ref<
         .id(d => d.id)
         .distance(FORCE_CONFIG.linkDistance))
       .force('center', forceCenter(w / 2, h / 2).strength(FORCE_CONFIG.centerStrength))
-      .force('collide', forceCollide<ForceGraphNode>().radius(d => {
-        // Sprite-based sizing: base 2x + 0.5 per relationship, sprite is 18px tall
-        const scale = 2 + Math.min(3, d.relationshipCount * 0.5)
-        return SPRITE_H * scale / 2 + 8
+      .force('collide', forceCollide<ForceGraphNode>().radius(() => {
+        return SPRITE_H * SPRITE_SCALE / 2 + 12
       }))
       .alphaDecay(FORCE_CONFIG.alphaDecay)
       .on('tick', () => {
+        // Clamp nodes within viewport bounds so they can't float off-screen
+        const pad = 40
+        for (const node of nodes.value) {
+          node.x = Math.max(pad, Math.min(w - pad, node.x ?? w / 2))
+          node.y = Math.max(pad, Math.min(h - pad, node.y ?? h / 2))
+        }
         // Trigger reactivity without allocating new arrays — d3-force mutates in place
         triggerRef(nodes)
         triggerRef(links)
