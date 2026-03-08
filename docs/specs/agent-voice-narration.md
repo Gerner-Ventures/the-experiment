@@ -76,6 +76,7 @@ agent dialogue in parallel (background tasks), before the frontend enters the ta
 Acceptance criteria:
 
 - [ ] agent speech audio is pregenerated when decisions are resolved for the round
+<!-- canon:realized-in:PR#164 file:backend/app/engine/service.py -->
 - [ ] pregeneration runs concurrently across agents (not sequential)
 - [ ] pregeneration failures are logged but do not block the round
 - [ ] generated audio is cached using the same LRU/TTL cache as GM narration
