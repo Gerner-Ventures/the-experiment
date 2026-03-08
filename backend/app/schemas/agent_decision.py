@@ -43,7 +43,7 @@ DecisionActionType = Literal[
 CooperationIntent = Literal["high", "medium", "low", "none"]
 
 AGENT_INNER_THOUGHT_MAX_LENGTH = 160
-AGENT_DECISION_MAX_TOKENS = 180
+AGENT_DECISION_MAX_TOKENS = 384
 
 
 class DecisionAction(APIModel):

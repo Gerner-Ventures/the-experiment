@@ -11,7 +11,11 @@ from app.core.config import Settings
 from app.llm import LLMClient, get_default_model_configs
 from app.llm.models import LLMUsage, LLMResult, UsageRecord
 from app.llm.service import LLMService
-from app.schemas.agent_decision import AGENT_INNER_THOUGHT_MAX_LENGTH, AgentDecision
+from app.schemas.agent_decision import (
+    AGENT_DECISION_MAX_TOKENS,
+    AGENT_INNER_THOUGHT_MAX_LENGTH,
+    AgentDecision,
+)
 from app.schemas.gm_plan import GMPlanRead
 
 
@@ -197,11 +201,11 @@ async def test_structured_generation_passes_max_tokens_to_router() -> None:
             "agent",
             AgentDecision,
             {"experiment_id": "exp-9", "round_number": 1, "agent_id": "a-1"},
-            max_tokens=180,
+            max_tokens=AGENT_DECISION_MAX_TOKENS,
         )
     )
 
-    assert fake_router.calls[0]["max_tokens"] == 180
+    assert fake_router.calls[0]["max_tokens"] == AGENT_DECISION_MAX_TOKENS
 
 
 @pytest.mark.asyncio
