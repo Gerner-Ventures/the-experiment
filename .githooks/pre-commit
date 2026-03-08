@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+echo "── pre-commit: frontend lint + typecheck ──"
+cd "$ROOT/frontend"
+npx eslint . --max-warnings=0
+npx vue-tsc --noEmit
+
+echo "── pre-commit: backend lint + format check ──"
+cd "$ROOT/backend"
+.venv/bin/ruff check .
+.venv/bin/ruff format --check .
+
+echo "✓ pre-commit passed"

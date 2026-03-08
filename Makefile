@@ -34,9 +34,13 @@ help: ## Show this help message
 
 .PHONY: setup env
 
-setup: ## Install all dependencies (backend + frontend)
+setup: install-hooks ## Install all dependencies (backend + frontend) + git hooks
 	cd backend && poetry install
 	cd frontend && npm install
+
+install-hooks: ## Install git commit hooks (lint, test, conventional commits)
+	git config core.hooksPath .githooks
+	@echo "✓ Git hooks installed from .githooks/"
 
 env: ## Copy .env.example to backend/.env if missing
 	@if [ -f backend/.env ]; then \
