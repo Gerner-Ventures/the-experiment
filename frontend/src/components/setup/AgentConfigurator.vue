@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import {
-  Card, Collapse, CollapsePanel, Input, Select,
+  Card, Collapse, CollapsePanel, Input,
   Tag, Button, Space, Tooltip, Typography, Flex,
 } from 'ant-design-vue'
 import {
@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons-vue'
 import type { AgentConfig } from '@/types/agent'
 import {
-  PERSONALITY_TRAIT_KEYS, GOAL_PRESET_KEYS, LLM_MODELS,
+  PERSONALITY_TRAIT_KEYS, GOAL_PRESET_KEYS,
   MAX_PERSONALITY_TRAITS, MIN_AGENTS, MAX_AGENTS, DEFAULT_LLM_MODEL,
   DEFAULT_PERSONALITY_AXES, GOAL_ARCHETYPE_MAP,
   getTraitLabel, getGoalPreset,
@@ -137,11 +137,6 @@ function removeAgent(id: string) {
               </Tag>
             </Flex>
 
-            <!-- Model -->
-            <Typography.Text class="font-mono !text-[10px] !text-white/20 shrink-0">
-              {{ LLM_MODELS.find(m => m.value === agent.llmModel)?.label }}
-            </Typography.Text>
-
             <!-- Status -->
             <Tooltip :title="agent.secretGoal ? locale.agents.statusReady : locale.agents.statusNeedsGoal">
               <CheckCircleFilled v-if="agent.secretGoal" class="!text-accent/50 text-sm" />
@@ -263,18 +258,8 @@ function removeAgent(id: string) {
             />
           </div>
 
-          <!-- Model + Remove -->
-          <Flex align="center" justify="space-between">
-            <div>
-              <label class="font-mono text-[10px] text-white/30 uppercase tracking-widest mb-1.5 block">
-                {{ locale.agents.modelLabel }}
-              </label>
-              <Select
-                v-model:value="agent.llmModel"
-                :options="LLM_MODELS"
-                class="w-52"
-              />
-            </div>
+          <!-- Remove -->
+          <Flex align="center" justify="end">
             <Button
               v-if="agents.length > MIN_AGENTS"
               danger

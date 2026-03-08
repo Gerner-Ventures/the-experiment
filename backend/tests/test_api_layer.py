@@ -79,6 +79,8 @@ class _ScriptedAgentService(AgentService):
 def reset_runtime_store() -> None:
     runtime.store = InMemoryExperimentStore()
     runtime.connection_manager.connections.clear()
+    runtime._steps_in_progress.clear()
+    runtime._current_tasks.clear()
     runtime.gm_service.llm_service.client.tracker = UsageTracker()
     runtime.engine.gm_service.llm_service.client.tracker = UsageTracker()
     runtime.engine.agent_service = _StubAgentService()
@@ -153,15 +155,9 @@ def test_create_get_and_step_experiment_flow() -> None:
 
     stepped = client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
     assert stepped.status_code == 200
-    assert stepped.json()["round_result"]["round_number"] == 1
-    assert (
-        stepped.json()["round_result"]["gm_plan"]["plan"]["round_theme"]
-        == approved.json()["plan"]["round_theme"]
-    )
-
-    fetched = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
-    assert fetched.status_code == 200
-    assert fetched.json()["current_round"] == 1
+    assert stepped.json()["status"] == "step_started"
+    assert stepped.json()["round_number"] == 1
+    assert stepped.json()["experiment_id"] == experiment_id
 
 
 def test_start_and_pause_routes_update_experiment_status() -> None:

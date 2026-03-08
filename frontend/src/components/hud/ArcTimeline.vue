@@ -20,23 +20,23 @@ interface TimelineAct {
 const acts = computed<TimelineAct[]>(() => {
   // Map arc presets to acts
   const arcMap: Record<string, TimelineAct[]> = {
-    'lord-of-the-flies': [
+    'lord_of_the_flies': [
       { name: 'False Peace', startRound: 1, endRound: 5, tone: 'Cooperative' },
       { name: 'The Fracture', startRound: 6, endRound: 10, tone: 'Suspicious' },
       { name: 'The Reckoning', startRound: 11, endRound: 15, tone: 'Desperate' },
     ],
-    'slow-burn': [
+    'slow_burn': [
       { name: 'Arrival', startRound: 1, endRound: 3, tone: 'Curious' },
       { name: 'Settling In', startRound: 4, endRound: 6, tone: 'Comfortable' },
       { name: 'First Cracks', startRound: 7, endRound: 9, tone: 'Uneasy' },
       { name: 'Erosion', startRound: 10, endRound: 12, tone: 'Strained' },
       { name: 'Collapse', startRound: 13, endRound: 15, tone: 'Chaotic' },
     ],
-    'chaos-from-round-1': [
+    'chaos_from_round_1': [
       { name: 'Panic', startRound: 1, endRound: 6, tone: 'Desperate' },
       { name: 'Endgame', startRound: 7, endRound: 15, tone: 'Apocalyptic' },
     ],
-    'the-long-peace': [
+    'the_long_peace': [
       { name: 'Golden Age', startRound: 1, endRound: 6, tone: 'Peaceful' },
       { name: 'Shock', startRound: 7, endRound: 11, tone: 'Crisis' },
       { name: 'Aftermath', startRound: 12, endRound: 15, tone: 'Survival' },

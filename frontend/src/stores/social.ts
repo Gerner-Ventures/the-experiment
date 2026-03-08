@@ -88,6 +88,27 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
+  // Faction, cult, and exile events — stored as events for now, UI in future tickets
+  const factionUpdates = ref<Array<Record<string, unknown>>>([])
+  const exileEvents = ref<Array<Record<string, unknown>>>([])
+
+  function onFactionUpdate(msg: WSMessage) {
+    factionUpdates.value.push(msg.data as Record<string, unknown>)
+  }
+
+  function onCultActivity(msg: WSMessage) {
+    // Cult activity is a subset of faction events
+    factionUpdates.value.push({ ...msg.data as Record<string, unknown>, type: 'cult_activity' })
+  }
+
+  function onExileVote(msg: WSMessage) {
+    exileEvents.value.push({ ...msg.data as Record<string, unknown>, phase: 'vote' })
+  }
+
+  function onExileResult(msg: WSMessage) {
+    exileEvents.value.push({ ...msg.data as Record<string, unknown>, phase: 'result' })
+  }
+
   function dismissMeeting() {
     if (meeting.value) {
       meeting.value.active = false
@@ -97,12 +118,16 @@ export const useSocialStore = defineStore('social', () => {
   function $reset() {
     conversations.value = []
     meeting.value = null
+    factionUpdates.value = []
+    exileEvents.value = []
     msgCounter = 0
   }
 
   return {
     conversations, meeting, recentConversations, isMeetingActive,
+    factionUpdates, exileEvents,
     onSpeak, onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
+    onFactionUpdate, onCultActivity, onExileVote, onExileResult,
     dismissMeeting, $reset,
   }
 })

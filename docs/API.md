@@ -51,7 +51,7 @@ Important behavior:
 | `GET` | `/api/experiments/{experiment_id}` | Retrieve the current experiment snapshot |
 | `POST` | `/api/experiments/{experiment_id}/start` | Mark an experiment as running without stepping a round |
 | `POST` | `/api/experiments/{experiment_id}/pause` | Pause an active experiment |
-| `POST` | `/api/experiments/{experiment_id}/step` | Run one round and return both round output and refreshed state |
+| `POST` | `/api/experiments/{experiment_id}/step` | Start a round in the background; results stream via WebSocket |
 | `POST` | `/api/experiments/{experiment_id}/inject` | Inject an Observer event into the simulation |
 | `GET` | `/api/experiments/{experiment_id}/gm/plan` | Get or generate the next GM plan |
 | `POST` | `/api/experiments/{experiment_id}/gm/approve` | Approve or replace the pending GM plan |
@@ -166,12 +166,17 @@ Current behavior to be aware of:
 
 ## Round Stepping
 
-`POST /api/experiments/{experiment_id}/step` returns:
+`POST /api/experiments/{experiment_id}/step` returns immediately with:
 
-- `round_result`: the round number, applied GM plan, phase-by-phase events, world snapshot, and agent turns
-- `experiment`: the refreshed experiment snapshot after the round concludes
+- `status`: `"step_started"`
+- `round_number`: the upcoming round number
+- `experiment_id`: the experiment ID
 
-Useful follow-up reads after a step:
+The round executes as a background task. Progress streams over WebSocket as `phase_change`, `agent_action`, and `round_end` messages. If the round fails, a `step_error` message is broadcast. Returns `409` if a round is already in progress.
+
+**Important:** A REST-only caller (no WebSocket connection) will not receive error or completion notifications. Always connect a WebSocket before stepping.
+
+Useful follow-up reads after a round completes:
 
 - `GET /api/experiments/{id}/log?round_number=N`
 - `GET /api/experiments/{id}/rounds/{N}/snapshot`
@@ -306,6 +311,7 @@ Connection semantics:
 | `observer_event` | `{ "description": "<observer event text>" }` |
 | `round_end` | `{ "threat_level": <number>, "resources": { ... } }` |
 | `experiment_end` | `{ "status": "<completed|collapsed>", "total_rounds": <number> }` |
+| `step_error` | `{ "error": "<message>" }` — sent when a background round fails |
 
 `phase_change` is the most complete event feed. Its embedded `RoundEvent.data.kind` values currently include conversation, meeting, exile, and faction-specific records such as:
 

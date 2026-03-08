@@ -26,7 +26,7 @@ interface ArcPresetDef {
 
 const ARC_DEFINITIONS: ArcPresetDef[] = [
   {
-    id: 'lord-of-the-flies',
+    id: 'lord_of_the_flies',
     key: 'lordOfTheFlies',
     acts: 3,
     timeline: [
@@ -36,7 +36,7 @@ const ARC_DEFINITIONS: ArcPresetDef[] = [
     ],
   },
   {
-    id: 'slow-burn',
+    id: 'slow_burn',
     key: 'slowBurn',
     acts: 5,
     timeline: [
@@ -48,7 +48,7 @@ const ARC_DEFINITIONS: ArcPresetDef[] = [
     ],
   },
   {
-    id: 'chaos-from-round-1',
+    id: 'chaos_from_round_1',
     key: 'chaosFromRound1',
     acts: 2,
     timeline: [
@@ -57,7 +57,7 @@ const ARC_DEFINITIONS: ArcPresetDef[] = [
     ],
   },
   {
-    id: 'the-long-peace',
+    id: 'the_long_peace',
     key: 'theLongPeace',
     acts: 3,
     timeline: [

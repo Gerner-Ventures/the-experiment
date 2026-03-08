@@ -26,6 +26,7 @@ WSMessageType = Literal[
     "resource_update",
     "observer_event",
     "experiment_end",
+    "step_error",
 ]
 
 
