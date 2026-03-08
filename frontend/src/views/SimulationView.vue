@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Typography } from 'ant-design-vue'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
@@ -15,6 +15,7 @@ import RoundCounter from '@/components/hud/RoundCounter.vue'
 import ArcTimeline from '@/components/hud/ArcTimeline.vue'
 import GMPlanPanel from '@/components/hud/GMPlanPanel.vue'
 import NarrationOverlay from '@/components/hud/NarrationOverlay.vue'
+import ActionLabel from '@/components/hud/ActionLabel.vue'
 import AgentDossier from '@/components/dossier/AgentDossier.vue'
 import ExperimentLog from '@/components/log/ExperimentLog.vue'
 import ConversationBubble from '@/components/social/ConversationBubble.vue'
@@ -25,6 +26,8 @@ import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useUIStore } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
+import { useTurnStore } from '@/stores/turn'
+import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
@@ -39,7 +42,15 @@ const worldStore = useWorldStore()
 const gmStore = useGMStore()
 const uiStore = useUIStore()
 const socialStore = useSocialStore()
+const turnStore = useTurnStore()
 const ws = useWebSocket()
+
+const pixiWorldRef = ref<InstanceType<typeof PixiWorld>>()
+
+// Reactive state for the action label overlay
+const actionLabelPosition = ref<{ x: number; y: number } | null>(null)
+const actionLabelType = ref('')
+const highlightedTargetId = ref<string | null>(null)
 
 // Theme and arc from sessionStorage (set by SetupView) or defaults
 const themeId = sessionStorage.getItem('experiment-theme') || 'lord-of-the-flies'
@@ -208,8 +219,78 @@ function handleAgentClick(agentId: string) {
   uiStore.selectAgent(agentId)
 }
 
+// ─── Turn store handler wiring ───
+
+function wireTurnHandlers() {
+  const pw = pixiWorldRef.value
+  if (!pw) return
+
+  turnStore.setHandlers({
+    move(_agentId, _location, onComplete) {
+      // No-op until pathfinding is wired. nextTick avoids a synchronous
+      // moving→acting phase flicker in the same tick.
+      nextTick(onComplete)
+    },
+    playAction(agentId, animationName, onComplete) {
+      pw.playAction(agentId, animationName, onComplete)
+    },
+    updateAgent(agentId, status, location) {
+      const updates: Record<string, unknown> = { status }
+      if (location) updates.location = location
+      agentStore.onAgentUpdate(agentId, updates)
+    },
+    addConversation(agentId, agentName, message) {
+      socialStore.onSpeak({
+        type: 'agent_speak',
+        round: experimentStore.currentRound,
+        timestamp: new Date().toISOString(),
+        data: { agent_id: agentId, agent_name: agentName, target: 'all', message },
+      })
+    },
+    getAgentLocation(agentId) {
+      return agentStore.getAgent(agentId)?.location
+    },
+  })
+}
+
+// ─── Action label + target highlight reactivity ───
+
+watch(() => turnStore.phase, (newPhase, oldPhase) => {
+  const pw = pixiWorldRef.value
+  if (!pw) return
+
+  if (newPhase === 'acting' && turnStore.activeTurn) {
+    const turn = turnStore.activeTurn
+    // Show action label
+    const pos = pw.getAgentScreenPosition(turn.agentId)
+    if (pos) {
+      actionLabelPosition.value = pos
+      actionLabelType.value = turn.actionType
+    }
+    // Highlight target
+    if (turn.targetAgentId) {
+      const color = AGGRESSIVE_ACTIONS.has(turn.actionType) ? '#ff4444' : '#ffffff'
+      pw.highlightAgent(turn.targetAgentId, color)
+      highlightedTargetId.value = turn.targetAgentId
+    }
+  }
+
+  if (oldPhase === 'acting') {
+    // Clear action label
+    actionLabelPosition.value = null
+    actionLabelType.value = ''
+    // Clear target highlight
+    if (highlightedTargetId.value) {
+      pw.clearHighlight(highlightedTargetId.value)
+      highlightedTargetId.value = null
+    }
+  }
+})
+
 onMounted(async () => {
   await initExperiment()
+  await nextTick()
+  wireTurnHandlers()
 })
 
 onUnmounted(() => {
@@ -221,6 +302,7 @@ onUnmounted(() => {
   gmStore.$reset()
   uiStore.$reset()
   socialStore.$reset()
+  turnStore.$reset()
 })
 
 // When stepping clears (from step_error, disconnect, etc.), reset waitingForRound
@@ -297,6 +379,7 @@ function goBack() {
       <!-- Canvas layer (z-0) -->
       <PixiWorld
         v-if="ready && (experimentCreated || isDemo)"
+        ref="pixiWorldRef"
         class="absolute inset-0 z-0"
         :theme="theme"
         :map-data="DEFAULT_TOWN"
@@ -351,6 +434,14 @@ function goBack() {
             :total-rounds="experimentStore.totalRounds"
           />
         </div>
+
+        <!-- Action label overlay (during acting phase) -->
+        <ActionLabel
+          v-if="actionLabelPosition && actionLabelType"
+          class="pointer-events-none"
+          :action-type="actionLabelType"
+          :position="actionLabelPosition"
+        />
 
         <!-- Conversation bubbles (pointer-events-auto so future interactions work) -->
         <ConversationBubble

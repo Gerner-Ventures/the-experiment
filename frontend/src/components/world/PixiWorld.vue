@@ -21,6 +21,15 @@ const emit = defineEmits<{
 const canvasContainer = ref<HTMLElement>()
 const world = usePixiWorld()
 
+defineExpose({
+  playAction: world.playAction,
+  highlightAgent: world.highlightAgent,
+  clearHighlight: world.clearHighlight,
+  moveAgentTo: world.moveAgentTo,
+  getAgentScreenPosition: world.getAgentScreenPosition,
+  getAgents: world.getAgents,
+})
+
 /** Fisher-Yates shuffle (unbiased) */
 function shuffle<T>(arr: T[]): T[] {
   const result = [...arr]
