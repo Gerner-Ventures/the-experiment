@@ -4,11 +4,18 @@ const MIN_ZOOM = 0.3
 const MAX_ZOOM = 3
 const PAN_SPEED = 8
 
+/** Dampening factor for scroll zoom (lower = smoother). */
+const ZOOM_STEP = 0.03
+/** Lerp speed for smooth zoom transitions (0–1, higher = faster snap). */
+const ZOOM_LERP = 0.15
+
 export class CameraController {
   private world: Container
   private screenWidth: number
   private screenHeight: number
   private zoom = 1
+  /** Target zoom level that the current zoom lerps toward. */
+  private targetZoom = 1
   private dragging = false
   private lastPointer = { x: 0, y: 0 }
   private keys = new Set<string>()
@@ -34,8 +41,13 @@ export class CameraController {
 
     this.onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const delta = e.deltaY > 0 ? 0.9 : 1.1
-      this.setZoom(this.zoom * delta)
+      // Normalize deltaY across browsers/devices. Mouse wheel fires ~100-120px
+      // per tick while trackpad fires many small events. Dividing by 100 before
+      // clamping preserves per-event magnitude differences.
+      const raw = e.deltaMode === 2 ? e.deltaY * 400 : e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      const normalized = Math.max(-1, Math.min(1, raw / 100))
+      const factor = 1 - normalized * ZOOM_STEP
+      this.setTargetZoom(this.targetZoom * factor)
     }
 
     this.onPointerDown = (e: PointerEvent) => {
@@ -62,6 +74,7 @@ export class CameraController {
     canvas.addEventListener('pointerdown', this.onPointerDown)
     window.addEventListener('pointermove', this.onPointerMove)
     window.addEventListener('pointerup', this.onPointerUp)
+    window.addEventListener('pointercancel', this.onPointerUp)
   }
 
   update() {
@@ -70,13 +83,37 @@ export class CameraController {
     if (this.keys.has('ArrowUp') || this.keys.has('w')) this.world.y += PAN_SPEED
     if (this.keys.has('ArrowDown') || this.keys.has('s')) this.world.y -= PAN_SPEED
 
-    if (this.keys.has('=') || this.keys.has('+')) this.setZoom(this.zoom * 1.02)
-    if (this.keys.has('-')) this.setZoom(this.zoom * 0.98)
+    // Advance from current zoom (not target) so the target only ever leads
+    // by one step — prevents the target racing ahead while the lerp lags.
+    if (this.keys.has('=') || this.keys.has('+')) this.setTargetZoom(this.zoom * 1.02)
+    if (this.keys.has('-')) this.setTargetZoom(this.zoom * 0.98)
+
+    // Lerp current zoom toward target for smooth transitions
+    if (Math.abs(this.zoom - this.targetZoom) > 0.001) {
+      // Zoom toward/away from screen center to keep the focal point stable
+      const prevZoom = this.zoom
+      this.zoom += (this.targetZoom - this.zoom) * ZOOM_LERP
+      this.world.scale.set(this.zoom)
+
+      // Adjust position so zoom centers on the viewport middle
+      const cx = this.screenWidth / 2
+      const cy = this.screenHeight / 2
+      const ratio = this.zoom / prevZoom
+      this.world.x = cx - (cx - this.world.x) * ratio
+      this.world.y = cy - (cy - this.world.y) * ratio
+    }
   }
 
+  /** Immediately snap to a zoom level, bypassing smooth lerp transition. */
   setZoom(level: number) {
     this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, level))
+    this.targetZoom = this.zoom
     this.world.scale.set(this.zoom)
+  }
+
+  /** Set the zoom target; the actual zoom will lerp toward it each frame. */
+  setTargetZoom(level: number) {
+    this.targetZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, level))
   }
 
   centerOn(screenX: number, screenY: number) {
@@ -85,8 +122,17 @@ export class CameraController {
   }
 
   resize(width: number, height: number) {
+    // Re-center the camera when the viewport changes so the map stays centered
+    const cx = this.screenWidth / 2
+    const cy = this.screenHeight / 2
+    const dx = width / 2 - cx
+    const dy = height / 2 - cy
+
     this.screenWidth = width
     this.screenHeight = height
+
+    this.world.x += dx
+    this.world.y += dy
   }
 
   destroy(canvas: HTMLCanvasElement) {
@@ -96,5 +142,6 @@ export class CameraController {
     canvas.removeEventListener('pointerdown', this.onPointerDown)
     window.removeEventListener('pointermove', this.onPointerMove)
     window.removeEventListener('pointerup', this.onPointerUp)
+    window.removeEventListener('pointercancel', this.onPointerUp)
   }
 }

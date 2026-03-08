@@ -291,67 +291,77 @@ function goBack() {
       </div>
     </header>
 
-    <!-- PixiJS World -->
-    <div class="flex-1 relative">
+    <!-- PixiJS World — isolate creates a stacking context so the WebGL canvas
+         cannot escape above the HUD during GPU compositing / resize events -->
+    <div class="flex-1 relative isolate">
+      <!-- Canvas layer (z-0) -->
       <PixiWorld
         v-if="ready && (experimentCreated || isDemo)"
+        class="absolute inset-0 z-0"
         :theme="theme"
         :map-data="DEFAULT_TOWN"
         :agents="agentStore.agentConfigs"
         :demo-mode="!experimentCreated"
         @agent-click="handleAgentClick"
       />
-      <div v-else-if="loadError" class="h-full flex flex-col items-center justify-center gap-4">
+      <div v-else-if="loadError" class="absolute inset-0 flex flex-col items-center justify-center gap-4">
         <Typography.Text class="font-mono !text-sm !text-red-400">
           {{ loadError }}
         </Typography.Text>
         <Button @click="goBack">Back to Setup</Button>
       </div>
-      <div v-else class="h-full flex items-center justify-center">
+      <div v-else class="absolute inset-0 flex items-center justify-center">
         <Typography.Text class="font-mono !text-sm !text-white/30">
           {{ locale.simulation.loading }}
         </Typography.Text>
       </div>
 
-      <!-- Control Bar (bottom center) -->
-      <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10">
-        <ControlBar
-          :is-playing="uiStore.isPlaying"
-          :is-stepping="uiStore.isStepping"
-          :stepping-status="uiStore.steppingStatus"
-          :is-complete="experimentStore.isComplete"
-          :has-experiment="experimentCreated"
-          @step="handleStep"
-          @play="handleStart"
-          @pause="handlePause"
-          @toggle-log="uiStore.togglePanel('log')"
+      <!-- HUD overlay layer (z-10) — always rendered, pointer-events pass through
+           to canvas except on interactive children -->
+      <div class="absolute inset-0 z-10 pointer-events-none">
+        <!-- Control Bar (bottom center) -->
+        <div class="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto">
+          <ControlBar
+            :is-playing="uiStore.isPlaying"
+            :is-stepping="uiStore.isStepping"
+            :stepping-status="uiStore.steppingStatus"
+            :is-complete="experimentStore.isComplete"
+            :has-experiment="experimentCreated"
+            @step="handleStep"
+            @play="handleStart"
+            @pause="handlePause"
+            @toggle-log="uiStore.togglePanel('log')"
+          />
+        </div>
+
+        <!-- Left side: Resource bars + Threat (display-only, no pointer-events
+             so canvas panning works through these regions) -->
+        <div class="absolute top-3 left-3 space-y-2">
+          <ThreatMeter :value="worldStore.threatLevel" />
+          <ResourceBars :resources="worldStore.resources" />
+        </div>
+
+        <!-- Right side: Arc timeline -->
+        <div class="absolute top-3 right-3">
+          <ArcTimeline
+            v-if="experimentCreated"
+            class="pointer-events-auto"
+            :arc-name="arcId"
+            :current-round="experimentStore.currentRound"
+            :total-rounds="experimentStore.totalRounds"
+          />
+        </div>
+
+        <!-- Conversation bubbles (pointer-events-auto so future interactions work) -->
+        <ConversationBubble
+          v-for="(conv, i) in socialStore.recentConversations.slice(-3)"
+          :key="conv.id"
+          class="pointer-events-auto"
+          :agent-name="conv.agentName"
+          :message="conv.message"
+          :index="i"
         />
       </div>
-
-      <!-- Left side: Resource bars + Threat -->
-      <div class="absolute top-3 left-3 z-10 space-y-2 pointer-events-auto">
-        <ThreatMeter :value="worldStore.threatLevel" />
-        <ResourceBars :resources="worldStore.resources" />
-      </div>
-
-      <!-- Right side: Arc timeline -->
-      <div class="absolute top-3 right-3 z-10 pointer-events-auto">
-        <ArcTimeline
-          v-if="experimentCreated"
-          :arc-name="arcId"
-          :current-round="experimentStore.currentRound"
-          :total-rounds="experimentStore.totalRounds"
-        />
-      </div>
-
-      <!-- Conversation bubbles -->
-      <ConversationBubble
-        v-for="(conv, i) in socialStore.recentConversations.slice(-3)"
-        :key="conv.id"
-        :agent-name="conv.agentName"
-        :message="conv.message"
-        :index="i"
-      />
     </div>
 
     <!-- GM Plan Panel (Drawer) -->
