@@ -174,7 +174,8 @@ async def test_get_agent_speech_metadata_returns_pending_when_not_cached() -> No
     assert meta.agent_id == agent.agent_id
     assert meta.round_number == 1
     assert meta.index == 0
-    assert meta.audio_url is not None
+    # audio_url is only set when status is "ready"
+    assert meta.audio_url is None
 
 
 @pytest.mark.asyncio

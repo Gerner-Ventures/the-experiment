@@ -142,6 +142,7 @@ class ExperimentRuntime:
         self._agent_speech_log: dict[str, list[AgentSpeechEntry]] = defaultdict(list)
 
     async def aclose(self) -> None:
+        self._agent_speech_log.clear()
         if self.tts_service is not None:
             await self.tts_service.aclose()
 
@@ -1109,7 +1110,7 @@ class ExperimentRuntime:
         )
         status, cache_hit = await self.tts_service.get_status(request)
         audio_url: str | None = None
-        if status != "unavailable":
+        if status == "ready":
             audio_url = self.tts_service.build_speech_audio_url(
                 experiment_id, agent_id, round_number, index
             )
@@ -1266,7 +1267,7 @@ class ExperimentRuntime:
                 return_exceptions=True,
             )
 
-        asyncio.get_running_loop().create_task(_prewarm_all())
+        asyncio.create_task(_prewarm_all())
 
     async def _broadcast_round_end(
         self,
@@ -1499,7 +1500,7 @@ class ExperimentRuntime:
                     error=str(exc),
                 )
 
-        asyncio.get_running_loop().create_task(_prewarm())
+        asyncio.create_task(_prewarm())
 
     async def _broadcast_narration_audio_status_for_plan(
         self, experiment_id: str, gm_plan: GMPlanRecord

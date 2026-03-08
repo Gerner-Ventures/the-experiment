@@ -28,6 +28,7 @@ import { useUIStore, PANELS } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
 import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
+import { MUTE_STORAGE_KEY } from '@/config/audio'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
@@ -61,9 +62,9 @@ const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
 
 // Mute state for agent voice narration
-import { MUTE_STORAGE_KEY } from '@/config/audio'
 const isMuted = ref(window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
 
+// TODO: toggling mute while audio is mid-playback does not stop the current bubble's audio
 function toggleMute() {
   isMuted.value = !isMuted.value
   window.localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))

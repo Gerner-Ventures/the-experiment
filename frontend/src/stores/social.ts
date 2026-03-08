@@ -76,7 +76,7 @@ export const useSocialStore = defineStore('social', () => {
       (c) => c.agentId === data.agent_id && c.round === data.round && c.index === data.index,
     )
     if (entry) {
-      entry.audioStatus = data.status === 'ready' ? 'ready' : data.status === 'pending' ? 'pending' : data.status === 'error' ? 'error' : 'unavailable'
+      entry.audioStatus = data.status
       entry.audioUrl = data.audio_url ?? null
     }
   }

@@ -42,5 +42,5 @@ export interface AgentSpeechAudioData {
   round: number
   index: number
   status: NarrationAudioStatus
-  audio_url?: string
+  audio_url: string | null
 }
