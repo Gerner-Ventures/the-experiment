@@ -247,6 +247,55 @@
   background: rgba(255, 255, 255, 0.04) !important;
 }
 
+/* Drawer dark overrides */
+.ant-drawer-content {
+  background: var(--ant-color-bg-elevated) !important;
+}
+
+.ant-drawer-header {
+  background: transparent !important;
+  border-bottom-color: var(--ant-color-border) !important;
+}
+
+.ant-drawer-title {
+  color: var(--ant-color-text) !important;
+}
+
+.ant-drawer-close {
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.ant-drawer-close:hover {
+  color: var(--ant-color-text) !important;
+}
+
+.ant-drawer-footer {
+  border-top-color: var(--ant-color-border) !important;
+}
+
+/* Descriptions dark overrides */
+.ant-descriptions {
+  background: transparent !important;
+}
+
+.ant-descriptions-bordered .ant-descriptions-view {
+  border-color: var(--ant-color-border) !important;
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-label,
+.ant-descriptions-bordered .ant-descriptions-item-content {
+  border-color: var(--ant-color-border) !important;
+}
+
+.ant-descriptions-item-label {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.ant-descriptions-item-content {
+  color: var(--ant-color-text) !important;
+}
+
 /* ── Custom Utilities ── */
 @utility scanlines {
   position: relative;

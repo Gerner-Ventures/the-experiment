@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Drawer, Button, Tag, Space, Typography, Descriptions } from 'ant-design-vue'
-import { CheckOutlined } from '@ant-design/icons-vue'
+import { ref } from 'vue'
+import { Drawer, Button, Tag, Space, Collapse } from 'ant-design-vue'
+import { CheckOutlined, DownOutlined, RightOutlined } from '@ant-design/icons-vue'
 import type { GMPlan } from '@/types/gm'
 import { useLocale } from '@/locales'
 
@@ -16,14 +17,20 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const reasoningOpen = ref<string[]>([])
+
 function severityColor(severity: string): string {
-  switch (severity) {
-    case 'low': return 'green'
-    case 'medium': return 'gold'
-    case 'high': return 'orange'
-    case 'critical': return 'red'
-    default: return 'default'
+  return `var(--color-threat-${severity})`
+}
+
+function resourceColor(key: string): string {
+  const colors: Record<string, string> = {
+    food: 'var(--color-food)',
+    water: 'var(--color-water)',
+    materials: 'var(--color-materials)',
+    power: 'var(--color-power)',
   }
+  return colors[key] ?? 'var(--ant-color-text)'
 }
 </script>
 
@@ -37,61 +44,89 @@ function severityColor(severity: string): string {
     @close="emit('close')"
   >
     <template v-if="plan">
-      <div class="space-y-4">
+      <div class="gm-panel">
         <!-- Theme -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase">{{ locale.gm.theme }}</Typography.Text>
-          <Typography.Title :level="4" class="!mt-1 !mb-0">{{ plan.roundTheme }}</Typography.Title>
+        <div class="gm-section">
+          <div class="gm-label">{{ locale.gm.theme }}</div>
+          <div class="gm-theme-title">{{ plan.roundTheme }}</div>
         </div>
 
         <!-- Crisis Event -->
-        <div class="p-3 rounded-lg border border-white/[0.08] bg-white/[0.02]">
-          <div class="flex items-center gap-2 mb-2">
-            <Typography.Text class="!text-white/40 font-mono !text-xs uppercase">{{ locale.gm.crisis }}</Typography.Text>
-            <Tag :color="severityColor(plan.crisisEvent.severity)">
-              {{ plan.crisisEvent.severity.toUpperCase() }}
+        <div
+          class="gm-crisis-card"
+          :style="{ borderLeftColor: severityColor(plan.crisisEvent.severity) }"
+        >
+          <div class="gm-crisis-header">
+            <Tag
+              :style="{
+                background: severityColor(plan.crisisEvent.severity),
+                color: '#050507',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '12px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }"
+            >
+              {{ plan.crisisEvent.severity }}
             </Tag>
-            <Tag>{{ plan.crisisEvent.type }}</Tag>
+            <Tag class="gm-type-tag">{{ plan.crisisEvent.type }}</Tag>
           </div>
-          <Typography.Paragraph class="!mb-0 !text-white/70">
-            {{ plan.crisisEvent.description }}
-          </Typography.Paragraph>
+          <div class="gm-crisis-label">{{ locale.gm.crisis }}</div>
+          <div class="gm-crisis-description">{{ plan.crisisEvent.description }}</div>
         </div>
 
         <!-- Resource Modifiers -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.resourceModifiers }}</Typography.Text>
-          <Descriptions :column="2" size="small" bordered>
-            <Descriptions.Item v-for="(val, key) in plan.resourceModifiers" :key="key" :label="String(key)">
-              <span :class="(val as number) < 0 ? 'text-red-400' : 'text-green-400'">
+        <div class="gm-section">
+          <div class="gm-label">{{ locale.gm.resourceModifiers }}</div>
+          <div class="gm-resource-grid">
+            <div
+              v-for="(val, key) in plan.resourceModifiers"
+              :key="key"
+              class="gm-resource-item"
+            >
+              <span class="gm-resource-name" :style="{ color: resourceColor(String(key)) }">
+                {{ String(key) }}
+              </span>
+              <span
+                class="gm-resource-value"
+                :style="{
+                  color: (val as number) < 0
+                    ? 'var(--ant-color-error)'
+                    : 'var(--ant-color-success)',
+                }"
+              >
                 {{ (val as number) > 0 ? '+' : '' }}{{ val }}
               </span>
-            </Descriptions.Item>
-          </Descriptions>
+            </div>
+          </div>
         </div>
 
-        <!-- Narration Preview -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.narration }}</Typography.Text>
-          <Typography.Paragraph class="!text-white/60 italic">
+        <!-- Narration -->
+        <div class="gm-section">
+          <div class="gm-label">{{ locale.gm.narration }}</div>
+          <blockquote class="gm-narration">
             "{{ plan.narration }}"
-          </Typography.Paragraph>
+          </blockquote>
         </div>
 
-        <!-- Reasoning -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.reasoning }}</Typography.Text>
-          <Typography.Paragraph class="!text-white/50 !text-sm">
-            {{ plan.reasoning }}
-          </Typography.Paragraph>
-        </div>
+        <!-- Reasoning (collapsible) -->
+        <Collapse v-model:activeKey="reasoningOpen" ghost>
+          <Collapse.Panel key="reasoning" :header="locale.gm.reasoning">
+            <template #extra>
+              <component
+                :is="reasoningOpen.includes('reasoning') ? DownOutlined : RightOutlined"
+                class="gm-collapse-icon"
+              />
+            </template>
+            <p class="gm-reasoning">{{ plan.reasoning }}</p>
+          </Collapse.Panel>
+        </Collapse>
 
-        <!-- Meta hint -->
-        <div v-if="plan.metaHint">
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.metaHint }}</Typography.Text>
-          <Typography.Paragraph class="!text-accent/60 !text-sm italic">
-            {{ plan.metaHint }}
-          </Typography.Paragraph>
+        <!-- Meta Hint -->
+        <div v-if="plan.metaHint" class="gm-meta-hint">
+          <div class="gm-label">{{ locale.gm.metaHint }}</div>
+          <p class="gm-meta-hint-text">{{ plan.metaHint }}</p>
         </div>
       </div>
     </template>
@@ -99,7 +134,7 @@ function severityColor(severity: string): string {
     <template #footer>
       <Space class="w-full justify-end">
         <Button @click="emit('close')">{{ locale.gm.dismiss }}</Button>
-        <Button type="primary" @click="emit('approve')">
+        <Button type="primary" size="large" @click="emit('approve')">
           <template #icon><CheckOutlined /></template>
           {{ locale.gm.approve }}
         </Button>
@@ -107,3 +142,135 @@ function severityColor(severity: string): string {
     </template>
   </Drawer>
 </template>
+
+<style scoped>
+.gm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.gm-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gm-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ant-color-text-tertiary);
+}
+
+.gm-theme-title {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+/* Crisis card */
+.gm-crisis-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ant-color-border);
+  border-left: 3px solid;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.gm-crisis-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.gm-type-tag {
+  text-transform: capitalize;
+}
+
+.gm-crisis-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ant-color-text-tertiary);
+  margin-bottom: 4px;
+}
+
+.gm-crisis-description {
+  color: var(--ant-color-text);
+  line-height: 1.6;
+}
+
+/* Resource grid */
+.gm-resource-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.gm-resource-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--ant-color-border);
+  border-radius: 6px;
+}
+
+.gm-resource-name {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.gm-resource-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* Narration */
+.gm-narration {
+  margin: 0;
+  padding: 12px 16px;
+  border-left: 2px solid var(--ant-color-border);
+  color: var(--ant-color-text-secondary);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+/* Reasoning */
+.gm-reasoning {
+  margin: 0;
+  color: var(--ant-color-text-tertiary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.gm-collapse-icon {
+  color: var(--ant-color-text-tertiary);
+  font-size: 10px;
+}
+
+/* Meta hint */
+.gm-meta-hint {
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 20%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 4%, transparent);
+}
+
+.gm-meta-hint-text {
+  margin: 0;
+  color: var(--color-accent-dim);
+  font-size: 13px;
+  font-style: italic;
+  line-height: 1.5;
+}
+</style>
