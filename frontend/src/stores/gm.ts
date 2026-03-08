@@ -64,7 +64,8 @@ export const useGMStore = defineStore('gm', () => {
 
   function onAudioStatus(msg: WSMessage) {
     const data = msg.data as unknown as GMAudioStatusData
-    narrationRound.value = msg.round
+    // Ignore stale messages from previous rounds
+    if (narrationRound.value !== null && msg.round !== narrationRound.value) return
     narrationAudioStatus.value = data.status
     if (data.status === 'ready' && data.audio_url) {
       narrationAudioUrl.value = data.audio_url
@@ -81,6 +82,8 @@ export const useGMStore = defineStore('gm', () => {
     narrationAudioStatus.value = status
     narrationAudioUrl.value = audioUrl
     narrationAudioError.value = null
+    audioAutoplayBlocked.value = false
+    isNarrationPlaying.value = false
     showNarration.value = !!text
   }
 
@@ -111,7 +114,7 @@ export const useGMStore = defineStore('gm', () => {
   return {
     currentPlan, showPlanPanel, planApproved,
     narrationText, showNarration, narrationRound,
-    narrationAudioStatus, narrationAudioUrl, narrationAudioError,
+    narrationAudioStatus, narrationAudioUrl,
     audioAutoplayBlocked, isNarrationPlaying,
     onPlan, onNarration, onAudioStatus, hydrateNarration,
     approvePlan, dismissNarration,

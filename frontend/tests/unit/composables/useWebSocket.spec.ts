@@ -16,7 +16,6 @@ describe('gm_audio_status WebSocket routing', () => {
     })
     expect(store.narrationAudioStatus).toBe('ready')
     expect(store.narrationAudioUrl).toBe('/api/experiments/e1/rounds/2/narration/audio')
-    expect(store.narrationRound).toBe(2)
   })
 
   it('gmStore.onAudioStatus handles pending status', () => {
@@ -39,6 +38,5 @@ describe('gm_audio_status WebSocket routing', () => {
       data: { status: 'error', error: 'TTS timeout' },
     })
     expect(store.narrationAudioStatus).toBe('error')
-    expect(store.narrationAudioError).toBe('TTS timeout')
   })
 })

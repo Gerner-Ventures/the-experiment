@@ -100,7 +100,7 @@ async function initExperiment() {
             planNarration,
             detail.current_round,
             meta.status === 'ready' ? 'ready' : meta.status === 'pending' ? 'pending' : 'unavailable',
-            meta.status === 'ready' ? meta.audio_url : null,
+            meta.status === 'ready' ? meta.audio_url ?? null : null,
           )
         } catch {
           // Backend narration endpoint unavailable — show text only

@@ -106,7 +106,7 @@ export interface NarrationMetadata {
   model_id: string
   output_format: string
   status: 'pending' | 'ready' | 'unavailable'
-  audio_url: string
+  audio_url?: string
   cache_hit: boolean
 }
 

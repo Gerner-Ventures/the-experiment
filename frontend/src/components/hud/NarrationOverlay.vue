@@ -24,6 +24,19 @@ let typewriterTimer: ReturnType<typeof setTimeout> | null = null
 let charIndex = 0
 let audio: HTMLAudioElement | null = null
 
+// Named handlers for proper cleanup
+function onAudioPlaying() {
+  emit('update:playing', true)
+  emit('update:autoplayBlocked', false)
+}
+function onAudioEnded() {
+  emit('update:playing', false)
+  audioEnded.value = true
+}
+function onAudioError() {
+  emit('update:playing', false)
+}
+
 const showPlayButton = computed(() =>
   props.audioStatus === 'ready' && (props.autoplayBlocked || audioEnded.value)
 )
@@ -41,12 +54,13 @@ watch(() => props.visible, (show) => {
   }
 })
 
-// When audio becomes ready while overlay is visible, try autoplay
+// When audio becomes ready while overlay is visible, try autoplay.
+// immediate: true handles the reconnect case where props are already set on mount.
 watch(() => props.audioStatus, (status) => {
   if (status === 'ready' && props.visible && props.audioUrl) {
     tryPlayAudio()
   }
-})
+}, { immediate: true })
 
 function startTypewriter() {
   displayedText.value = ''
@@ -76,19 +90,9 @@ function tryPlayAudio() {
   audio = new Audio(props.audioUrl)
   audioEnded.value = false
 
-  audio.addEventListener('playing', () => {
-    emit('update:playing', true)
-    emit('update:autoplayBlocked', false)
-  })
-
-  audio.addEventListener('ended', () => {
-    emit('update:playing', false)
-    audioEnded.value = true
-  })
-
-  audio.addEventListener('error', () => {
-    emit('update:playing', false)
-  })
+  audio.addEventListener('playing', onAudioPlaying)
+  audio.addEventListener('ended', onAudioEnded)
+  audio.addEventListener('error', onAudioError)
 
   const playPromise = audio.play()
   if (playPromise) {
@@ -100,12 +104,11 @@ function tryPlayAudio() {
   }
 }
 
-function handlePlayClick() {
-  tryPlayAudio()
-}
-
 function stopAudio() {
   if (audio) {
+    audio.removeEventListener('playing', onAudioPlaying)
+    audio.removeEventListener('ended', onAudioEnded)
+    audio.removeEventListener('error', onAudioError)
     audio.pause()
     audio.removeAttribute('src')
     audio.load()
@@ -154,7 +157,7 @@ onUnmounted(() => {
           <button
             v-if="showPlayButton"
             class="px-4 py-1.5 rounded font-mono text-[11px] text-white/70 uppercase tracking-widest border border-white/20 hover:border-white/40 hover:text-white/90 transition-colors"
-            @click.stop="handlePlayClick"
+            @click.stop="tryPlayAudio"
           >
             {{ audioEnded ? locale.gm.audioReplay : locale.gm.audioPlay }}
           </button>

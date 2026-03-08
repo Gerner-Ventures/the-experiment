@@ -20,6 +20,7 @@ const mockPlay = jest.fn().mockResolvedValue(undefined)
 const mockPause = jest.fn()
 const mockLoad = jest.fn()
 const mockAddEventListener = jest.fn()
+const mockRemoveEventListener = jest.fn()
 
 beforeEach(() => {
   jest.useFakeTimers()
@@ -28,12 +29,14 @@ beforeEach(() => {
     pause: mockPause,
     load: mockLoad,
     addEventListener: mockAddEventListener,
+    removeEventListener: mockRemoveEventListener,
     removeAttribute: jest.fn(),
   })) as unknown as typeof Audio
   mockPlay.mockClear()
   mockPause.mockClear()
   mockLoad.mockClear()
   mockAddEventListener.mockClear()
+  mockRemoveEventListener.mockClear()
 })
 
 afterEach(() => {
@@ -119,5 +122,31 @@ describe('NarrationOverlay', () => {
   it('does not render when not visible', () => {
     const wrapper = createWrapper({ visible: false })
     expect(wrapper.find('.fixed').exists()).toBe(false)
+  })
+
+  it('shows play button when autoplay is blocked by browser', async () => {
+    mockPlay.mockRejectedValueOnce(new DOMException('NotAllowedError'))
+    const wrapper = createWrapper({
+      audioStatus: 'idle',
+      audioUrl: '/audio',
+    })
+    await wrapper.setProps({ audioStatus: 'ready' })
+    // Let the rejected promise flush
+    await wrapper.vm.$nextTick()
+    await jest.runAllTimersAsync()
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('update:autoplayBlocked')).toBeTruthy()
+    expect(wrapper.emitted('update:autoplayBlocked')![0]).toEqual([true])
+  })
+
+  it('attempts autoplay on mount when audio is already ready (reconnect)', async () => {
+    // Simulates the reconnect/refresh case where props are already set on mount
+    const wrapper = createWrapper({
+      audioStatus: 'ready',
+      audioUrl: '/api/experiments/e1/rounds/1/narration/audio',
+    })
+    await wrapper.vm.$nextTick()
+    expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio')
+    expect(mockPlay).toHaveBeenCalled()
   })
 })

@@ -40,11 +40,11 @@ describe('useGMStore', () => {
 
     it('transitions to pending on gm_audio_status pending', () => {
       const store = useGMStore()
+      // narrationRound is null initially, so any round is accepted
       store.onAudioStatus(makeMsg('gm_audio_status', {
         status: 'pending',
       } as GMAudioStatusData, 1))
       expect(store.narrationAudioStatus).toBe('pending')
-      expect(store.narrationRound).toBe(1)
     })
 
     it('transitions to ready with audio URL', () => {
@@ -57,14 +57,38 @@ describe('useGMStore', () => {
       expect(store.narrationAudioUrl).toBe('/api/experiments/exp_1/rounds/1/narration/audio')
     })
 
-    it('transitions to error and stores error message', () => {
+    it('transitions to error', () => {
       const store = useGMStore()
       store.onAudioStatus(makeMsg('gm_audio_status', {
         status: 'error',
         error: 'TTS failed',
       } as GMAudioStatusData, 1))
       expect(store.narrationAudioStatus).toBe('error')
-      expect(store.narrationAudioError).toBe('TTS failed')
+    })
+
+    it('ignores stale audio status from a different round', () => {
+      const store = useGMStore()
+      // Set up narration for round 2
+      store.onPlan(makeMsg('gm_plan', {
+        plan: {
+          round: 2,
+          round_theme: 'Test',
+          reasoning: '',
+          crisis_event: { type: 'resource', description: '', severity: 'low' },
+          resource_modifiers: {},
+          narration: 'Day two.',
+          meta_hint: null,
+        },
+      }, 2))
+      expect(store.narrationRound).toBe(2)
+
+      // Stale message from round 1 should be ignored
+      store.onAudioStatus(makeMsg('gm_audio_status', {
+        status: 'ready',
+        audio_url: '/audio/round1',
+      } as GMAudioStatusData, 1))
+      expect(store.narrationAudioStatus).toBe('idle')
+      expect(store.narrationAudioUrl).toBeNull()
     })
 
     it('resets audio state on new plan', () => {
@@ -88,7 +112,6 @@ describe('useGMStore', () => {
       }, 2))
       expect(store.narrationAudioStatus).toBe('idle')
       expect(store.narrationAudioUrl).toBeNull()
-      expect(store.narrationAudioError).toBeNull()
     })
 
     it('resets all narration state on $reset', () => {
