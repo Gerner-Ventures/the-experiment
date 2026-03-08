@@ -67,21 +67,19 @@ const emit = defineEmits<{
       <div class="w-px h-5 bg-white/[0.08] mx-1" />
 
       <!-- Play/Pause -->
-      <Tooltip :title="isPlaying ? locale.hud.pause : locale.hud.play">
-        <Button
-          :type="isPlaying ? 'default' : 'primary'"
-          shape="circle"
-          size="large"
-          class="!inline-flex !items-center !justify-center"
-          :disabled="!hasExperiment || isComplete"
-          @click="isPlaying ? emit('pause') : emit('play')"
-        >
-          <template #icon>
-            <PauseOutlined v-if="isPlaying" />
-            <CaretRightOutlined v-else />
-          </template>
-        </Button>
-      </Tooltip>
+      <Button
+        :type="isPlaying ? 'default' : 'primary'"
+        shape="circle"
+        size="large"
+        class="!inline-flex !items-center !justify-center"
+        :disabled="!hasExperiment || isComplete"
+        @click="isPlaying ? emit('pause') : emit('play')"
+      >
+        <template #icon>
+          <PauseOutlined v-if="isPlaying" />
+          <CaretRightOutlined v-else />
+        </template>
+      </Button>
 
       <!-- Step -->
       <Tooltip :title="isStepping ? locale.hud.steppingRunning : locale.hud.step">
