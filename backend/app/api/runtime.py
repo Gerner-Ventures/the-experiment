@@ -13,8 +13,8 @@ import structlog
 from app.agents.models import AgentMemoryState
 from app.api.models import (
     AnalyticsSummary,
-    AgentSuspicionHistory,
     AgentGoalProgress,
+    AgentSuspicionHistory,
     BetrayalTimelineItem,
     CreateExperimentRequest,
     EventLogItem,
@@ -26,6 +26,7 @@ from app.api.models import (
     GoalOutcomeSummary,
     HighlightItem,
     NarrationAudioMetadata,
+    HighlightScope,
     RelationshipEdge,
     ReplayIndex,
     ReplayRound,
@@ -39,6 +40,7 @@ from app.api.models import (
 )
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
 from app.api.ws_manager import ConnectionManager
+from app.highlights import HighlightSelector
 from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
 from app.agents.models import AgentTurnResult
@@ -112,6 +114,7 @@ class ExperimentRuntime:
         self.connection_manager = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.tts_service = tts_service
+        self.highlight_selector = HighlightSelector()
         self.lock = asyncio.Lock()
         self._steps_in_progress: dict[str, bool] = {}
         self._current_tasks: dict[str, asyncio.Task[None]] = {}
@@ -164,6 +167,10 @@ class ExperimentRuntime:
                 experiment_id,
                 event_type="experiment_created",
                 summary=f"Experiment '{request.name}' created.",
+                data={
+                    "resources": state.world_state.resources.model_dump(mode="json"),
+                    "world_state": state.world_state.model_dump(mode="json"),
+                },
             )
             log.info(
                 "experiment_created",
@@ -929,23 +936,16 @@ class ExperimentRuntime:
                 )
         return sorted(edges, key=lambda item: abs(item.trust), reverse=True)
 
-    async def get_highlights(self, experiment_id: str) -> list[HighlightItem]:
-        logs = await self.store.list_logs(experiment_id)
-        highlights: list[HighlightItem] = []
-        for item in logs:
-            score = self._highlight_score(item)
-            if score <= 0:
-                continue
-            highlights.append(
-                HighlightItem(
-                    round_number=item.round_number,
-                    score=score,
-                    category=item.type,
-                    summary=item.summary,
-                    data=item.data,
-                )
-            )
-        return sorted(highlights, key=lambda item: item.score, reverse=True)[:20]
+    async def get_highlights(
+        self,
+        experiment_id: str,
+        *,
+        scope: HighlightScope = "game",
+        round_number: int | None = None,
+        logs: list[EventLogItem] | None = None,
+    ) -> list[HighlightItem]:
+        event_logs = logs if logs is not None else await self.store.list_logs(experiment_id)
+        return self.highlight_selector.select(event_logs, scope=scope, round_number=round_number)
 
     async def get_replay_index(self, experiment_id: str) -> ReplayIndex:
         logs = await self.store.list_logs(experiment_id)
@@ -979,7 +979,10 @@ class ExperimentRuntime:
                     gm_narration=self._string_or(round_summary.get("gm", {}).get("narration")),
                 )
             )
-        return ReplayIndex(rounds=rounds, highlights=await self.get_highlights(experiment_id))
+        return ReplayIndex(
+            rounds=rounds,
+            highlights=await self.get_highlights(experiment_id, scope="game", logs=logs),
+        )
 
     async def get_round_snapshot(
         self, experiment_id: str, round_number: int
@@ -1259,33 +1262,6 @@ class ExperimentRuntime:
             group.total_tokens += record.usage.total_tokens
             group.cost_usd = round(group.cost_usd + record.usage.cost_usd, 6)
         return sorted(grouped.values(), key=lambda item: item.total_tokens, reverse=True)
-
-    def _highlight_score(self, item: EventLogItem) -> float:
-        if item.type == "exile_enacted":
-            return 10.0
-        if item.type == "cult_activity":
-            return 8.0
-        if item.type == "faction_update":
-            return 6.0
-        if item.type == "crisis_event":
-            severity = str(item.data.get("crisis_event", {}).get("severity", "low"))
-            return {"critical": 9.0, "high": 7.0, "medium": 5.0}.get(severity, 3.0)
-        if item.type == "agent_action":
-            requested_action = self._requested_action_type(item)
-            resolved_action = self._resolved_action_type(item)
-            if (
-                requested_action in SABOTAGE_ACTION_TYPES
-                or resolved_action in SABOTAGE_ACTION_TYPES
-            ):
-                return 8.0 if resolved_action in SABOTAGE_ACTION_TYPES else 5.0
-            if requested_action in HOSTILE_ACTION_TYPES or resolved_action in HOSTILE_ACTION_TYPES:
-                return 6.5 if resolved_action in HOSTILE_ACTION_TYPES else 4.0
-        if item.type == "observer_event":
-            return 7.0
-        if item.type == "round_end":
-            threat_level = float(item.data.get("threat_level", 0.0))
-            return 5.5 if threat_level >= 65 else 0.0
-        return 0.0
 
     def _message(
         self,

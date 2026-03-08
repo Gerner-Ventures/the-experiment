@@ -136,6 +136,14 @@ The event log also stores derived round entries that sit alongside the phase eve
 Those derived entries are what the analytics summary, highlight feed, replay index, and headless
 runner use when they compute cooperation, surface notable moments, or summarize a finished run.
 
+The highlight selector mixes direct log rows with `round_end` rollups:
+
+- direct signals: `crisis_event`, hostile or sabotage `agent_action`, and close-vote `midday` / `exile_vote` rows
+- round-summary signals: `resources`, `factions`, and `suspicion` embedded in `round_end.data`
+
+That is the data path behind `GET /api/experiments/{id}/highlights?scope=round&round=N` and the
+game-wide reel at `scope=game`.
+
 Code references:
 
 - `backend/app/api/store.py`
@@ -438,6 +446,7 @@ The API runtime now persists report-grade derived analytics at round end:
 - `agent_action` log rows include both requested and resolved action types
 - `round_end` log rows include compact round summaries for cooperation, goals, suspicion, factions, and GM context
 - replay and analytics endpoints read from those persisted summaries instead of reconstructing everything from websocket-only state
+- the highlight reel endpoint combines both sources: event-log rows drive crisis, betrayal, and close-vote moments, while `round_end` summaries drive resource swings, alliance shifts, and suspicion spikes
 
 ## Runtime Ownership
 

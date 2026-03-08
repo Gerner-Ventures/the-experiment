@@ -18,6 +18,16 @@ from app.tts import NarrationTTSService
 from app.tts.models import NarrationAudioRequest, ProviderAudioStream
 
 
+class _CountingStore(InMemoryExperimentStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.list_logs_calls = 0
+
+    async def list_logs(self, experiment_id: str) -> list[EventLogItem]:
+        self.list_logs_calls += 1
+        return await super().list_logs(experiment_id)
+
+
 def _request() -> CreateExperimentRequest:
     return CreateExperimentRequest.model_validate(
         {
@@ -133,6 +143,7 @@ async def test_create_experiment_persists_initial_state_and_log(
     assert len(stored.agents) == 2
     assert total == 1
     assert logs[0].type == "experiment_created"
+    assert logs[0].data["resources"] == stored.world_state.resources.model_dump(mode="json")
 
 
 @pytest.mark.asyncio
@@ -277,6 +288,54 @@ async def test_connection_manager_broadcasts_encoded_payload_to_all_connected_so
     payload = first_socket.send_json.call_args.args[0]
     assert isinstance(payload["connected_at"], str)
     assert payload["data"]["experiment_id"] == "exp-1"
+
+
+@pytest.mark.asyncio
+async def test_replay_index_reuses_loaded_logs() -> None:
+    store = _CountingStore()
+    runtime = ExperimentRuntime(store=store)
+    state = await runtime.create_experiment(_request())
+
+    await store.append_log(
+        EventLogItem(
+            id="round-end",
+            experiment_id=state.experiment_id,
+            round_number=1,
+            phase="round_end",
+            type="round_end",
+            summary="Round 1 concludes.",
+            data={
+                "summary": "Round 1 concludes.",
+                "threat_level": 10.0,
+                "resources": state.world_state.resources.model_dump(mode="json"),
+                "cooperation": {"score": 0.5, "cooperative_actions": 1, "total_actions": 2},
+                "betrayal_count": 0,
+                "sabotage_count": 0,
+                "gm": {"round_theme": "Pressure", "narration": "The town watches itself."},
+                "factions": [],
+                "suspicion": [],
+            },
+            timestamp=datetime.now(UTC),
+        )
+    )
+    await store.record_round_result(
+        state.experiment_id,
+        RoundResult(
+            round_number=1,
+            gm_plan=_gm_plan(1),
+            phases=[],
+            cooperation_ratio=0.0,
+            threat_level=10.0,
+            world_state=state.world_state,
+            action_resolutions=[],
+            created_at=datetime.now(UTC),
+        ),
+    )
+
+    replay = await runtime.get_replay_index(state.experiment_id)
+
+    assert replay.rounds[0].round_number == 1
+    assert store.list_logs_calls == 1
 
 
 @pytest.mark.asyncio
