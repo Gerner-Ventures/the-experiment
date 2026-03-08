@@ -30,8 +30,6 @@ export function usePixiWorld(): UsePixiWorld {
   let canvasEl: HTMLCanvasElement | null = null
   let agentClickCallback: ((agentId: string) => void) | null = null
   let resizeObserver: ResizeObserver | null = null
-  /** Map center in tile coordinates, stored so we can re-center on resize. */
-  let mapCenterTile: { x: number; y: number } | null = null
 
   async function mount(container: HTMLElement): Promise<void> {
     app = new Application()
@@ -108,8 +106,7 @@ export function usePixiWorld(): UsePixiWorld {
     camera.setZoom(1.2)
 
     // Center on map middle immediately after load
-    mapCenterTile = { x: mapData.width / 2, y: mapData.height / 2 }
-    const center = tileToScreen(mapCenterTile.x, mapCenterTile.y)
+    const center = tileToScreen(mapData.width / 2, mapData.height / 2)
     camera.centerOn(center.x, center.y)
   }
 

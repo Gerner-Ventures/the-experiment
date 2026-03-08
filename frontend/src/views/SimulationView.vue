@@ -322,19 +322,21 @@ function goBack() {
         </div>
 
         <!-- Right side: Arc timeline -->
-        <div class="absolute top-3 right-3 pointer-events-auto">
+        <div class="absolute top-3 right-3">
           <ArcTimeline
             v-if="experimentCreated"
+            class="pointer-events-auto"
             :arc-name="arcId"
             :current-round="experimentStore.currentRound"
             :total-rounds="experimentStore.totalRounds"
           />
         </div>
 
-        <!-- Conversation bubbles -->
+        <!-- Conversation bubbles (pointer-events-auto so future interactions work) -->
         <ConversationBubble
           v-for="(conv, i) in socialStore.recentConversations.slice(-3)"
           :key="conv.id"
+          class="pointer-events-auto"
           :agent-name="conv.agentName"
           :message="conv.message"
           :index="i"
