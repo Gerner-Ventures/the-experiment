@@ -3,6 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+
+import structlog
 from datetime import UTC, datetime
 from random import Random
 from typing import Literal, cast
@@ -45,8 +47,6 @@ from app.world.service import (
 )
 
 logger = logging.getLogger(__name__)
-
-import structlog
 log = structlog.get_logger(__name__)
 
 
