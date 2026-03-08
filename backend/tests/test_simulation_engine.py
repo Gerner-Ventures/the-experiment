@@ -151,9 +151,10 @@ async def test_hostile_actions_generate_target_consequence_events() -> None:
     engine = SimulationEngine(agent_service=service, random_seed=2)
 
     result = await engine.run_round(_state())
+    morning_phase = next(phase for phase in result.phases if phase.phase == "morning")
 
     morning_events = [
-        event for event in result.phases[2].events if event.data.get("kind") == "agent_action"
+        event for event in morning_phase.events if event.data.get("kind") == "agent_action"
     ]
     assert [bool(event.data.get("is_consequence")) for event in morning_events[:2]] == [False, True]
     assert morning_events[0].data["agent_name"] == "Mara"
@@ -170,6 +171,28 @@ async def test_hostile_actions_generate_target_consequence_events() -> None:
     assert consequence_resolutions[0].source_agent_name == "Mara"
     assert consequence_resolutions[0].source_action_type == "shoot"
     assert consequence_resolutions[0].resolved_action_type in {"bleeding", "injured"}
+
+
+@pytest.mark.asyncio
+async def test_attack_can_generate_burning_consequences() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("attack", "well", "Jon"), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    engine = SimulationEngine(agent_service=service, random_seed=0)
+
+    result = await engine.run_round(_state())
+
+    consequence_resolutions = [
+        action for action in result.action_resolutions if action.is_consequence
+    ]
+
+    assert len(consequence_resolutions) == 1
+    assert consequence_resolutions[0].resolved_action_type == "burning"
+    assert consequence_resolutions[0].source_action_type == "attack"
 
 
 @pytest.mark.asyncio

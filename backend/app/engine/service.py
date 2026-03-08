@@ -93,7 +93,7 @@ class SimulationEngine:
     ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = {
         "shoot": ("bleeding", "injured"),
         "stab": ("bleeding", "injured"),
-        "attack": ("injured", "knocked_down", "stunned"),
+        "attack": ("injured", "knocked_down", "stunned", "burning"),
         "poison": ("poisoned",),
         "threaten": ("crying", "fleeing", "stunned"),
     }
