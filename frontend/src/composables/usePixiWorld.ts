@@ -1,6 +1,6 @@
 import { Application, Container } from 'pixi.js'
 import type { MapTheme, MapData } from '@/types/world'
-import type { CharacterSprite } from '@/config/character-sprites'
+import type { CharacterSprite } from '@/config/character-sprites' // HDCharacterDef alias
 import type { RoundPhase } from '@/types/websocket'
 import { IsometricMap, tileToScreen } from '@/components/world/pixi/IsometricMap'
 import { CameraController } from '@/components/world/pixi/CameraController'

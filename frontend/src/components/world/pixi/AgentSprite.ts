@@ -1,22 +1,22 @@
 import { Container, Graphics, Text, Texture, Sprite } from 'pixi.js'
-import type { CharacterSprite, PoseName } from '@/config/character-sprites'
-import { SILLY_ANIMATIONS, WALK_ANIMATION, renderSpriteToCanvas } from '@/config/character-sprites'
-import { getAnimation } from '@/config/sprites/animations'
-import type { AnimationDef } from '@/config/sprites/types'
+import type { HDCharacterDef, HDPoseName, HDAnimationDef } from '@/config/sprites/hd/types'
+import { getHDSpriteById } from '@/config/sprites/hd/characters'
+import { HDFrameCache } from '@/config/sprites/hd/cache'
+import { HD_SILLY_ANIMATIONS, getHDAnimation, getHDAnimationForAction } from '@/config/sprites/hd/animations'
+import {
+  MOVE_SPEED,
+  HD_FEET_OFFSET_Y, HD_HEAD_TOP_OFFSET_Y,
+  HD_SELECTION_RING, HD_HIGHLIGHT_RING,
+  AGENT_NAME_LABEL,
+} from '@/config/sprites/hd/theme'
 import { tileToScreen } from './isometric-utils'
-
-/** Tile-to-tile movement speed: higher = faster. 4 = ~0.25s per tile (Pokemon-style). */
-const MOVE_SPEED = 4
-
-/** Scale boost applied to the sprite container during action animations */
-const ACTION_SCALE_BOOST = 1.3
 
 export class AgentSpriteObject {
   container: Container
   private pixiSprite: Sprite
   private nameLabel: Text
-  private characterSprite: CharacterSprite
-  private textureCache = new Map<PoseName, Texture>()
+  private hdCharacter: HDCharacterDef
+  private textureCache = new Map<string, Texture>()
 
   tileX: number
   tileY: number
@@ -27,8 +27,9 @@ export class AgentSpriteObject {
   private animTimer: ReturnType<typeof setTimeout> | null = null
   private actionTimer: ReturnType<typeof setTimeout> | null = null
   private walkTimer: ReturnType<typeof setInterval> | null = null
+  private idleCallbackHandle: number | null = null
   private walkFrame = 0
-  private currentAnimation: AnimationDef | null = null
+  private currentHDAnimation: HDAnimationDef | null = null
   private currentFrame = 0
   private animCompleteCallback: (() => void) | null = null
 
@@ -39,11 +40,19 @@ export class AgentSpriteObject {
   constructor(
     public readonly id: string,
     public readonly name: string,
-    characterSprite: CharacterSprite,
+    characterIdOrDef: { id: string },
     startX: number,
     startY: number,
   ) {
-    this.characterSprite = characterSprite
+    // Resolve HD character definition
+    const resolved = (typeof characterIdOrDef === 'object' && 'basePalette' in characterIdOrDef)
+      ? characterIdOrDef as HDCharacterDef
+      : getHDSpriteById(characterIdOrDef.id)
+    if (!resolved) {
+      console.error(`[AgentSprite] Unknown character ID: ${characterIdOrDef.id}, falling back to first available`)
+    }
+    this.hdCharacter = resolved ?? getHDSpriteById('lotf_ralph')!
+
     this.tileX = startX
     this.tileY = startY
     this.targetTileX = startX
@@ -59,36 +68,49 @@ export class AgentSpriteObject {
     this.pixiSprite.zIndex = 1
     this.container.addChild(this.pixiSprite)
 
-    // Name label (scaled proportionally)
+    // Name label — positioned above character head
     this.nameLabel = new Text({
       text: name,
       style: {
-        fontFamily: 'JetBrains Mono Variable, monospace',
-        fontSize: 9,
-        fill: '#ffffff',
+        fontFamily: AGENT_NAME_LABEL.fontFamily,
+        fontSize: AGENT_NAME_LABEL.fontSize,
+        fill: AGENT_NAME_LABEL.fill,
         align: 'center',
       },
     })
-    this.nameLabel.anchor.set(0.5, 0)
-    this.nameLabel.y = 4
-    this.nameLabel.alpha = 0.6
+    this.nameLabel.anchor.set(0.5, 1)
+    this.nameLabel.y = HD_HEAD_TOP_OFFSET_Y
+    this.nameLabel.alpha = AGENT_NAME_LABEL.alpha
     this.nameLabel.zIndex = 2
     this.container.addChild(this.nameLabel)
 
     // Position
     this.updateScreenPosition()
+
+    // Pre-render common poses in idle time (idle already cached from getTexture above)
+    if (typeof requestIdleCallback === 'function') {
+      const char = this.hdCharacter
+      this.idleCallbackHandle = requestIdleCallback(() => {
+        this.idleCallbackHandle = null
+        HDFrameCache.prerender(char, [
+          'walk1', 'walk2', 'talk1', 'talk2',
+          'wave1', 'wave2', 'punch1', 'punch2',
+        ] as HDPoseName[])
+      })
+    }
   }
 
-  private getTexture(pose: PoseName): Texture {
+  private getTexture(pose: string): Texture {
     let tex = this.textureCache.get(pose)
     if (!tex) {
-      tex = Texture.from(renderSpriteToCanvas(this.characterSprite, pose))
+      const canvas = HDFrameCache.get(this.hdCharacter, pose as HDPoseName)
+      tex = Texture.from(canvas)
       this.textureCache.set(pose, tex)
     }
     return tex
   }
 
-  setPose(pose: PoseName) {
+  setPose(pose: string) {
     this.pixiSprite.texture = this.getTexture(pose)
   }
 
@@ -118,7 +140,6 @@ export class AgentSpriteObject {
     console.debug(`[AgentSprite] ${this.name} following path of ${path.length} tiles`)
 
     if (path.length === 0) {
-      // Already at destination
       const cb = this.pathCallback
       this.pathCallback = null
       cb?.()
@@ -147,11 +168,12 @@ export class AgentSpriteObject {
   private startWalkCycle() {
     this.stopWalkCycle()
     this.walkFrame = 0
-    this.setPose(WALK_ANIMATION.frames[0])
+    const hdWalk = getHDAnimation('walk')
+    this.setPose(hdWalk.poses[0])
     this.walkTimer = setInterval(() => {
-      this.walkFrame = (this.walkFrame + 1) % WALK_ANIMATION.frames.length
-      this.setPose(WALK_ANIMATION.frames[this.walkFrame])
-    }, WALK_ANIMATION.frameMs)
+      this.walkFrame = (this.walkFrame + 1) % hdWalk.poses.length
+      this.setPose(hdWalk.poses[this.walkFrame])
+    }, Math.round(1000 / (60 * hdWalk.speed)))
   }
 
   private stopWalkCycle() {
@@ -166,7 +188,6 @@ export class AgentSpriteObject {
       this.moveProgress = Math.min(1, this.moveProgress + dt * MOVE_SPEED)
       const fromScreen = tileToScreen(this.tileX, this.tileY)
       const toScreen = tileToScreen(this.targetTileX, this.targetTileY)
-      // Linear interpolation for tile-by-tile walking (no easing)
       this.container.x = fromScreen.x + (toScreen.x - fromScreen.x) * this.moveProgress
       this.container.y = fromScreen.y + (toScreen.y - fromScreen.y) * this.moveProgress
       this.container.zIndex = this.targetTileY * 100 + this.targetTileX
@@ -176,7 +197,6 @@ export class AgentSpriteObject {
         this.tileY = this.targetTileY
         this.updateScreenPosition()
 
-        // If following a path, continue to next tile
         if (this.pathQueue.length > 0) {
           this.walkNextStep()
         } else {
@@ -195,47 +215,49 @@ export class AgentSpriteObject {
   }
 
   /**
-   * Play a named animation (looks up from animation registry by name).
+   * Play a named animation (looks up from HD animation registry).
    * Always returns a valid animation (falls back to wave if not found).
-   * Calls onComplete when the animation finishes.
    */
   playAnimationByName(animName: string, onComplete?: () => void) {
-    const anim = getAnimation(animName)
-    this.playAnimation(anim, onComplete)
+    const hdAnim = getHDAnimationForAction(animName) ?? getHDAnimation(animName)
+    this.playHDAnimation(hdAnim, onComplete)
   }
 
-  playAnimation(anim: AnimationDef, onComplete?: () => void) {
+  /** Play an HD animation. Note: onComplete is only called for non-looping animations. */
+  playHDAnimation(anim: HDAnimationDef, onComplete?: () => void) {
     this.stopAnimation()
-    this.currentAnimation = anim
+    this.currentHDAnimation = anim
     this.currentFrame = 0
     this.animCompleteCallback = onComplete ?? null
-    // Scale up during action for visibility
-    this.container.scale.set(ACTION_SCALE_BOOST)
-    this.advanceFrame()
+    this.advanceHDFrame()
   }
 
-  private advanceFrame() {
-    if (!this.currentAnimation) return
-    if (this.currentFrame >= this.currentAnimation.frames.length) {
-      const cb = this.animCompleteCallback
-      this.currentAnimation = null
-      this.animCompleteCallback = null
-      this.container.scale.set(1) // Reset scale after animation completes
-      this.setPose('idle')
-      cb?.()
-      return
+  private advanceHDFrame() {
+    if (!this.currentHDAnimation) return
+    const anim = this.currentHDAnimation
+    if (this.currentFrame >= anim.poses.length) {
+      if (anim.loop) {
+        this.currentFrame = 0
+      } else {
+        const cb = this.animCompleteCallback
+        this.currentHDAnimation = null
+        this.animCompleteCallback = null
+        this.setPose('idle')
+        cb?.()
+        return
+      }
     }
-    this.setPose(this.currentAnimation.frames[this.currentFrame])
+    this.setPose(anim.poses[this.currentFrame])
     this.currentFrame++
-    this.animTimer = setTimeout(() => this.advanceFrame(), this.currentAnimation!.frameMs)
+    const frameMs = Math.round(1000 / (60 * anim.speed))
+    this.animTimer = setTimeout(() => this.advanceHDFrame(), frameMs)
   }
 
   get isAnimating(): boolean {
-    return this.currentAnimation !== null
+    return this.currentHDAnimation !== null
   }
 
   startRandomBehavior(getNeighbors: (x: number, y: number) => { x: number; y: number }[]) {
-    // Guard against double-start
     if (this.actionTimer) return
 
     const doAction = () => {
@@ -246,23 +268,20 @@ export class AgentSpriteObject {
 
       const roll = Math.random()
       if (roll < 0.5) {
-        // Random walk
         const neighbors = getNeighbors(this.tileX, this.tileY)
         if (neighbors.length > 0) {
           const target = neighbors[Math.floor(Math.random() * neighbors.length)]
           this.moveTo(target.x, target.y)
         }
       } else {
-        // Random silly animation
-        const anim = SILLY_ANIMATIONS[Math.floor(Math.random() * SILLY_ANIMATIONS.length)]
-        this.playAnimation(anim)
+        const hdAnim = HD_SILLY_ANIMATIONS[Math.floor(Math.random() * HD_SILLY_ANIMATIONS.length)]
+        this.playHDAnimation(hdAnim)
       }
 
       const delay = 1000 + Math.random() * 3000
       this.actionTimer = setTimeout(doAction, delay)
     }
 
-    // Start after a random initial delay
     this.actionTimer = setTimeout(doAction, Math.random() * 2000)
   }
 
@@ -271,11 +290,9 @@ export class AgentSpriteObject {
       clearTimeout(this.animTimer)
       this.animTimer = null
     }
-    this.currentAnimation = null
+    this.currentHDAnimation = null
     this.currentFrame = 0
     this.animCompleteCallback = null
-    // Reset scale back to normal
-    this.container.scale.set(1)
   }
 
   stopAllBehavior() {
@@ -294,9 +311,10 @@ export class AgentSpriteObject {
   // ─── Selection ring ───
 
   addSelectionRing() {
+    const s = HD_SELECTION_RING
     const ring = new Graphics()
-    ring.ellipse(0, 0, 28, 14)
-    ring.stroke({ color: '#00e5a0', width: 2, alpha: 0.8 })
+    ring.ellipse(0, HD_FEET_OFFSET_Y, s.rx, s.ry)
+    ring.stroke({ color: s.color, width: s.strokeWidth, alpha: s.alpha })
     ring.label = 'selection-ring'
     this.container.addChildAt(ring, 0)
   }
@@ -310,9 +328,10 @@ export class AgentSpriteObject {
 
   setHighlight(color: string) {
     this.clearHighlight()
+    const h = HD_HIGHLIGHT_RING
     const ring = new Graphics()
-    ring.ellipse(0, 0, 30, 15)
-    ring.stroke({ color, width: 3, alpha: 0.9 })
+    ring.ellipse(0, HD_FEET_OFFSET_Y, h.rx, h.ry)
+    ring.stroke({ color, width: h.strokeWidth, alpha: h.alpha })
     ring.label = 'highlight-ring'
     this.container.addChildAt(ring, 0)
   }
@@ -324,6 +343,10 @@ export class AgentSpriteObject {
 
   destroy() {
     this.stopAllBehavior()
+    if (this.idleCallbackHandle !== null && typeof cancelIdleCallback === 'function') {
+      cancelIdleCallback(this.idleCallbackHandle)
+      this.idleCallbackHandle = null
+    }
     for (const tex of this.textureCache.values()) {
       tex.destroy(true)
     }
