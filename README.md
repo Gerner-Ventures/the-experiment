@@ -82,6 +82,7 @@ To enable local hooks, run `pre-commit install`.
 This repo includes in-repo Codex skills under `.codex/skills/`.
 
 - Use `$backend` for backend-only implementation and review work.
+- Use `$address-feedback <number>` to address GitHub PR feedback, push one update commit, and post the follow-up responses on GitHub.
 - Use `$pr-review <number>` to review a GitHub pull request and submit the actual review on GitHub.
 
 ### Headless Backend Simulation
