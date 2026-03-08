@@ -46,6 +46,7 @@ Backend sends types frontend doesn't handle: `connected`, `faction_update`, `cul
 
 - [x] Setup screen creates experiment via API and redirects
 <!-- canon:realized-in:audit file:frontend/src/views/SetupView.vue:113-132 -->
+<!-- canon:realized-in:PR#169 file:frontend/src/views/SetupView.vue -->
 - [x] Simulation connects to WebSocket with live updates
 <!-- canon:realized-in:audit file:frontend/src/views/SimulationView.vue:28-42 -->
 - [x] Play/pause/step controls call real endpoints
