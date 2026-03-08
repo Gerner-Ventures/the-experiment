@@ -246,7 +246,16 @@ describe('agentStore', () => {
       expect(store.agentCount).toBe(2)
     })
 
-    it('updates agent location from structured move actions', () => {
+    it('updates agent location from structured action payloads', () => {
+      const store = useAgentStore()
+      store.setAgents(sampleAgents)
+      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'gather', location: 'beach' }, summary: '' } }))
+      const agent = store.getAgent('a1')!
+      expect(agent.location).toBe('beach')
+      expect(agent.status).toBe('working')
+    })
+
+    it('updates move actions from structured action payloads', () => {
       const store = useAgentStore()
       store.setAgents(sampleAgents)
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'move', location: 'beach' }, summary: '' } }))

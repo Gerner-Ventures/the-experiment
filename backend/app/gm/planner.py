@@ -8,7 +8,7 @@ from app.gm.events import (
     scale_resource_modifiers,
     select_crisis_template,
 )
-from app.gm.models import GMPlanData, GMPlanningContext, PromptPackage
+from app.gm.models import GMPlanData, GMPlanningContext, GM_NARRATION_MAX_WORDS, PromptPackage
 
 
 def build_prompt_package(context: GMPlanningContext) -> PromptPackage:
@@ -42,7 +42,9 @@ def build_prompt_package(context: GMPlanningContext) -> PromptPackage:
         f"Upcoming act: {next_act.name if next_act else 'None'}\n"
         f"Transition guidance: {transition_note or 'No act transition this round.'}\n"
         "Generate a GM plan that includes a clear round theme, a crisis event, resource modifiers, narration, "
-        "and an optional meta hint. Favor bold narrative turns over inactivity."
+        "and an optional meta hint. Favor bold narrative turns over inactivity. "
+        f"Keep narration to 1-2 short sentences, suitable for 15-20 seconds of spoken delivery, "
+        f"and no more than {GM_NARRATION_MAX_WORDS} words."
     )
     return PromptPackage(
         system_prompt=system_prompt,

@@ -89,6 +89,18 @@ _EVENT_KIND_TO_WS_TYPE: dict[str, WSMessageType] = {
 }
 
 
+def _phase_event_ws_type(event: Any) -> WSMessageType | None:
+    data = getattr(event, "data", {})
+    if not isinstance(data, dict):
+        return None
+    kind = str(data.get("kind", ""))
+    # Regular agent_action events already stream through RoundHook.on_agent_action.
+    # Only engine-generated consequence actions need a second broadcast from phase completion.
+    if kind == "agent_action" and bool(data.get("is_consequence")):
+        return "agent_action"
+    return _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
+
+
 class CooperationMetrics(TypedDict):
     score: float
     cooperative_actions: int
@@ -1084,9 +1096,13 @@ class ExperimentRuntime:
         cooperative = sum(
             1
             for item in agent_actions
-            if self._resolved_action_type(item) in COOPERATIVE_ACTION_TYPES
+            if not self._is_consequence_action(item)
+            and self._resolved_action_type(item) in COOPERATIVE_ACTION_TYPES
         )
-        return round(cooperative / len(agent_actions), 2)
+        decisional_actions = sum(
+            1 for item in agent_actions if not self._is_consequence_action(item)
+        )
+        return round(cooperative / decisional_actions, 2) if decisional_actions else 0.0
 
     def _usage_records(
         self,
@@ -1172,12 +1188,14 @@ class ExperimentRuntime:
         round_number: int,
         data: dict[str, Any],
         phase: str | None = None,
+        is_consequence: bool = False,
     ) -> dict[str, Any]:
         return WSMessage(
             type=message_type,
             round=round_number,
             phase=phase,
             timestamp=datetime.now(UTC),
+            is_consequence=is_consequence,
             data=data,
         ).model_dump(mode="json")
 
@@ -1445,16 +1463,19 @@ class ExperimentRuntime:
         self, state: SimulationState, round_result: RoundResult
     ) -> dict[str, Any]:
         agents_by_id = {agent.agent_id: agent for agent in state.agents}
-        total_actions = len(round_result.action_resolutions)
+        decisional_actions = [
+            action for action in round_result.action_resolutions if not action.is_consequence
+        ]
+        total_actions = len(decisional_actions)
         cooperative_actions = sum(
             1
-            for action in round_result.action_resolutions
+            for action in decisional_actions
             if action.resolved_action_type in COOPERATIVE_ACTION_TYPES
         )
         cooperation_score = round(cooperative_actions / total_actions, 2) if total_actions else 0.0
         betrayal_count = sum(
             1
-            for action in round_result.action_resolutions
+            for action in decisional_actions
             if self._is_betrayal_action(action.requested_action_type, action.resolved_action_type)
         )
         betrayal_count += sum(
@@ -1465,13 +1486,13 @@ class ExperimentRuntime:
         )
         sabotage_count = sum(
             1
-            for action in round_result.action_resolutions
+            for action in decisional_actions
             if action.requested_action_type in SABOTAGE_ACTION_TYPES
             or action.resolved_action_type in SABOTAGE_ACTION_TYPES
         )
         dominant_faction = max(state.factions, key=lambda faction: faction.influence, default=None)
         goal_progress: list[dict[str, Any]] = []
-        for action in round_result.action_resolutions:
+        for action in decisional_actions:
             agent = agents_by_id.get(action.agent_id)
             goal_progress.append(
                 {
@@ -1603,6 +1624,9 @@ class ExperimentRuntime:
         if isinstance(action, str):
             return action
         return None
+
+    def _is_consequence_action(self, item: EventLogItem) -> bool:
+        return bool(item.data.get("is_consequence"))
 
     def _is_betrayal_action(
         self,
@@ -1748,8 +1772,7 @@ class _StreamingHook:
         # meeting_start, etc.) are consumed by dedicated UI components that
         # subscribe to specific WS message types.  Both are intentional.
         for event in phase_result.events:
-            kind = str(event.data.get("kind", ""))
-            msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
+            msg_type = _phase_event_ws_type(event)
             if msg_type:
                 await cm.broadcast(
                     eid,
@@ -1758,6 +1781,7 @@ class _StreamingHook:
                         round_number=round_number,
                         phase=phase_result.phase,
                         data=event.data,
+                        is_consequence=bool(event.data.get("is_consequence")),
                     ),
                 )
 
@@ -1778,6 +1802,7 @@ class _StreamingHook:
                     "agent_id": agent.agent_id,
                     "agent_name": agent.name,
                     "action": turn.decision.action.model_dump(mode="json"),
+                    "is_consequence": False,
                     "inner_thought": turn.decision.inner_thought,
                     "cooperation_intent": turn.decision.cooperation_intent,
                     "goal_progress": turn.decision.goal_progress,

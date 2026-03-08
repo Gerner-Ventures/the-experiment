@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, cast, get_args
 
 from pydantic import Field
 
@@ -40,6 +40,9 @@ DecisionActionType = Literal[
     "breakdown",
     "self_sacrifice",
 ]
+DECISION_ACTION_TYPES: tuple[DecisionActionType, ...] = cast(
+    tuple[DecisionActionType, ...], get_args(DecisionActionType)
+)
 CooperationIntent = Literal["high", "medium", "low", "none"]
 
 AGENT_INNER_THOUGHT_MAX_LENGTH = 160
