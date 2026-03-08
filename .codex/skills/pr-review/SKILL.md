@@ -40,12 +40,14 @@ Read only the docs relevant to the changed area:
 ## Workflow
 
 1. Parse the PR number from the prompt.
-2. Load PR metadata with GitHub CLI.
-3. Inspect the file list and diff before reading broader repo context.
-4. Read the touched files plus any nearby code required to understand correctness.
-5. Run targeted tests or checks when they materially reduce uncertainty, especially for backend changes.
-6. Decide whether findings are blocking or non-blocking.
-7. Submit a GitHub review, not just a local summary.
+2. Check whether the authenticated GitHub account has already reviewed this PR.
+3. Load PR metadata with GitHub CLI.
+4. If you already reviewed the PR, extract your previous blocking and non-blocking findings before doing fresh scanning.
+5. Inspect the current file list and diff before reading broader repo context.
+6. Read the touched files plus any nearby code required to understand correctness.
+7. Run targeted tests or checks when they materially reduce uncertainty, especially for backend changes.
+8. Decide whether findings are blocking or non-blocking.
+9. Submit a GitHub review, not just a local summary.
 
 Useful commands:
 
@@ -53,9 +55,28 @@ Useful commands:
 gh pr view <number> --json number,title,body,baseRefName,headRefName,author,files,commits,url
 gh pr diff <number> --patch
 gh pr checkout <number>
+gh api repos/{owner}/{repo}/pulls/<number>/reviews
 ```
 
 Use `gh pr checkout <number>` when local execution or deeper code navigation would help, but only from a clean checkout or disposable worktree. If the current checkout has unrelated local changes, inspect the PR with `gh pr view` and `gh pr diff` instead of stomping around like a raccoon in the pantry.
+
+## Follow-up Reviews
+
+If you have already submitted a review on the PR from the authenticated account, switch into follow-up mode:
+
+- Start by reading your prior review(s), especially any blocking findings.
+- Bias the next review toward one question: did the author actually address the items you already called out?
+- Focus on the new diff and the code paths touched while attempting to fix those earlier findings.
+- Do not burn time re-running a full PR safari unless the new diff introduces a fresh risk worth calling out.
+- If prior blocking items are still present, keep the review centered on that failure instead of burying it under a new pile of findings.
+
+When following up, explicitly connect each unresolved item to the earlier review. Good patterns:
+
+- `I called this out in the last review and it still is not fixed.`
+- `This is the same blocking issue from my previous review.`
+- `Remember when I asked for this to be fixed? Same bug, same problem.`
+
+Do not claim the author ignored earlier feedback unless the review history and current diff actually support that statement. Be direct, but stay accurate.
 
 ## Findings Format
 
@@ -123,6 +144,9 @@ Classification labels do not need to be fancy, but they should be concrete. Emoj
 - Keep the humor pointed at the bad code path, not the human who wrote it.
 - Prefer lines that sound like a sharp reviewer with taste, not a generic assistant trying to be quirky.
 - If the PR introduces a truly catastrophic bug, you may be blunt and a bit mean, but still keep the review actionable and specific.
+- In follow-up reviews, be noticeably less interested in doing another full sweep and more interested in whether earlier blocking feedback was actually handled.
+- If a previously flagged blocking issue is still there, say so plainly and with teeth. Short lines like `I already asked for this fix and the bug is still here.` are preferred over polite mush.
+- Sarcasm is fine. Unsupported accusations are not. Keep the bite tied to the unchanged bug or diff, not to speculation about the author's motives.
 
 ## Submission
 
