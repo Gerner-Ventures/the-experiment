@@ -46,7 +46,8 @@ Backend sends types frontend doesn't handle: `connected`, `faction_update`, `cul
 
 - [ ] Setup screen creates experiment via API and redirects
 - [ ] Simulation connects to WebSocket with live updates
-- [ ] Play/pause/step controls call real endpoints
+- [x] Play/pause/step controls call real endpoints
+<!-- specwright:realized-in:PR#70 file:frontend/src/views/SimulationView.vue -->
 - [ ] All stores populate from backend data (no mocks)
 - [ ] All WS message types handled (including faction, exile, cult)
 - [ ] Game completes > experiment_end > redirect to report
