@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import type { HDPoseName } from '@/config/sprites/hd/types'
-import { renderCharacter } from '@/config/sprites/hd/render'
-import { HD_SILLY_ANIMATIONS } from '@/config/sprites/hd/animations'
+import type { CharacterSprite, PoseName } from '@/config/character-sprites'
+import { renderCharacter, SILLY_ANIMATIONS } from '@/config/character-sprites'
 
 const props = withDefaults(defineProps<{
-  sprite: { id: string }
+  sprite: CharacterSprite
   scale?: number
   animate?: boolean
 }>(), {
@@ -17,7 +16,7 @@ const canvas = ref<HTMLCanvasElement>()
 const timers: ReturnType<typeof setTimeout>[] = []
 let animating = false
 
-function draw(pose: HDPoseName = 'idle') {
+function draw(pose: PoseName = 'idle') {
   if (!canvas.value) return
   const ctx = canvas.value.getContext('2d')
   if (!ctx) return
@@ -47,21 +46,21 @@ function playRandomAnimation() {
   if (!props.animate || animating) return
   animating = true
 
-  const anim = HD_SILLY_ANIMATIONS[Math.floor(Math.random() * HD_SILLY_ANIMATIONS.length)]
+  const anim = SILLY_ANIMATIONS[Math.floor(Math.random() * SILLY_ANIMATIONS.length)]
   let frameIdx = 0
-  const frameMs = Math.round(1000 / (60 * anim.speed))
 
   function nextFrame() {
-    if (frameIdx >= anim.poses.length) {
+    if (frameIdx >= anim.frames.length) {
       animating = false
+      // Schedule next random animation after a pause
       if (props.animate) {
         timers.push(setTimeout(playRandomAnimation, 1500 + Math.random() * 2500))
       }
       return
     }
-    draw(anim.poses[frameIdx])
+    draw(anim.frames[frameIdx])
     frameIdx++
-    timers.push(setTimeout(nextFrame, frameMs))
+    timers.push(setTimeout(nextFrame, anim.frameMs))
   }
 
   nextFrame()

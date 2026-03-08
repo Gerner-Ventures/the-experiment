@@ -2,14 +2,14 @@
  * @jest-environment jsdom
  */
 import {
-  HD_GRID_W,
-  HD_GRID_H,
-  HD_PIXEL_SCALE,
-  renderHDSpriteToCanvas,
+  SPRITE_W,
+  SPRITE_H,
+  PIXEL_SCALE,
+  renderSpriteToCanvas,
   renderCharacter,
-  HD_CHARACTER_SPRITES,
-  getHDSpriteById,
+  CHARACTER_SPRITES,
   getSpriteById,
+  type CharacterSprite,
 } from '@/config/sprites'
 
 // jsdom does not support canvas getContext('2d') — mock it
@@ -28,34 +28,34 @@ afterEach(() => {
   jest.restoreAllMocks()
 })
 
-describe('character-sprites (HD)', () => {
+describe('character-sprites', () => {
   describe('constants', () => {
-    it('HD_GRID_W is 32', () => {
-      expect(HD_GRID_W).toBe(32)
+    it('SPRITE_W is 14', () => {
+      expect(SPRITE_W).toBe(14)
     })
 
-    it('HD_GRID_H is 48', () => {
-      expect(HD_GRID_H).toBe(48)
+    it('SPRITE_H is 18', () => {
+      expect(SPRITE_H).toBe(18)
     })
 
-    it('HD_PIXEL_SCALE is 3', () => {
-      expect(HD_PIXEL_SCALE).toBe(3)
+    it('PIXEL_SCALE is 3', () => {
+      expect(PIXEL_SCALE).toBe(3)
     })
   })
 
-  describe('renderCharacter (compat wrapper)', () => {
-    const testSprite = HD_CHARACTER_SPRITES[0]
+  describe('renderCharacter', () => {
+    const testSprite: CharacterSprite = CHARACTER_SPRITES[0]
 
     it('returns a grid with correct dimensions', () => {
-      const grid = renderCharacter(testSprite, 'idle')
-      expect(grid).toHaveLength(HD_GRID_H)
+      const grid = renderCharacter(testSprite)
+      expect(grid).toHaveLength(SPRITE_H)
       for (const row of grid) {
-        expect(row).toHaveLength(HD_GRID_W)
+        expect(row).toHaveLength(SPRITE_W)
       }
     })
 
     it('returns grid with null or hex color strings', () => {
-      const grid = renderCharacter(testSprite, 'idle')
+      const grid = renderCharacter(testSprite)
       for (const row of grid) {
         for (const pixel of row) {
           if (pixel !== null) {
@@ -70,7 +70,7 @@ describe('character-sprites (HD)', () => {
       const poses = ['idle', 'walk1', 'walk2', 'dance1', 'dance2', 'dead'] as const
       for (const pose of poses) {
         const grid = renderCharacter(testSprite, pose)
-        expect(grid).toHaveLength(HD_GRID_H)
+        expect(grid).toHaveLength(SPRITE_H)
       }
     })
 
@@ -84,60 +84,54 @@ describe('character-sprites (HD)', () => {
     })
   })
 
-  describe('renderHDSpriteToCanvas', () => {
+  describe('renderSpriteToCanvas', () => {
     it('returns a canvas with correct dimensions at default scale', () => {
-      const character = HD_CHARACTER_SPRITES[0]
-      const canvas = renderHDSpriteToCanvas(character, 'idle')
+      const sprite = CHARACTER_SPRITES[0]
+      const canvas = renderSpriteToCanvas(sprite)
 
       expect(canvas).toBeInstanceOf(HTMLCanvasElement)
-      expect(canvas.width).toBe(HD_GRID_W * HD_PIXEL_SCALE)
-      expect(canvas.height).toBe(HD_GRID_H * HD_PIXEL_SCALE)
+      expect(canvas.width).toBe(SPRITE_W * PIXEL_SCALE)
+      expect(canvas.height).toBe(SPRITE_H * PIXEL_SCALE)
     })
 
     it('returns a canvas with correct dimensions at custom scale', () => {
-      const character = HD_CHARACTER_SPRITES[0]
+      const sprite = CHARACTER_SPRITES[0]
       const scale = 4
-      const canvas = renderHDSpriteToCanvas(character, 'idle', scale)
+      const canvas = renderSpriteToCanvas(sprite, 'idle', scale)
 
-      expect(canvas.width).toBe(HD_GRID_W * scale)
-      expect(canvas.height).toBe(HD_GRID_H * scale)
+      expect(canvas.width).toBe(SPRITE_W * scale)
+      expect(canvas.height).toBe(SPRITE_H * scale)
     })
 
-    it('renders all characters without error', () => {
-      for (const character of HD_CHARACTER_SPRITES) {
-        expect(() => renderHDSpriteToCanvas(character, 'idle')).not.toThrow()
+    it('renders all character sprites without error', () => {
+      for (const sprite of CHARACTER_SPRITES) {
+        expect(() => renderSpriteToCanvas(sprite)).not.toThrow()
       }
     })
   })
 
-  describe('getHDSpriteById / getSpriteById', () => {
-    it('returns character for valid id', () => {
-      const sprite = getHDSpriteById('intern')
-      expect(sprite).toBeDefined()
-      expect(sprite!.id).toBe('intern')
-    })
-
-    it('getSpriteById compat returns same result', () => {
+  describe('getSpriteById', () => {
+    it('returns sprite for valid id', () => {
       const sprite = getSpriteById('intern')
       expect(sprite).toBeDefined()
       expect(sprite!.id).toBe('intern')
     })
 
     it('returns undefined for unknown id', () => {
-      expect(getHDSpriteById('nonexistent')).toBeUndefined()
+      expect(getSpriteById('nonexistent')).toBeUndefined()
     })
   })
 
-  describe('HD_CHARACTER_SPRITES', () => {
+  describe('CHARACTER_SPRITES', () => {
     it('has unique ids', () => {
-      const ids = HD_CHARACTER_SPRITES.map(s => s.id)
+      const ids = CHARACTER_SPRITES.map(s => s.id)
       const uniqueIds = new Set(ids)
       expect(uniqueIds.size).toBe(ids.length)
     })
 
-    it('all characters render without error', () => {
-      for (const character of HD_CHARACTER_SPRITES) {
-        expect(() => renderCharacter(character, 'idle')).not.toThrow()
+    it('all sprites have valid body/hair/outfit/accessory indices', () => {
+      for (const sprite of CHARACTER_SPRITES) {
+        expect(() => renderCharacter(sprite)).not.toThrow()
       }
     })
   })

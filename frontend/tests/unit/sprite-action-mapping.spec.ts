@@ -1,47 +1,48 @@
-import { HD_ACTION_TO_ANIMATION, HD_ANIMATION_REGISTRY, HD_SILLY_ANIMATIONS } from '@/config/sprites/hd/animations'
+import { ACTION_TO_ANIMATION, ANIMATION_REGISTRY, SILLY_ANIMATIONS } from '@/config/sprites/animations'
 import { SKIP_ACTION_PHASE, AGGRESSIVE_ACTIONS } from '@/config/action-categories'
 
-describe('HD_ACTION_TO_ANIMATION → HD_ANIMATION_REGISTRY integration', () => {
+describe('ACTION_TO_ANIMATION → ANIMATION_REGISTRY integration', () => {
   it('maps every non-skip action to a valid animation registry key', () => {
-    for (const [action, animName] of Object.entries(HD_ACTION_TO_ANIMATION)) {
+    for (const [action, animName] of Object.entries(ACTION_TO_ANIMATION)) {
       expect(typeof animName).toBe('string')
       expect(animName.length).toBeGreaterThan(0)
-      expect(HD_ANIMATION_REGISTRY[animName]).toBeDefined()
+      expect(ANIMATION_REGISTRY[animName]).toBeDefined()
       expect(action).toBeTruthy()
     }
   })
 
-  it('has HD_SILLY_ANIMATIONS entries for key action animations', () => {
-    const sillyNames = new Set(HD_SILLY_ANIMATIONS.map(a => a.name))
+  it('has SILLY_ANIMATIONS entries for key action animations', () => {
+    const sillyNames = new Set(SILLY_ANIMATIONS.map(a => a.name))
     const actionsWithAnimations = [
       'stab', 'shoot', 'dance', 'panic', 'pee', 'poop', 'vomit', 'sleep',
     ]
     for (const action of actionsWithAnimations) {
-      const animName = HD_ACTION_TO_ANIMATION[action]
+      const animName = ACTION_TO_ANIMATION[action]
       expect(animName).toBeDefined()
       expect(sillyNames.has(animName)).toBe(true)
     }
   })
 
-  it('skip actions all have animation mappings', () => {
+  it('skip actions have low-impact animations (walk, wave, or think)', () => {
     for (const action of SKIP_ACTION_PHASE) {
-      const animName = HD_ACTION_TO_ANIMATION[action]
-      expect(animName).toBeDefined()
-      expect(HD_ANIMATION_REGISTRY[animName]).toBeDefined()
+      const animName = ACTION_TO_ANIMATION[action]
+      if (animName) {
+        expect(['walk', 'wave', 'think']).toContain(animName)
+      }
     }
   })
 
-  it('all HD_SILLY_ANIMATIONS have valid pose sequences', () => {
-    for (const anim of HD_SILLY_ANIMATIONS) {
+  it('all SILLY_ANIMATIONS have valid frame sequences', () => {
+    for (const anim of SILLY_ANIMATIONS) {
       expect(anim.name).toBeTruthy()
-      expect(anim.poses.length).toBeGreaterThan(0)
-      expect(anim.speed).toBeGreaterThan(0)
+      expect(anim.frames.length).toBeGreaterThan(0)
+      expect(anim.frameMs).toBeGreaterThan(0)
     }
   })
 
-  it('aggressive actions all have HD_ACTION_TO_ANIMATION mappings', () => {
+  it('aggressive actions all have ACTION_TO_ANIMATION mappings', () => {
     for (const action of AGGRESSIVE_ACTIONS) {
-      expect(HD_ACTION_TO_ANIMATION[action]).toBeDefined()
+      expect(ACTION_TO_ANIMATION[action]).toBeDefined()
     }
   })
 

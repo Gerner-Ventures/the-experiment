@@ -7,13 +7,6 @@ import {
   type ThemeDayNightPalette,
   type PhasePalette,
 } from '@/config/day-night-palettes'
-import {
-  SUN, MOON, MOON_NIGHT_POSITION,
-  DIGITAL_ORB, DIGITAL_MOON,
-  STARS, ARC, SUN_SHADOW, SUN_SCALE,
-  ANIMATION, TRANSITION, DEMO, THRESHOLD,
-  FALLBACK_SKY,
-} from '@/config/day-night-constants'
 
 gsap.registerPlugin(MotionPathPlugin)
 
@@ -69,7 +62,6 @@ export class DayNightCycle {
 
   // Corona rays — individual line Graphics for per-frame property updates
   private coronaRayObjects: { gfx: Graphics; angle: number }[] = []
-  private sunGlowColorNum = 0 // cached numeric color for per-frame ray shimmer
 
   // Sky gradient state for tweening
   private currentSkyTop: string
@@ -97,8 +89,8 @@ export class DayNightCycle {
 
     // Default sky colors (midday)
     const midday = palette.phases.midday
-    this.currentSkyTop = midday?.skyTop ?? FALLBACK_SKY.top
-    this.currentSkyBottom = midday?.skyBottom ?? FALLBACK_SKY.bottom
+    this.currentSkyTop = midday?.skyTop ?? '#87ceeb'
+    this.currentSkyBottom = midday?.skyBottom ?? '#e0f0ff'
     this.currentBrightness = midday?.filterBrightness ?? 1.0
 
     // Sky gradient
@@ -153,23 +145,23 @@ export class DayNightCycle {
 
   private buildSun(): void {
     const body = new Graphics()
-    body.circle(0, 0, SUN.bodyRadius)
+    body.circle(0, 0, 14)
     body.fill(hexToNum(this.palette.sunColor))
     this.sunContainer.addChild(body)
 
+    // Glow
     const glow = new Graphics()
-    glow.circle(0, 0, SUN.glowRadius)
-    glow.fill({ color: hexToNum(this.palette.sunGlowColor), alpha: SUN.glowAlpha })
-    glow.filters = [new BlurFilter({ strength: SUN.blurStrength })]
+    glow.circle(0, 0, 20)
+    glow.fill({ color: hexToNum(this.palette.sunGlowColor), alpha: 0.3 })
+    glow.filters = [new BlurFilter({ strength: 8 })]
     this.sunContainer.addChild(glow)
 
     // Corona rays — pre-built as individual Graphics for efficient per-frame updates
-    this.sunGlowColorNum = hexToNum(this.palette.sunGlowColor)
-    const color = this.sunGlowColorNum
-    for (let i = 0; i < SUN.rayCount; i++) {
-      const angle = (i / SUN.rayCount) * Math.PI * 2
+    const color = hexToNum(this.palette.sunGlowColor)
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2
       const rayGfx = new Graphics()
-      this.drawSingleRay(rayGfx, angle, SUN.rayOuterRadius, color)
+      this.drawSingleRay(rayGfx, angle, 22, color)
       this.sunContainer.addChild(rayGfx)
       this.coronaRayObjects.push({ gfx: rayGfx, angle })
     }
@@ -177,14 +169,15 @@ export class DayNightCycle {
 
   private drawSingleRay(gfx: Graphics, angle: number, len: number, color: number): void {
     gfx.clear()
-    gfx.moveTo(Math.cos(angle) * SUN.rayInnerRadius, Math.sin(angle) * SUN.rayInnerRadius)
+    gfx.moveTo(Math.cos(angle) * 16, Math.sin(angle) * 16)
     gfx.lineTo(Math.cos(angle) * len, Math.sin(angle) * len)
-    gfx.stroke({ color, width: SUN.rayStrokeWidth, alpha: SUN.rayAlpha })
+    gfx.stroke({ color, width: 1.5, alpha: 0.4 })
   }
 
   private buildMoon(): void {
+    // Body
     const body = new Graphics()
-    body.circle(0, 0, MOON.bodyRadius)
+    body.circle(0, 0, 10)
     body.fill(hexToNum(this.palette.moonColor))
     this.moonContainer.addChild(body)
 
@@ -192,22 +185,23 @@ export class DayNightCycle {
     const nightPalette = this.palette.phases.night
     const crescentColor = nightPalette ? hexToNum(nightPalette.skyTop) : 0x0a1428
     const crescent = new Graphics()
-    crescent.circle(MOON.crescentOffset.x, MOON.crescentOffset.y, MOON.crescentRadius)
-    crescent.fill({ color: crescentColor, alpha: MOON.crescentAlpha })
+    crescent.circle(4, -2, 8)
+    crescent.fill({ color: crescentColor, alpha: 0.9 })
     this.moonContainer.addChild(crescent)
 
     // Craters
     const craters = new Graphics()
-    for (const c of MOON.craters) {
-      craters.circle(c.x, c.y, c.radius)
-    }
-    craters.fill({ color: hexToNum(this.palette.moonColor), alpha: MOON.craterAlpha })
+    craters.circle(-3, 2, 1.5)
+    craters.circle(-1, -3, 1)
+    craters.circle(2, 4, 1)
+    craters.fill({ color: hexToNum(this.palette.moonColor), alpha: 0.5 })
     this.moonContainer.addChild(craters)
 
+    // Glow
     const glow = new Graphics()
-    glow.circle(0, 0, MOON.glowRadius)
-    glow.fill({ color: hexToNum(this.palette.moonGlowColor), alpha: MOON.glowAlpha })
-    glow.filters = [new BlurFilter({ strength: MOON.blurStrength })]
+    glow.circle(0, 0, 16)
+    glow.fill({ color: hexToNum(this.palette.moonGlowColor), alpha: 0.2 })
+    glow.filters = [new BlurFilter({ strength: 6 })]
     this.moonContainer.addChild(glow)
   }
 
@@ -215,19 +209,19 @@ export class DayNightCycle {
     this.digitalOrb = new Container()
 
     const core = new Graphics()
-    core.circle(0, 0, DIGITAL_ORB.coreRadius)
-    core.fill({ color: hexToNum(this.palette.sunColor), alpha: DIGITAL_ORB.coreAlpha })
+    core.circle(0, 0, 12)
+    core.fill({ color: hexToNum(this.palette.sunColor), alpha: 0.8 })
     this.digitalOrb.addChild(core)
 
     const ring = new Graphics()
-    ring.circle(0, 0, DIGITAL_ORB.ringRadius)
-    ring.stroke({ color: hexToNum(this.palette.sunColor), width: DIGITAL_ORB.ringStrokeWidth, alpha: DIGITAL_ORB.ringAlpha })
+    ring.circle(0, 0, 18)
+    ring.stroke({ color: hexToNum(this.palette.sunColor), width: 1.5, alpha: 0.5 })
     this.digitalOrb.addChild(ring)
 
     const glow = new Graphics()
-    glow.circle(0, 0, DIGITAL_ORB.glowRadius)
-    glow.fill({ color: hexToNum(this.palette.sunGlowColor), alpha: DIGITAL_ORB.glowAlpha })
-    glow.filters = [new BlurFilter({ strength: DIGITAL_ORB.blurStrength })]
+    glow.circle(0, 0, 24)
+    glow.fill({ color: hexToNum(this.palette.sunGlowColor), alpha: 0.15 })
+    glow.filters = [new BlurFilter({ strength: 10 })]
     this.digitalOrb.addChild(glow)
 
     this.sunContainer.addChild(this.digitalOrb)
@@ -235,31 +229,33 @@ export class DayNightCycle {
 
   private buildDigitalMoon(): void {
     const core = new Graphics()
-    core.circle(0, 0, DIGITAL_MOON.coreRadius)
-    core.fill({ color: hexToNum(this.palette.moonColor), alpha: DIGITAL_MOON.coreAlpha })
+    core.circle(0, 0, 10)
+    core.fill({ color: hexToNum(this.palette.moonColor), alpha: 0.5 })
     this.moonContainer.addChild(core)
 
     const ring = new Graphics()
-    ring.circle(0, 0, DIGITAL_MOON.ringRadius)
-    ring.stroke({ color: hexToNum(this.palette.moonColor), width: DIGITAL_MOON.ringStrokeWidth, alpha: DIGITAL_MOON.ringAlpha })
+    ring.circle(0, 0, 14)
+    ring.stroke({ color: hexToNum(this.palette.moonColor), width: 1, alpha: 0.3 })
     this.moonContainer.addChild(ring)
   }
 
   private generateStars(): void {
+    // Destroy previous star Graphics
     for (const star of this.starObjects) {
       star.gfx.destroy()
     }
     this.starObjects = []
 
+    const count = 50
     // Generate or reuse seeds (seeds store normalized 0-1 positions)
     if (this.starSeeds.length === 0) {
-      for (let i = 0; i < STARS.count; i++) {
+      for (let i = 0; i < count; i++) {
         this.starSeeds.push({
           nx: Math.random(),
-          ny: Math.random() * STARS.maxNormalizedY,
-          baseAlpha: STARS.minAlpha + Math.random() * STARS.alphaRange,
+          ny: Math.random() * 0.6,
+          baseAlpha: 0.3 + Math.random() * 0.7,
           phase: Math.random() * Math.PI * 2,
-          radius: STARS.minRadius + Math.random() * STARS.radiusRange,
+          radius: 0.5 + Math.random() * 1.5,
         })
       }
     }
@@ -276,27 +272,27 @@ export class DayNightCycle {
   }
 
   private getArcPath(): { x: number; y: number }[] {
-    const padX = this.width * ARC.padX
-    const endpointY = this.height * ARC.endpointY
-    const apexY = this.height * ARC.apexY
+    const padX = this.width * 0.1
+    const horizonY = this.height * 0.85
+    const apexY = this.height * 0.08
 
     return [
-      { x: padX, y: endpointY },
-      { x: this.width * 0.25, y: apexY + ARC.controlPointOffset },
+      { x: padX, y: horizonY },
+      { x: this.width * 0.25, y: apexY + 40 },
       { x: this.width * 0.5, y: apexY },
-      { x: this.width * 0.75, y: apexY + ARC.controlPointOffset },
-      { x: this.width - padX, y: endpointY },
+      { x: this.width * 0.75, y: apexY + 40 },
+      { x: this.width - padX, y: horizonY },
     ]
   }
 
   private buildArcTween(): void {
     this.sunContainer.x = this.width * 0.5
-    this.sunContainer.y = this.height * ARC.apexY
+    this.sunContainer.y = this.height * 0.08
 
     this.arcTween = gsap.to(this.sunContainer, {
       motionPath: {
         path: this.getArcPath(),
-        curviness: ARC.curviness,
+        curviness: 1.5,
       },
       duration: 1,
       paused: true,
@@ -305,24 +301,24 @@ export class DayNightCycle {
   }
 
   private updateShadowAndScale(): void {
-    const endpointY = this.height * ARC.endpointY
-    const apexY = this.height * ARC.apexY
+    const horizonY = this.height * 0.85
+    const apexY = this.height * 0.08
     const sunY = this.sunContainer.y
 
-    // Altitude: 0 at endpoints, 1 at apex
-    const altitude = Math.max(0, Math.min(1, 1 - (sunY - apexY) / (endpointY - apexY)))
+    // Altitude: 0 at horizon, 1 at apex
+    const altitude = Math.max(0, Math.min(1, 1 - (sunY - apexY) / (horizonY - apexY)))
 
-    // Scale: uniform (no altitude-based scaling when range=0)
-    const scale = SUN_SCALE.min + altitude * SUN_SCALE.range
+    // Scale: larger at midday (overhead), smaller near horizon
+    const scale = 0.6 + altitude * 0.4
     this.sunContainer.scale.set(scale)
 
-    // Shadow below sun
+    // Shadow
     this.shadowGraphics.clear()
-    if (this.sunContainer.alpha > THRESHOLD.shadowMin) {
-      const shadowRx = SUN_SHADOW.baseRx + altitude * SUN_SHADOW.altitudeRx
-      const shadowRy = SUN_SHADOW.baseRy + altitude * SUN_SHADOW.altitudeRy
-      const shadowAlpha = SUN_SHADOW.baseAlpha + altitude * SUN_SHADOW.altitudeAlpha
-      const shadowY = sunY + SUN_SHADOW.baseYOffset + (1 - altitude) * SUN_SHADOW.altitudeYRange
+    if (this.sunContainer.alpha > 0.1) {
+      const shadowRx = 20 + altitude * 30
+      const shadowRy = 3 + altitude * 5
+      const shadowAlpha = 0.05 + altitude * 0.15
+      const shadowY = sunY + 60 + (1 - altitude) * 40
       this.shadowGraphics.ellipse(this.sunContainer.x, shadowY, shadowRx, shadowRy)
       this.shadowGraphics.fill({ color: 0x000000, alpha: shadowAlpha })
     }
@@ -333,6 +329,7 @@ export class DayNightCycle {
     const topColor = hexToNum(this.currentSkyTop)
     const bottomColor = hexToNum(this.currentSkyBottom)
 
+    // Use PixiJS v8 native FillGradient for smooth sky
     const gradient = new FillGradient({
       type: 'linear',
       start: { x: 0, y: 0 },
@@ -353,14 +350,10 @@ export class DayNightCycle {
       tween.kill()
     }
     this.activeTweens = []
+    // Also kill any tweens targeting the arc tween object itself
     if (this.arcTween) {
       gsap.killTweensOf(this.arcTween)
     }
-  }
-
-  private positionMoonForNight(): void {
-    this.moonContainer.x = this.width * MOON_NIGHT_POSITION.x
-    this.moonContainer.y = this.height * MOON_NIGHT_POSITION.y
   }
 
   setPhase(phase: RoundPhase): void {
@@ -370,6 +363,7 @@ export class DayNightCycle {
     const targetPalette = this.palette.phases[phase]
     if (!targetPalette) return
 
+    // Kill all in-progress transition tweens
     this.killActiveTweens()
 
     // Night→dawn wrap: fade-through transition
@@ -386,8 +380,8 @@ export class DayNightCycle {
       this.activeTweens.push(
         gsap.to(this.arcTween, {
           progress: targetArcT,
-          duration: TRANSITION.phaseDuration,
-          ease: TRANSITION.ease,
+          duration: 2,
+          ease: 'power2.inOut',
         }),
       )
     }
@@ -397,8 +391,8 @@ export class DayNightCycle {
     this.activeTweens.push(
       gsap.to(brightnessProxy, {
         value: targetPalette.filterBrightness,
-        duration: TRANSITION.phaseDuration,
-        ease: TRANSITION.ease,
+        duration: 2,
+        ease: 'power2.inOut',
         onUpdate: () => {
           this.currentBrightness = brightnessProxy.value
           this.tintFilter.brightness(this.currentBrightness, false)
@@ -408,9 +402,9 @@ export class DayNightCycle {
 
     // Tween celestial body visibility
     this.activeTweens.push(
-      gsap.to(this.sunContainer, { alpha: targetPalette.sunAlpha, duration: TRANSITION.phaseDuration, ease: TRANSITION.ease }),
-      gsap.to(this.moonContainer, { alpha: targetPalette.moonAlpha, duration: TRANSITION.phaseDuration, ease: TRANSITION.ease }),
-      gsap.to(this.starContainer, { alpha: targetPalette.starOpacity, duration: TRANSITION.phaseDuration, ease: TRANSITION.ease }),
+      gsap.to(this.sunContainer, { alpha: targetPalette.sunAlpha, duration: 2, ease: 'power2.inOut' }),
+      gsap.to(this.moonContainer, { alpha: targetPalette.moonAlpha, duration: 2, ease: 'power2.inOut' }),
+      gsap.to(this.starContainer, { alpha: targetPalette.starOpacity, duration: 2, ease: 'power2.inOut' }),
     )
 
     // Tween sky colors
@@ -420,8 +414,8 @@ export class DayNightCycle {
     this.activeTweens.push(
       gsap.to(skyProxy, {
         t: 1,
-        duration: TRANSITION.phaseDuration,
-        ease: TRANSITION.ease,
+        duration: 2,
+        ease: 'power2.inOut',
         onUpdate: () => {
           this.currentSkyTop = lerpColor(startTop, targetPalette.skyTop, skyProxy.t)
           this.currentSkyBottom = lerpColor(startBottom, targetPalette.skyBottom, skyProxy.t)
@@ -430,8 +424,10 @@ export class DayNightCycle {
       }),
     )
 
+    // Position moon at center-top during night
     if (phase === 'night') {
-      this.positionMoonForNight()
+      this.moonContainer.x = this.width * 0.5
+      this.moonContainer.y = this.height * 0.15
     }
 
     this.currentPhase = phase
@@ -443,8 +439,8 @@ export class DayNightCycle {
     const startBottom = this.currentSkyBottom
 
     // 1. Fade out moon + stars
-    tl.to(this.moonContainer, { alpha: 0, duration: TRANSITION.nightFadeOutDuration })
-    tl.to(this.starContainer, { alpha: 0, duration: TRANSITION.nightFadeOutDuration }, '<')
+    tl.to(this.moonContainer, { alpha: 0, duration: 0.8 })
+    tl.to(this.starContainer, { alpha: 0, duration: 0.8 }, '<')
 
     // 2. Reset arc to dawn position
     tl.call(() => {
@@ -454,13 +450,14 @@ export class DayNightCycle {
     })
 
     // 3. Fade in sun + update filter + sky
-    tl.to(this.sunContainer, { alpha: dawnPalette.sunAlpha, duration: TRANSITION.dawnFadeInDuration })
+    tl.to(this.sunContainer, { alpha: dawnPalette.sunAlpha, duration: 1.2 })
 
+    // Use tracked brightness rather than hardcoded value
     const proxy = { brightness: this.currentBrightness, t: 0 }
     tl.to(proxy, {
       brightness: dawnPalette.filterBrightness,
       t: 1,
-      duration: TRANSITION.dawnFadeInDuration,
+      duration: 1.2,
       onUpdate: () => {
         this.currentBrightness = proxy.brightness
         this.tintFilter.brightness(this.currentBrightness, false)
@@ -478,32 +475,32 @@ export class DayNightCycle {
     this.elapsed += dt
 
     // Star twinkle — alpha-only updates, no Graphics rebuild
-    if (this.starContainer.alpha > THRESHOLD.visibilityMin) {
+    if (this.starContainer.alpha > 0.01) {
       for (const star of this.starObjects) {
-        const twinkle = 0.5 + 0.5 * Math.sin(this.elapsed * ANIMATION.starTwinkleSpeed + star.phase)
+        const twinkle = 0.5 + 0.5 * Math.sin(this.elapsed * 1.5 + star.phase)
         star.gfx.alpha = star.baseAlpha * twinkle
       }
     }
 
-    // Corona ray shimmer — redraw individual ray Graphics
-    if (this.coronaRayObjects.length > 0 && this.sunContainer.alpha > THRESHOLD.visibilityMin) {
-      const color = this.sunGlowColorNum
+    // Corona ray shimmer — redraw individual ray Graphics (8 tiny objects)
+    if (this.coronaRayObjects.length > 0 && this.sunContainer.alpha > 0.01) {
+      const color = hexToNum(this.palette.sunGlowColor)
       for (let i = 0; i < this.coronaRayObjects.length; i++) {
         const ray = this.coronaRayObjects[i]
-        const shimmer = Math.sin(this.elapsed * ANIMATION.coronaShimmerSpeed + i * ANIMATION.coronaPhaseStep) * ANIMATION.coronaShimmerAmplitude
-        this.drawSingleRay(ray.gfx, ray.angle, SUN.rayOuterRadius + shimmer, color)
+        const shimmer = Math.sin(this.elapsed * 2 + i * 1.3) * 4
+        this.drawSingleRay(ray.gfx, ray.angle, 22 + shimmer, color)
       }
     }
 
     // Digital orb pulse
-    if (this.digitalOrb && this.sunContainer.alpha > THRESHOLD.visibilityMin) {
-      this.digitalOrb.alpha = ANIMATION.digitalPulseMin + ANIMATION.digitalPulseRange * Math.sin(this.elapsed * ANIMATION.digitalPulseSpeed)
+    if (this.digitalOrb && this.sunContainer.alpha > 0.01) {
+      this.digitalOrb.alpha = 0.7 + 0.3 * Math.sin(this.elapsed * 3)
     }
 
     // Demo mode auto-cycling
     if (this.isDemoMode) {
       this.demoTimer += dt
-      if (this.demoTimer > DEMO.intervalSeconds) {
+      if (this.demoTimer > 10) {
         this.demoTimer = 0
         this.demoPhaseIndex = (this.demoPhaseIndex + 1) % this.DEMO_PHASES.length
         this.setPhase(this.DEMO_PHASES[this.demoPhaseIndex])
@@ -540,16 +537,19 @@ export class DayNightCycle {
       this.starObjects[i].gfx.y = seed.ny * this.height
     }
 
-    // Reposition moon if night phase
+    // Reposition moon if night phase (not alpha — alpha may be mid-fade-in)
     if (this.currentPhase === 'night') {
-      this.positionMoonForNight()
+      this.moonContainer.x = this.width * 0.5
+      this.moonContainer.y = this.height * 0.15
     }
   }
 
   destroy(): void {
+    // Kill all tracked GSAP tweens
     this.killActiveTweens()
     this.arcTween?.kill()
 
+    // Kill any remaining tweens on display objects
     gsap.killTweensOf(this.sunContainer)
     gsap.killTweensOf(this.moonContainer)
     gsap.killTweensOf(this.starContainer)
