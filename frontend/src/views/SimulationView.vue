@@ -299,6 +299,16 @@ onMounted(async () => {
   await initExperiment()
   await nextTick()
   wireTurnHandlers()
+
+  // Replay current phase into PixiWorld after mount.
+  // A phase_change WS message may have arrived before PixiWorld existed,
+  // setting experimentStore.currentPhase while pixiWorldRef was still null.
+  // The watcher would have silently no-op'd, so we replay here.
+  // TODO: backend should expose current_phase in ExperimentDetail / WS connect
+  // payload so reconnects can fully hydrate without waiting for the next transition.
+  if (experimentStore.currentPhase) {
+    pixiWorldRef.value?.setPhase(experimentStore.currentPhase)
+  }
 })
 
 onUnmounted(() => {
