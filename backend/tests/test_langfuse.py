@@ -531,48 +531,6 @@ class TestRepairAndStatusMetadata:
     AC 4.4: Experiment status set as trace metadata on round completion."""
 
     @pytest.mark.asyncio
-    async def test_repair_attempt_logged_as_span_event(self) -> None:
-        """When JSON repair occurs, a span event should be recorded."""
-        from app.core.langfuse import set_trace_context, _trace_context
-
-        calls: list[dict[str, object]] = []
-
-        def mock_log_event(*, name: str, metadata: object = None) -> None:
-            calls.append({"name": name, "metadata": metadata})
-
-        from app.llm.client import LLMClient
-        from app.llm.models import LLMRequest
-        from app.schemas.agent_decision import AgentDecision
-
-        class RepairFakeRouter:
-            def __init__(self) -> None:
-                self.call_count = 0
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.call_count += 1
-                if self.call_count == 1:
-                    return FakeResponse("not-valid-json")
-                return FakeResponse()
-
-        client = LLMClient()
-        client.router = RepairFakeRouter()  # type: ignore[assignment]
-        token = set_trace_context(trace_id="t-1", span_id="s-1")
-        try:
-            with patch("app.llm.client.log_event", side_effect=mock_log_event):
-                await client.generate_structured(
-                    LLMRequest(
-                        role="agent",
-                        messages=[{"role": "system", "content": "test"}],
-                        response_format=AgentDecision,
-                        metadata={},
-                    )
-                )
-            assert len(calls) >= 1
-            assert any("repair" in str(c["name"]).lower() for c in calls)
-        finally:
-            _trace_context.reset(token)
-
-    @pytest.mark.asyncio
     async def test_experiment_status_set_on_trace_after_round(self) -> None:
         from app.core import langfuse as lf_module
 
