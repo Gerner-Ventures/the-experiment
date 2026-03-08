@@ -395,7 +395,11 @@ Relationship state is stored per agent in `relationships` and is updated through
 
 ## Websocket Flow
 
-`ExperimentRuntime.broadcast_round()` emits the runtime state to the frontend over websockets.
+`ExperimentRuntime` emits websocket updates through a shared `RoundHook` path wired into
+`SimulationEngine.run_round(..., hook=...)`.
+
+Both the synchronous `step()` path and the background `start_step()` path now stream the same
+message sequence during a round, then finish with the same final state sync.
 
 Core messages include:
 
@@ -410,7 +414,6 @@ Core messages include:
 - `meeting_vote`
 - `meeting_result`
 - `agent_action`
-- `agent_move`
 - `resource_update`
 - `threat_update`
 - `round_end`

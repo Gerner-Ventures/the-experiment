@@ -251,13 +251,11 @@ describe('agentStore', () => {
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'ghost', action: 'talk', summary: '' } }))
       expect(store.agentCount).toBe(2)
     })
-  })
 
-  describe('onMove', () => {
-    it('updates agent location and sets status to moving', () => {
+    it('updates agent location from structured move actions', () => {
       const store = useAgentStore()
       store.setAgents(sampleAgents)
-      store.onMove(makeMsg({ type: 'agent_move', data: { agent_id: 'a1', location: 'beach' } }))
+      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'move', location: 'beach' }, summary: '' } }))
       const agent = store.getAgent('a1')!
       expect(agent.location).toBe('beach')
       expect(agent.status).toBe('moving')
@@ -269,7 +267,7 @@ describe('agentStore', () => {
       const store = useAgentStore()
       store.setAgents(sampleAgents)
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: 'talk', summary: '' } }))
-      store.onMove(makeMsg({ type: 'agent_move', data: { agent_id: 'a2', location: 'forest' } }))
+      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a2', action: { type: 'move', location: 'forest' }, summary: '' } }))
       store.resetStatuses()
       expect(store.getAgent('a1')!.status).toBe('idle')
       expect(store.getAgent('a2')!.status).toBe('idle')
