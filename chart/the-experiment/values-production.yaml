@@ -40,6 +40,8 @@ secrets:
     existingSecret: the-experiment-litellm
   posthog:
     existingSecret: the-experiment-posthog
+  elevenlabs:
+    existingSecret: the-experiment-elevenlabs
   langfuse:
     existingSecret: the-experiment-langfuse
 

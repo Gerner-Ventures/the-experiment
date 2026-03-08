@@ -144,6 +144,14 @@ Secret name helpers
 {{- end -}}
 {{- end }}
 
+{{- define "the-experiment.elevenlabsSecretName" -}}
+{{- if .Values.secrets.elevenlabs.existingSecret -}}
+{{ .Values.secrets.elevenlabs.existingSecret }}
+{{- else -}}
+{{ include "the-experiment.fullname" . }}-elevenlabs
+{{- end -}}
+{{- end }}
+
 {{- define "the-experiment.langfuseSecretName" -}}
 {{- if .Values.secrets.langfuse.existingSecret -}}
 {{ .Values.secrets.langfuse.existingSecret }}

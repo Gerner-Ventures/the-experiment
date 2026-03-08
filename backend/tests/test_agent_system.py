@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -160,6 +161,19 @@ class _FailingMemoryConsolidationLLMService(_StubMemoryLLMService):
         raise RuntimeError("memory consolidation unavailable")
 
 
+class _FailingDecisionLLMService(LLMService):
+    async def generate_agent_decision(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        response_format: dict[str, object] | type[Any],
+        metadata: dict[str, object] | None = None,
+        model_override: str | None = None,
+        max_tokens: int | None = None,
+    ):
+        raise RuntimeError("llm unavailable")
+
+
 def _context() -> AgentContext:
     return AgentContext(
         agent_id="agent-1",
@@ -301,6 +315,23 @@ async def test_decide_uses_agent_decision_token_cap() -> None:
     await brain.decide(_context())
 
     assert service.last_max_tokens == AGENT_DECISION_MAX_TOKENS
+
+
+@pytest.mark.asyncio
+async def test_agent_brain_returns_observe_fallback_and_logs_warning_on_llm_failure() -> None:
+    brain = AgentBrain(llm_service=_FailingDecisionLLMService())
+
+    with patch("app.agents.brain.logger.warning") as warning:
+        result = await brain.decide(_context())
+
+    assert result.decision.action.type == "observe"
+    assert result.decision.action.location == "bar"
+    assert result.decision.inner_thought == "I need a moment to read the room."
+    assert result.decision.goal_progress == "No clear progress this turn."
+    assert result.decision.cooperation_intent == "medium"
+    warning.assert_called_once()
+    assert warning.call_args.kwargs["exc_info"] is True
+    assert "fallback observe action" in warning.call_args.args[0]
 
 
 @pytest.mark.asyncio

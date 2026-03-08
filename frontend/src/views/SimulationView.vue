@@ -324,8 +324,8 @@ function goBack() {
     <!-- PixiJS World -->
     <div class="flex-1 relative">
       <PixiWorld
-        ref="pixiWorldRef"
         v-if="ready && (experimentCreated || isDemo)"
+        ref="pixiWorldRef"
         :theme="theme"
         :map-data="DEFAULT_TOWN"
         :agents="agentStore.agentConfigs"
