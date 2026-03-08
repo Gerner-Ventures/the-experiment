@@ -588,3 +588,87 @@ async def test_multiple_utterances_per_round_get_distinct_indices() -> None:
     assert agent_entries[1]["index"] == 1
     assert agent_entries[0]["text"] == "First utterance."
     assert agent_entries[1]["text"] == "Second utterance."
+
+
+# ---------- Reconstruction from persisted logs after restart ----------
+
+
+@pytest.mark.asyncio
+async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> None:
+    """After a process restart the in-memory speech log is empty.
+
+    _find_agent_speech_entry should fall back to the persisted event log
+    and reconstruct the entry so /agents/{id}/speech* endpoints still work.
+    """
+    from app.api.models import EventLogItem
+
+    store = InMemoryExperimentStore()
+    runtime = ExperimentRuntime(store=store, tts_service=_tts_service())
+    runtime.connection_manager.broadcast = AsyncMock()
+    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+
+    state = await runtime.create_experiment(_request())
+    eid = state.experiment_id
+    agent = state.agents[0]
+
+    # Simulate persisted event log entries (as _log_round_result would create)
+    await store.append_log(
+        EventLogItem(
+            id="evt-1",
+            experiment_id=eid,
+            round_number=1,
+            phase="morning",
+            type="morning",
+            summary="Mara speaks.",
+            data={
+                "kind": "agent_speak",
+                "agent_id": agent.agent_id,
+                "agent_name": agent.name,
+                "target": "all",
+                "message": "First line.",
+            },
+            timestamp="2026-01-01T00:00:00Z",
+        )
+    )
+    await store.append_log(
+        EventLogItem(
+            id="evt-2",
+            experiment_id=eid,
+            round_number=1,
+            phase="morning",
+            type="morning",
+            summary="Mara speaks again.",
+            data={
+                "kind": "agent_speak",
+                "agent_id": agent.agent_id,
+                "agent_name": agent.name,
+                "target": "all",
+                "message": "Second line.",
+            },
+            timestamp="2026-01-01T00:01:00Z",
+        )
+    )
+
+    # In-memory speech log is empty (simulates process restart)
+    assert len(runtime._agent_speech_log.get(eid, [])) == 0
+
+    # Should reconstruct from persisted logs
+    entry = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 0)
+    assert entry is not None
+    assert entry["text"] == "First line."
+    assert entry["agent_id"] == agent.agent_id
+    assert entry["index"] == 0
+    assert entry["character_id"] == agent.character_id
+
+    # Second utterance
+    entry2 = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 1)
+    assert entry2 is not None
+    assert entry2["text"] == "Second line."
+    assert entry2["index"] == 1
+
+    # After reconstruction, entries should be cached in memory
+    assert len(runtime._agent_speech_log[eid]) == 2
+
+    # Non-existent index returns None
+    entry_missing = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 5)
+    assert entry_missing is None

@@ -48,9 +48,12 @@ function tryPlay() {
         autoplayBlocked.value = false
       })
       .catch(() => {
-        // Autoplay blocked by browser
         autoplayBlocked.value = true
         isPlaying.value = false
+        // Arm fallback dismiss timer so blocked bubbles don't live forever
+        if (!fadeTimer) {
+          fadeTimer = setTimeout(dismiss, AUTO_DISMISS_MS)
+        }
       })
   }
 }
@@ -63,12 +66,13 @@ function handleTapToPlay() {
 function onAudioEnded() {
   isPlaying.value = false
   emit('audioEnd')
+  dismiss()
 }
 
 function onAudioError() {
   isPlaying.value = false
-  // Audio failure should not break the bubble — just emit audioEnd so pacing advances
   emit('audioEnd')
+  dismiss()
 }
 
 function stopAudio() {

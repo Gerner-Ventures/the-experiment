@@ -1020,13 +1020,14 @@ class ExperimentRuntime:
         )
         return result.content_type, result.stream
 
-    def _find_agent_speech_entry(
+    async def _find_agent_speech_entry(
         self,
         experiment_id: str,
         agent_id: str,
         round_number: int,
         index: int,
     ) -> AgentSpeechEntry | None:
+        # Fast path: check in-memory log first
         for entry in self._agent_speech_log.get(experiment_id, []):
             if (
                 entry["agent_id"] == agent_id
@@ -1034,6 +1035,45 @@ class ExperimentRuntime:
                 and entry["index"] == index
             ):
                 return entry
+
+        # Slow path: reconstruct from persisted event log (survives process restart)
+        logs = await self.store.list_logs(experiment_id)
+        # Build a character_id lookup from current state
+        character_map: dict[str, str] = {}
+        try:
+            state = await self.get_state(experiment_id)
+            for agent in state.agents:
+                character_map[agent.agent_id] = agent.character_id or ""
+        except KeyError:
+            pass
+
+        # Walk persisted logs to find agent_speak events for the target round,
+        # computing per-agent indexes as we go.
+        agent_round_counts: dict[str, int] = {}
+        for item in logs:
+            if item.round_number != round_number:
+                continue
+            if item.data.get("kind") != "agent_speak":
+                continue
+            ev_agent_id = str(item.data.get("agent_id", ""))
+            message_text = str(item.data.get("message", ""))
+            if not ev_agent_id or not message_text.strip():
+                continue
+            count_key = ev_agent_id
+            current_index = agent_round_counts.get(count_key, 0)
+            if ev_agent_id == agent_id and current_index == index:
+                entry: AgentSpeechEntry = {
+                    "agent_id": ev_agent_id,
+                    "character_id": character_map.get(ev_agent_id, ""),
+                    "round_number": round_number,
+                    "index": current_index,
+                    "text": message_text,
+                }
+                # Backfill in-memory cache so subsequent lookups are fast
+                self._agent_speech_log[experiment_id].append(entry)
+                return entry
+            agent_round_counts[count_key] = current_index + 1
+
         return None
 
     async def get_agent_speech_metadata(
@@ -1044,7 +1084,7 @@ class ExperimentRuntime:
         index: int,
     ) -> AgentSpeechAudioMetadata:
         await self.get_state(experiment_id)  # raises KeyError if not found
-        entry = self._find_agent_speech_entry(experiment_id, agent_id, round_number, index)
+        entry = await self._find_agent_speech_entry(experiment_id, agent_id, round_number, index)
         if entry is None:
             raise KeyError(
                 f"No speech entry for agent {agent_id} round {round_number} index {index}"
@@ -1094,7 +1134,7 @@ class ExperimentRuntime:
         round_number: int,
         index: int,
     ) -> tuple[str, AsyncIterator[bytes]]:
-        entry = self._find_agent_speech_entry(experiment_id, agent_id, round_number, index)
+        entry = await self._find_agent_speech_entry(experiment_id, agent_id, round_number, index)
         if entry is None:
             raise KeyError(
                 f"No speech entry for agent {agent_id} round {round_number} index {index}"
@@ -1123,51 +1163,29 @@ class ExperimentRuntime:
         experiment_id: str,
         round_number: int,
         phase_result: PhaseResult,
-        agents: list[EngineAgentState],
+        entries_to_prewarm: list[AgentSpeechEntry],
     ) -> None:
-        """Pregenerate TTS audio for all agent_speak events in a phase result."""
+        """Pregenerate TTS audio for the given speech entries."""
         if self.tts_service is None or not self.tts_service.configured:
-            # Broadcast unavailable status for all speech events
-            for event in phase_result.events:
-                kind = str(event.data.get("kind", ""))
-                if kind != "agent_speak":
-                    continue
-                agent_id = str(event.data.get("agent_id", ""))
-                entries = [
-                    e
-                    for e in self._agent_speech_log.get(experiment_id, [])
-                    if e["agent_id"] == agent_id and e["round_number"] == round_number
-                ]
-                for entry in entries:
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "agent_speech_audio",
-                            round_number=round_number,
-                            phase=phase_result.phase,
-                            data={
-                                "agent_id": agent_id,
-                                "round": round_number,
-                                "index": entry["index"],
-                                "status": "unavailable",
-                                "audio_url": None,
-                            },
-                        ),
-                    )
+            for entry in entries_to_prewarm:
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "agent_speech_audio",
+                        round_number=round_number,
+                        phase=phase_result.phase,
+                        data={
+                            "agent_id": entry["agent_id"],
+                            "round": round_number,
+                            "index": entry["index"],
+                            "status": "unavailable",
+                            "audio_url": None,
+                        },
+                    ),
+                )
             return
 
         tts_service = self.tts_service
-
-        # Collect speech entries to prewarm
-        entries_to_prewarm: list[AgentSpeechEntry] = []
-        for event in phase_result.events:
-            kind = str(event.data.get("kind", ""))
-            if kind != "agent_speak":
-                continue
-            agent_id = str(event.data.get("agent_id", ""))
-            for entry in self._agent_speech_log.get(experiment_id, []):
-                if entry["agent_id"] == agent_id and entry["round_number"] == round_number:
-                    entries_to_prewarm.append(entry)
 
         if not entries_to_prewarm:
             return
@@ -2011,7 +2029,7 @@ class _StreamingHook:
         # experiment store.  The individual typed messages below (agent_speak,
         # meeting_start, etc.) are consumed by dedicated UI components that
         # subscribe to specific WS message types.  Both are intentional.
-        has_speech = False
+        new_speech_entries: list[AgentSpeechEntry] = []
         for event in phase_result.events:
             msg_type = _phase_event_ws_type(event)
             if msg_type:
@@ -2028,7 +2046,6 @@ class _StreamingHook:
             # Record agent speech entries for TTS pregeneration
             event_kind = str(event.data.get("kind", ""))
             if event_kind == "agent_speak":
-                has_speech = True
                 agent_id = str(event.data.get("agent_id", ""))
                 message_text = str(event.data.get("message", ""))
                 if agent_id and message_text.strip():
@@ -2057,16 +2074,13 @@ class _StreamingHook:
                         "text": message_text,
                     }
                     self._runtime._agent_speech_log[eid].append(entry)
+                    new_speech_entries.append(entry)
 
-        # Kick off TTS pregeneration for agent speech concurrently
-        if has_speech:
-            try:
-                state = await self._runtime.get_state(eid)
-                await self._runtime._prepare_agent_speech_audio(
-                    eid, round_number, phase_result, state.agents
-                )
-            except KeyError:
-                pass
+        # Kick off TTS pregeneration only for the entries created in this phase
+        if new_speech_entries:
+            await self._runtime._prepare_agent_speech_audio(
+                eid, round_number, phase_result, new_speech_entries
+            )
 
     async def on_agent_action(
         self,
