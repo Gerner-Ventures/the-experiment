@@ -127,6 +127,7 @@ config:
   llmMaxRetries: ""
   llmMaxFallbacks: ""
   llmDefaultTemperature: ""
+  posthogOtlpEndpoint: ""
 
 ## @section Service parameters
 service:

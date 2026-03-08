@@ -47,6 +47,9 @@ data:
   {{- if .Values.config.llmDefaultTemperature }}
   LLM_DEFAULT_TEMPERATURE: {{ .Values.config.llmDefaultTemperature | quote }}
   {{- end }}
+  {{- if .Values.config.posthogOtlpEndpoint }}
+  POSTHOG_OTLP_ENDPOINT: {{ .Values.config.posthogOtlpEndpoint | quote }}
+  {{- end }}
   {{- if .Values.postgres.enabled }}
   DATABASE_URL: {{ include "the-experiment.postgresUrl" . | quote }}
   {{- end }}

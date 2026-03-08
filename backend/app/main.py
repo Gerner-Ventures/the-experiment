@@ -14,7 +14,7 @@ from app.core import langfuse as lf
 from app.core import posthog as ph
 from app.core.config import Settings, get_settings
 from app.core.runtime_factory import build_runtime
-from app.logging import setup_logging
+from app.logging import setup_logging, shutdown_logging
 
 setup_logging()
 
@@ -54,6 +54,7 @@ def create_app(
         yield
         if db_engine is not None:
             await db_engine.dispose()
+        shutdown_logging()
         lf.shutdown()
         ph.shutdown()
 
