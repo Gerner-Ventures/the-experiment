@@ -12,7 +12,7 @@ import type { AgentConfig } from '@/types/agent'
 import {
   PERSONALITY_TRAIT_KEYS, GOAL_PRESET_KEYS,
   MAX_PERSONALITY_TRAITS, MIN_AGENTS, MAX_AGENTS, DEFAULT_LLM_MODEL,
-  DEFAULT_PERSONALITY_AXES, GOAL_ARCHETYPE_MAP,
+  DEFAULT_PERSONALITY_AXES, DEFAULT_TRAIT_PAIRS, GOAL_ARCHETYPE_MAP,
   getTraitLabel, getGoalPreset,
   type PersonalityTrait,
 } from '@/config/agent-options'
@@ -58,13 +58,12 @@ function addAgent() {
   const nextChar = CHARACTERS.find(c => !used.has(c.id)) ?? CHARACTERS[0]
   const agentIndex = agents.value.length
   const goalKey = GOAL_PRESET_KEYS[agentIndex % GOAL_PRESET_KEYS.length]
-  const traitPairs: [number, number][] = [[0,14],[1,7],[2,4],[3,11],[5,12],[6,16]]
-  const [t1, t2] = traitPairs[agentIndex % traitPairs.length]
+  const [trait1, trait2] = DEFAULT_TRAIT_PAIRS[agentIndex % DEFAULT_TRAIT_PAIRS.length]
   agents.value.push({
     id: nextId,
     name: nextChar.name,
     characterId: nextChar.id,
-    personality: [PERSONALITY_TRAIT_KEYS[t1], PERSONALITY_TRAIT_KEYS[t2]],
+    personality: [trait1, trait2],
     personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
     secretGoal: getGoalPreset(goalKey).goal,
     goalArchetype: GOAL_ARCHETYPE_MAP[goalKey],
