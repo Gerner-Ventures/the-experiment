@@ -23,6 +23,8 @@ class GMService:
                 metadata={
                     "experiment_id": context.experiment_id,
                     "round_number": context.round_number,
+                    "generation_name": "gm-plan",
+                    "tags": ["role:gm"],
                 },
                 model_override=None,
             )

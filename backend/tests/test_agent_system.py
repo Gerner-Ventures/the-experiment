@@ -102,6 +102,9 @@ class _StubMemoryLLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryPromotionDecision:
         self.classify_calls += 1
         return self._decision
@@ -113,6 +116,9 @@ class _StubMemoryLLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         return self._consolidation
 
@@ -123,6 +129,10 @@ class _StubMemoryLLMService:
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        round_number: int | None = None,
     ) -> RelationshipConsolidationDecision:
         self.relationship_consolidation_calls += 1
         return self._relationship_consolidation
@@ -136,6 +146,9 @@ class _FailingMemoryConsolidationLLMService(_StubMemoryLLMService):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         raise RuntimeError("memory consolidation unavailable")
 

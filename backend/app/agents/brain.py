@@ -67,7 +67,13 @@ class AgentBrain:
                 metadata={
                     "experiment_id": context.experiment_id,
                     "agent_id": context.agent_id,
+                    "agent_name": context.name,
                     "round_number": context.world_state.round_number,
+                    "generation_name": f"agent:{context.name}",
+                    "tags": [
+                        "role:agent",
+                        f"archetype:{context.goal.archetype}",
+                    ],
                 },
                 model_override=None,
             )

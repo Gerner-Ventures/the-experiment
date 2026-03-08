@@ -482,6 +482,7 @@ class SimulationEngine:
                     cooperation_ratio=cooperation_ratio,
                     trace=trace,
                     night_span=night_span,
+                    experiment_id=state.experiment_id,
                 )
                 for agent in active_agents
             ]
@@ -511,6 +512,7 @@ class SimulationEngine:
         cooperation_ratio: float,
         trace: object = None,
         night_span: object = None,
+        experiment_id: str | None = None,
     ) -> tuple[str, AgentMemoryState]:
         memory_span = lf.span(
             name=f"memory:{agent.name}",
@@ -532,16 +534,26 @@ class SimulationEngine:
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
             classify=False,
+            experiment_id=experiment_id,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
         )
         updated_memory = await self.agent_service.consolidate_memory(
             updated_memory,
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
+            experiment_id=experiment_id,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
         )
         updated_memory = await self.agent_service.consolidate_relationship_memory(
             updated_memory,
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
+            experiment_id=experiment_id,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
+            round_number=round_number,
         )
         return reflection, updated_memory
 

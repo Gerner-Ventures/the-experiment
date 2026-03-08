@@ -38,6 +38,7 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
+                generation_name=(metadata or {}).get("generation_name"),
             )
         )
 
@@ -56,6 +57,7 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
+                generation_name=(metadata or {}).get("generation_name"),
             )
         )
 
@@ -79,6 +81,9 @@ class LLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryPromotionDecision:
         result = await self.client.generate_structured(
             LLMRequest(
@@ -108,7 +113,14 @@ class LLMService:
                     },
                 ],
                 response_format=MemoryPromotionDecision,
-                metadata={"memory_classifier": True, "round_number": event.round_number},
+                metadata={
+                    "memory_classifier": True,
+                    "round_number": event.round_number,
+                    "experiment_id": experiment_id or "",
+                    "agent_id": agent_id or "",
+                    "agent_name": agent_name or "",
+                },
+                generation_name=f"memory:classify:{agent_name}" if agent_name else "memory:classify",
             )
         )
         return MemoryPromotionDecision.model_validate(
@@ -122,6 +134,9 @@ class LLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         result = await self.client.generate_structured(
             LLMRequest(
@@ -154,7 +169,11 @@ class LLMService:
                 metadata={
                     "memory_consolidator": True,
                     "round_number": max((event.round_number for event in events), default=0),
+                    "experiment_id": experiment_id or "",
+                    "agent_id": agent_id or "",
+                    "agent_name": agent_name or "",
                 },
+                generation_name=f"memory:consolidate:{agent_name}" if agent_name else "memory:consolidate",
             )
         )
         return MemoryConsolidationDecision.model_validate(
@@ -168,6 +187,10 @@ class LLMService:
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        round_number: int | None = None,
     ) -> RelationshipConsolidationDecision:
         result = await self.client.generate_structured(
             LLMRequest(
@@ -194,7 +217,14 @@ class LLMService:
                     },
                 ],
                 response_format=RelationshipConsolidationDecision,
-                metadata={"relationship_consolidator": True},
+                metadata={
+                    "relationship_consolidator": True,
+                    "round_number": round_number or 0,
+                    "experiment_id": experiment_id or "",
+                    "agent_id": agent_id or "",
+                    "agent_name": agent_name or "",
+                },
+                generation_name=f"memory:relationship:{agent_name}" if agent_name else "memory:relationship",
             )
         )
         return RelationshipConsolidationDecision.model_validate(
