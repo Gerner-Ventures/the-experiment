@@ -93,6 +93,32 @@ class NarrationTTSService:
     def build_audio_url(self, experiment_id: str, round_number: int) -> str:
         return f"/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio"
 
+    def build_speech_request(
+        self,
+        *,
+        experiment_id: str,
+        round_number: int,
+        text: str,
+        character_id: str,
+    ) -> NarrationAudioRequest:
+        return NarrationAudioRequest(
+            experiment_id=experiment_id,
+            round_number=round_number,
+            text=text,
+            voice_id=self.voice_id_for_character(character_id),
+            model_id=self.model_id,
+            output_format=self.output_format,
+            voice_settings=self._voice_settings(),
+        )
+
+    def build_speech_audio_url(
+        self, experiment_id: str, agent_id: str, round_number: int, index: int
+    ) -> str:
+        return (
+            f"/api/experiments/{experiment_id}/agents/{agent_id}"
+            f"/speech/audio?round={round_number}&index={index}"
+        )
+
     def voice_id_for_character(self, character_id: str) -> str:
         voice_id = CHARACTER_VOICE_IDS.get(character_id)
         if isinstance(voice_id, str) and voice_id.strip():
