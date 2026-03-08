@@ -171,8 +171,16 @@ async def test_structured_generation_retries_on_parse_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_structured_generation_raises_after_retry_exhausted() -> None:
-    """When both attempts fail to parse, raise ValueError."""
+async def test_structured_generation_raises_after_retry_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When both attempts fail to parse, raise ValueError and capture PostHog event."""
+    captured_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "app.llm.client.ph.capture",
+        lambda event, properties: captured_events.append((event, properties)),
+    )
+
     broken1 = _FakeResponse("openai/gpt-4o-mini", "not-json-1")
     broken2 = _FakeResponse("openai/gpt-4o-mini", "not-json-2")
     client = LLMClient()
@@ -189,6 +197,13 @@ async def test_structured_generation_raises_after_retry_exhausted() -> None:
         )
 
     assert len(fake_router.calls) == 2
+
+    assert len(captured_events) == 1
+    event_name, props = captured_events[0]
+    assert event_name == "llm_parse_failure"
+    assert "finish_reason" in props
+    assert "completion_tokens" in props
+    assert "max_tokens_requested" in props
 
 
 def test_agent_decision_rejects_invalid_cooperation_intent() -> None:
