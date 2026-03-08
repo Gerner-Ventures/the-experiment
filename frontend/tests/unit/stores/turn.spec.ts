@@ -47,7 +47,7 @@ describe('useTurnStore', () => {
     expect(store.isProcessing).toBe(true)
   })
 
-  it('skips action phase for move/rest/observe/explore', () => {
+  it('skips action phase for move/rest/explore', () => {
     const store = useTurnStore()
     const handlers = createMockHandlers()
     store.setHandlers(handlers)
@@ -89,7 +89,7 @@ describe('useTurnStore', () => {
     expect(store.phase).toBe('acting') // still waiting for min duration
 
     // Floor timer expires
-    jest.advanceTimersByTime(800)
+    jest.advanceTimersByTime(1500)
     expect(store.phase).toBe('talking')
   })
 
@@ -105,7 +105,7 @@ describe('useTurnStore', () => {
     })
 
     // After acting phase completes (instant mock + 800ms floor)
-    jest.advanceTimersByTime(800)
+    jest.advanceTimersByTime(1500)
     expect(store.phase).toBe('hud-only')
 
     // After HUD timer

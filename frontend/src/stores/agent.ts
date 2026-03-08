@@ -2,11 +2,9 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
 import type { WSMessage } from '@/types/websocket'
-import { useUIStore } from '@/stores/ui'
-import { useLocale } from '@/locales'
+import { useTurnStore } from '@/stores/turn'
 
 export const useAgentStore = defineStore('agent', () => {
-  const locale = useLocale()
   const agents = ref<Map<string, Agent>>(new Map())
 
   const agentList = computed(() => Array.from(agents.value.values()))
@@ -45,6 +43,11 @@ export const useAgentStore = defineStore('agent', () => {
     return agents.value.get(id)
   }
 
+  /**
+   * Handle agent_action WS message.
+   * Parses the action and enqueues a turn — all side effects (movement, bubbles, HUD)
+   * are handled by the turn store in sequence.
+   */
   function onAction(msg: WSMessage) {
     const data = msg.data as {
       agent_id: string
@@ -67,17 +70,36 @@ export const useAgentStore = defineStore('agent', () => {
       agent.status = actionToStatus(actionType)
     }
     const agentName = data.agent_name ?? agent?.name ?? 'Agent'
-    useUIStore().setSteppingStatus(
-      locale.hud.steppingAgent
-        .replace('{name}', agentName)
-        .replace('{action}', actionType),
-    )
+
+    // Extract target location from action (turn store decides if movement is needed at processing time)
+    const targetLocation = typeof data.action === 'object'
+      ? (data.action.location as string | undefined)
+      : undefined
+
+    console.debug(`[AgentStore] onAction: ${agentName} → ${actionType}${targetLocation ? ` @ ${targetLocation}` : ''}`)
+
+    // Enqueue in the turn store — it handles movement, bubbles, and HUD in sequence
+    useTurnStore().enqueue({
+      agentId: data.agent_id,
+      agentName,
+      actionType,
+      targetLocation,
+      thought: data.inner_thought,
+    })
   }
 
   function onAgentUpdate(agentId: string, updates: Partial<Agent>) {
     const agent = agents.value.get(agentId)
     if (agent) {
       Object.assign(agent, updates)
+    }
+  }
+
+  function updateAgentStatus(agentId: string, status: AgentStatus, location?: string) {
+    const agent = agents.value.get(agentId)
+    if (agent) {
+      agent.status = status
+      if (location) agent.location = location
     }
   }
 
@@ -93,14 +115,14 @@ export const useAgentStore = defineStore('agent', () => {
 
   return {
     agents, agentList, agentConfigs, agentCount,
-    setAgents, getAgent, onAction, onAgentUpdate, updateAgentFromDossier, resetStatuses,
+    setAgents, getAgent, onAction, onAgentUpdate, updateAgentFromDossier,
+    updateAgentStatus, resetStatuses,
     $reset,
   }
 })
 
 /** Parse agent data from backend (snake_case) or legacy (camelCase) */
 function parseAgent(a: Record<string, unknown>): Agent {
-  // Handle both snake_case (backend) and camelCase (legacy)
   const personality = a.personality as Record<string, unknown> | undefined
   const goal = a.goal as Record<string, unknown> | undefined
 

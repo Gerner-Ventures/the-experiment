@@ -1,7 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-export type ActivePanel = 'none' | 'dossier' | 'log' | 'gm-plan' | 'meeting'
+export type ActivePanel = 'none' | 'dossier' | 'log' | 'gm-plan' | 'meeting' | 'relationship-web'
+
+export const PANELS = {
+  NONE: 'none' as const,
+  DOSSIER: 'dossier' as const,
+  LOG: 'log' as const,
+  GM_PLAN: 'gm-plan' as const,
+  MEETING: 'meeting' as const,
+  RELATIONSHIP_WEB: 'relationship-web' as const,
+} satisfies Record<string, ActivePanel>
 
 export const useUIStore = defineStore('ui', () => {
   const selectedAgentId = ref<string | null>(null)
@@ -38,6 +47,10 @@ export const useUIStore = defineStore('ui', () => {
     playbackSpeed.value = speed
   }
 
+  function setPlaying(value: boolean) {
+    isPlaying.value = value
+  }
+
   function togglePlaying() {
     isPlaying.value = !isPlaying.value
   }
@@ -71,7 +84,7 @@ export const useUIStore = defineStore('ui', () => {
     isStepping, steppingStatus,
     hasSelectedAgent,
     selectAgent, deselectAgent, setPanel, togglePanel,
-    setPlaybackSpeed, togglePlaying,
+    setPlaybackSpeed, setPlaying, togglePlaying,
     setSteppingStatus, clearStepping, startStepping,
     $reset,
   }

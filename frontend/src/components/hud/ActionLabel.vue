@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
+import { useLocale } from '@/locales'
+
+const locale = useLocale()
 
 const props = defineProps<{
   actionType: string
@@ -8,6 +11,11 @@ const props = defineProps<{
 }>()
 
 const isAggressive = computed(() => AGGRESSIVE_ACTIONS.has(props.actionType))
+
+const label = computed(() => {
+  const actions = locale.actions as Record<string, string>
+  return actions[props.actionType] ?? props.actionType.toUpperCase()
+})
 </script>
 
 <template>
@@ -19,7 +27,7 @@ const isAggressive = computed(() => AGGRESSIVE_ACTIONS.has(props.actionType))
       top: `${position.y - 60}px`,
     }"
   >
-    {{ actionType.toUpperCase() }}
+    {{ label }}
   </div>
 </template>
 

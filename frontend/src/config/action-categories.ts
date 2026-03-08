@@ -4,4 +4,4 @@ export const AGGRESSIVE_ACTIONS = new Set([
 ])
 
 /** Actions that skip the acting phase (animation redundant with idle/movement) */
-export const SKIP_ACTION_PHASE = new Set(['move', 'rest', 'observe', 'explore'])
+export const SKIP_ACTION_PHASE = new Set(['move', 'rest', 'explore'])

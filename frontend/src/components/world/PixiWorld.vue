@@ -3,6 +3,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import type { MapTheme, MapData } from '@/types/world'
 import type { AgentConfig } from '@/types/agent'
 import { usePixiWorld } from '@/composables/usePixiWorld'
+import { usePathfinding } from '@/composables/usePathfinding'
 import { getSpriteById } from '@/config/character-sprites'
 
 const props = withDefaults(defineProps<{
@@ -20,24 +21,10 @@ const emit = defineEmits<{
 
 const canvasContainer = ref<HTMLElement>()
 const world = usePixiWorld()
+const pathfinding = usePathfinding()
 
-defineExpose({
-  playAction: world.playAction,
-  highlightAgent: world.highlightAgent,
-  clearHighlight: world.clearHighlight,
-  moveAgentTo: world.moveAgentTo,
-  getAgentScreenPosition: world.getAgentScreenPosition,
-  getAgents: world.getAgents,
-})
-
-/** Fisher-Yates shuffle (unbiased) */
-function shuffle<T>(arr: T[]): T[] {
-  const result = [...arr]
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]]
-  }
-  return result
+function moveAgentToLocation(agentId: string, locationId: string, onComplete?: () => void) {
+  pathfinding.moveAgentToLocation(world, agentId, locationId, onComplete)
 }
 
 onMounted(async () => {
@@ -45,18 +32,18 @@ onMounted(async () => {
 
   await world.mount(canvasContainer.value)
   world.loadMap(props.theme, props.mapData)
+  pathfinding.buildIndex(props.mapData)
 
-  // Spawn agents at random walkable tiles (Fisher-Yates shuffle)
-  const walkableTiles = props.mapData.tiles.filter(t => t.walkable && t.tileType !== 'building')
-  const shuffled = shuffle(walkableTiles)
+  // Spawn agents at random walkable tiles (includes buildings)
+  const spawnTiles = pathfinding.getSpawnTiles(props.mapData)
 
   for (let i = 0; i < props.agents.length; i++) {
     const agent = props.agents[i]
-    const tile = shuffled[i % shuffled.length]
+    const tile = spawnTiles[i % spawnTiles.length]
     const sprite = getSpriteById(agent.characterId)
     if (!sprite) continue
 
-    world.spawnAgent(agent.id, agent.name, sprite, { x: tile.x, y: tile.y })
+    world.spawnAgent(agent.id, agent.name, sprite, tile)
   }
 
   // Set up agent click handler
@@ -75,6 +62,21 @@ onMounted(async () => {
 
 onUnmounted(() => {
   world.destroy()
+})
+
+/** Get an agent's current screen position (for positioning bubbles above sprites) */
+function getAgentScreenPosition(agentId: string): { x: number; y: number } | null {
+  return world.getAgentScreenPosition(agentId)
+}
+
+defineExpose({
+  moveAgentToLocation,
+  getAgentScreenPosition,
+  playAction: world.playAction,
+  highlightAgent: world.highlightAgent,
+  clearHighlight: world.clearHighlight,
+  moveAgentTo: world.moveAgentTo,
+  getAgents: world.getAgents,
 })
 </script>
 
