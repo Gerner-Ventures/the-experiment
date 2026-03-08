@@ -241,8 +241,7 @@ function wireTurnHandlers() {
       socialStore.addConversation(agentId, agentName, message)
     },
     getAgentLocation(agentId: string) {
-      const agent = agentStore.agentList.find(a => a.id === agentId)
-      return agent?.location
+      return agentStore.getAgent(agentId)?.location
     },
   })
 }
