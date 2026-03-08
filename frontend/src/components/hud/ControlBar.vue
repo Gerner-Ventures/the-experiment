@@ -6,6 +6,8 @@ import {
   StepForwardOutlined,
   UnorderedListOutlined,
   LoadingOutlined,
+  SoundOutlined,
+  StopOutlined,
 } from '@ant-design/icons-vue'
 import { useLocale } from '@/locales'
 
@@ -17,6 +19,7 @@ defineProps<{
   steppingStatus: string
   isComplete: boolean
   hasExperiment: boolean
+  isMuted: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +27,7 @@ const emit = defineEmits<{
   play: []
   pause: []
   toggleLog: []
+  toggleMute: []
 }>()
 </script>
 
@@ -47,6 +51,21 @@ const emit = defineEmits<{
           @click="emit('toggleLog')"
         >
           <template #icon><UnorderedListOutlined class="!text-white/40" /></template>
+        </Button>
+      </Tooltip>
+
+      <!-- Mute toggle -->
+      <Tooltip :title="isMuted ? locale.social.speech.unmute : locale.social.speech.mute">
+        <Button
+          size="small"
+          shape="circle"
+          class="!border-white/10 !inline-flex !items-center !justify-center"
+          @click="emit('toggleMute')"
+        >
+          <template #icon>
+            <StopOutlined v-if="isMuted" class="!text-white/40" />
+            <SoundOutlined v-else class="!text-white/40" />
+          </template>
         </Button>
       </Tooltip>
 

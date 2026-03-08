@@ -1,23 +1,113 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { SoundOutlined } from '@ant-design/icons-vue'
+import type { AudioStatus } from '@/stores/social'
+import { useLocale } from '@/locales'
+
+const MUTE_STORAGE_KEY = 'agent-voice-muted'
+const AUTO_DISMISS_MS = 6000
+
+const locale = useLocale()
 
 const props = defineProps<{
   agentName: string
   message: string
   index?: number
+  audioStatus: AudioStatus
+  audioUrl: string | null
+}>()
+
+const emit = defineEmits<{
+  dismiss: []
+  audioEnd: []
 }>()
 
 const visible = ref(true)
+const isPlaying = ref(false)
+const autoplayBlocked = ref(false)
 let fadeTimer: ReturnType<typeof setTimeout> | null = null
+let audio: HTMLAudioElement | null = null
+
+function isMuted(): boolean {
+  return localStorage.getItem(MUTE_STORAGE_KEY) === 'true'
+}
+
+function tryPlay() {
+  if (!props.audioUrl || isMuted()) return
+  audio = new Audio(props.audioUrl)
+  audio.addEventListener('ended', onAudioEnded)
+  audio.addEventListener('error', onAudioError)
+  const playPromise = audio.play()
+  if (playPromise) {
+    playPromise
+      .then(() => {
+        isPlaying.value = true
+        autoplayBlocked.value = false
+      })
+      .catch(() => {
+        // Autoplay blocked by browser
+        autoplayBlocked.value = true
+        isPlaying.value = false
+      })
+  }
+}
+
+function handleTapToPlay() {
+  autoplayBlocked.value = false
+  tryPlay()
+}
+
+function onAudioEnded() {
+  isPlaying.value = false
+  emit('audioEnd')
+}
+
+function onAudioError() {
+  isPlaying.value = false
+  // Audio failure should not break the bubble — just emit audioEnd so pacing advances
+  emit('audioEnd')
+}
+
+function stopAudio() {
+  if (audio) {
+    audio.pause()
+    audio.removeEventListener('ended', onAudioEnded)
+    audio.removeEventListener('error', onAudioError)
+    audio = null
+  }
+  isPlaying.value = false
+}
+
+function dismiss() {
+  visible.value = false
+  stopAudio()
+  emit('dismiss')
+}
+
+// Watch for audioStatus changing to 'ready' after mount (late arrival)
+watch(() => props.audioStatus, (newStatus) => {
+  if (newStatus === 'ready' && props.audioUrl && !audio && !isMuted()) {
+    // Cancel text-only timer since we have audio now
+    if (fadeTimer) {
+      clearTimeout(fadeTimer)
+      fadeTimer = null
+    }
+    tryPlay()
+  }
+})
 
 onMounted(() => {
-  fadeTimer = setTimeout(() => {
-    visible.value = false
-  }, 6000)
+  if (props.audioStatus === 'ready' && props.audioUrl && !isMuted()) {
+    tryPlay()
+  } else {
+    // Text-only fallback: auto-dismiss after 6s
+    fadeTimer = setTimeout(dismiss, AUTO_DISMISS_MS)
+  }
 })
 
 onUnmounted(() => {
   if (fadeTimer) clearTimeout(fadeTimer)
+  stopAudio()
 })
 
 const bottomOffset = (props.index ?? 0) * 64 + 56
@@ -31,8 +121,16 @@ const bottomOffset = (props.index ?? 0) * 64 + 56
       :style="{ bottom: `${bottomOffset}px` }"
     >
       <div class="bg-base/90 backdrop-blur-sm border border-white/[0.08] rounded-lg px-3 py-2 shadow-lg">
-        <div class="font-mono text-[10px] text-accent/60 uppercase tracking-wider mb-0.5">
+        <div class="font-mono text-[10px] text-accent/60 uppercase tracking-wider mb-0.5 flex items-center gap-1">
           {{ agentName }}
+          <SoundOutlined v-if="isPlaying" class="text-accent/80" />
+          <span
+            v-if="autoplayBlocked"
+            class="cursor-pointer text-accent/80 hover:text-accent"
+            @click="handleTapToPlay"
+          >
+            {{ locale.social.speech.tapToPlay }}
+          </span>
         </div>
         <div class="text-xs text-white/80 leading-snug line-clamp-3">
           "{{ message }}"

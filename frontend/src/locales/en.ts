@@ -242,6 +242,11 @@ export default {
     support: 'Support',
     oppose: 'Oppose',
     continue: 'Continue',
+    speech: {
+      tapToPlay: 'Tap to play',
+      mute: 'Mute agent voices',
+      unmute: 'Unmute agent voices',
+    },
   },
 
   log: {

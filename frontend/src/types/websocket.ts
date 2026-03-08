@@ -4,7 +4,7 @@ export type WSMessageType =
   | 'round_start' | 'round_end'
   | 'phase_change'
   | 'gm_plan' | 'gm_narration' | 'gm_audio_status'
-  | 'agent_action' | 'agent_speak'
+  | 'agent_action' | 'agent_speak' | 'agent_speech_audio'
   | 'crisis_event'
   | 'meeting_start' | 'meeting_speech' | 'meeting_vote' | 'meeting_result'
   | 'faction_update' | 'cult_activity'
@@ -34,4 +34,13 @@ export interface GMAudioStatusData {
   status: NarrationAudioStatus
   audio_url?: string
   error?: string
+}
+
+/** Payload for agent_speech_audio WebSocket message */
+export interface AgentSpeechAudioData {
+  agent_id: string
+  round: number
+  index: number
+  status: NarrationAudioStatus
+  audio_url?: string
 }

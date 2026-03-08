@@ -62,6 +62,15 @@ const experimentCreated = ref(false)
 const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
 
+// Mute state for agent voice narration
+const MUTE_STORAGE_KEY = 'agent-voice-muted'
+const isMuted = ref(localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
+
+function toggleMute() {
+  isMuted.value = !isMuted.value
+  localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))
+}
+
 async function initExperiment() {
   const experimentId = route.params.id as string
 
@@ -410,10 +419,12 @@ function goBack() {
             :stepping-status="uiStore.steppingStatus"
             :is-complete="experimentStore.isComplete"
             :has-experiment="experimentCreated"
+            :is-muted="isMuted"
             @step="handleStep"
             @play="handleStart"
             @pause="handlePause"
             @toggle-log="uiStore.togglePanel('log')"
+            @toggle-mute="toggleMute"
           />
         </div>
 
@@ -451,6 +462,10 @@ function goBack() {
           :agent-name="conv.agentName"
           :message="conv.message"
           :index="i"
+          :audio-status="conv.audioStatus"
+          :audio-url="conv.audioUrl"
+          @dismiss="turnStore.onBubbleDismissed()"
+          @audio-end="turnStore.notifyAudioComplete()"
         />
       </div>
     </div>
