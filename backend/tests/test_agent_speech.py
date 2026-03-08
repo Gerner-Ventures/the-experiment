@@ -599,7 +599,7 @@ async def test_multiple_utterances_per_round_get_distinct_indices() -> None:
 async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> None:
     """After a process restart the in-memory speech log is empty.
 
-    _find_agent_speech_entry should fall back to the persisted event log
+    RuntimeAudioService._find_agent_speech_entry should fall back to the persisted event log
     and reconstruct the entry so /agents/{id}/speech* endpoints still work.
     """
     from app.api.models import EventLogItem
@@ -655,7 +655,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     assert len(runtime._agent_speech_log.get(eid, [])) == 0
 
     # Should reconstruct from persisted logs
-    entry = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 0)
+    entry = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 0)
     assert entry is not None
     assert entry["text"] == "First line."
     assert entry["agent_id"] == agent.agent_id
@@ -663,7 +663,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     assert entry["character_id"] == agent.character_id
 
     # Second utterance
-    entry2 = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 1)
+    entry2 = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 1)
     assert entry2 is not None
     assert entry2["text"] == "Second line."
     assert entry2["index"] == 1
@@ -672,5 +672,5 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     assert len(runtime._agent_speech_log[eid]) == 2
 
     # Non-existent index returns None
-    entry_missing = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 5)
+    entry_missing = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 5)
     assert entry_missing is None

@@ -82,9 +82,9 @@ class ExperimentRuntime:
         if getattr(self.engine, "agent_service", None) is None:
             self.engine.agent_service = AgentService()
         self.engine.gm_service = self.gm_service
-        self.connection_manager = connection_manager or ConnectionManager()
+        self._connection_manager: Any = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
-        self.tts_service = tts_service
+        self._tts_service = tts_service
         self.highlight_selector = HighlightSelector()
         self.lock = asyncio.Lock()
         self._steps_in_progress: dict[str, bool] = {}
@@ -125,6 +125,28 @@ class ExperimentRuntime:
         self._agent_speech_log.clear()
         if self.tts_service is not None:
             await self.tts_service.aclose()
+
+    @property
+    def connection_manager(self) -> Any:
+        return self._connection_manager
+
+    @connection_manager.setter
+    def connection_manager(self, value: Any) -> None:
+        self._connection_manager = value
+        if hasattr(self, "audio"):
+            self.audio.connection_manager = value
+        if hasattr(self, "streaming"):
+            self.streaming.connection_manager = value
+
+    @property
+    def tts_service(self) -> NarrationTTSService | None:
+        return self._tts_service
+
+    @tts_service.setter
+    def tts_service(self, value: NarrationTTSService | None) -> None:
+        self._tts_service = value
+        if hasattr(self, "audio"):
+            self.audio.tts_service = value
 
     def get_llm_mode_status(self) -> dict[str, bool | str]:
         return {
