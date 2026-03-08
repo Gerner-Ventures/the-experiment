@@ -133,6 +133,26 @@ class _StubLLMService(LLMService):
         model_override: str | None = None,
         generation_name: str | None = None,
     ) -> LLMResult:
+        if generation_name == "gm-plan-revise":
+            return LLMResult(
+                model="anthropic/claude-3-5-sonnet-20241022",
+                content="",
+                parsed={
+                    "round": 999,
+                    "round_theme": "A Darker Witness Emerges",
+                    "reasoning": "Adjust the full beat toward dread.",
+                    "crisis_event": {
+                        "type": "structural",
+                        "description": "A tremor splits the square and rattles every promise.",
+                        "affects": ["town_square", "clinic"],
+                        "severity": "high",
+                    },
+                    "resource_modifiers": {"food": -1, "water": -2, "materials": -1, "power": -3},
+                    "environmental": "Dust hangs in the air after the shock.",
+                    "narration": "The earth shudders. Everyone hears the town answer back.",
+                    "meta_hint": "The revised plan leans into the observer's pressure.",
+                },
+            )
         return LLMResult(
             model="anthropic/claude-3-5-sonnet-20241022",
             content="",
@@ -171,3 +191,20 @@ async def test_gm_service_uses_llm_plan_when_available() -> None:
 
     assert record.plan.round_theme == "A Witness Breaks Pattern"
     assert record.plan.crisis_event.description.startswith("A witness publicly")
+
+
+@pytest.mark.asyncio
+async def test_gm_service_revise_plan_preserves_round_and_returns_pending() -> None:
+    service = GMService(llm_service=_StubLLMService())
+    current_plan = _plan_with_narration("The square is too quiet for comfort.")
+
+    record = await service.revise_plan(
+        _context(4),
+        current_plan,
+        "make it darker and add an earthquake",
+    )
+
+    assert record.status == "pending"
+    assert record.plan.round == current_plan.round
+    assert record.plan.round_theme == "A Darker Witness Emerges"
+    assert "earth shudders" in record.plan.narration.lower()

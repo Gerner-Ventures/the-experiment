@@ -41,6 +41,12 @@ Key fields:
 - `exile_history`
 - `sacrifice_history`
 
+Manual GM steering behavior:
+
+- when `auto_approve=false`, the runtime keeps the upcoming GM plan in `gm_plan` with `status="pending"` until approval
+- `POST /api/experiments/{id}/step` returns `409` until that upcoming plan has been approved/applied
+- `POST /api/experiments/{id}/gm/revise` replaces the pending upcoming draft in-place and records feedback/revision audit events in the log
+
 Code reference:
 
 - `backend/app/engine/models.py`
@@ -195,7 +201,13 @@ The GM receives a planning context built from:
 - a lightweight relationship summary
 - recent events
 
-The engine generates a `GMPlanRecord`, approves it if needed, then applies it.
+The runtime has two GM-plan paths:
+
+- if an `applied` plan for the upcoming round is already present, the engine reuses it as-is
+- otherwise the engine generates a `GMPlanRecord`, approves it if needed, then applies it
+
+In manual mode, the API runtime blocks `step` until the upcoming plan has been approved, so the
+common path is: generate/revise pending draft first, then approve, then run the round.
 
 Outputs:
 
@@ -438,6 +450,11 @@ Narration audio is exposed separately over REST:
 
 - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
 - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
+
+Those routes resolve both:
+
+- the current upcoming pending/applied GM plan for `current_round + 1`
+- persisted narration from completed rounds
 
 The websocket only carries narration-audio readiness state; audio bytes are streamed over HTTP from
 the backend rather than sent through the experiment websocket.

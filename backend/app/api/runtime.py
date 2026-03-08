@@ -65,6 +65,14 @@ class RuntimeLLMModeServices:
     agent_service: AgentService
 
 
+class GMPlanApprovalRequiredError(RuntimeError):
+    pass
+
+
+class GMPlanRevisionError(RuntimeError):
+    pass
+
+
 class ExperimentRuntime:
     def __init__(
         self,
@@ -307,19 +315,7 @@ class ExperimentRuntime:
         next_round = state.current_round + 1
         if state.gm_plan and state.gm_plan.plan.round == next_round:
             return state.gm_plan
-        context = GMPlanningContext(
-            experiment_id=experiment_id,
-            round_number=next_round,
-            total_rounds=state.total_rounds,
-            arc=state.arc,
-            world_state=state.world_state,
-            threat_level=state.world_state.threat_level,
-            cooperation_ratio=0.6,
-            unresolved_plotlines=state.unresolved_plotlines,
-            relationships_summary=self._relationship_summary(state),
-            recent_events=state.recent_events[-5:],
-            auto_approve=state.auto_approve,
-        )
+        context = self._build_gm_planning_context(state)
         plan = await self.gm_service.generate_plan(context)
         state.gm_plan = plan
         await self.store.save_state(state)
@@ -329,9 +325,35 @@ class ExperimentRuntime:
             summary=plan.plan.round_theme,
             round_number=next_round,
         )
-        if plan.status == "applied":
-            await self.audio.prepare_narration_audio(experiment_id, plan)
+        await self.audio.prepare_narration_audio(experiment_id, plan)
         return plan
+
+    async def revise_gm_plan(self, experiment_id: str, feedback: str) -> GMPlanRecord:
+        state = await self.get_state(experiment_id)
+        record = await self.get_or_generate_gm_plan(experiment_id)
+        context = self._build_gm_planning_context(state)
+        try:
+            revised = await self.gm_service.revise_plan(context, record.plan, feedback)
+        except Exception as exc:
+            raise GMPlanRevisionError("GM plan revision failed.") from exc
+        state.gm_plan = revised
+        await self.store.save_state(state)
+        await self.event_log.log(
+            experiment_id,
+            event_type="gm_plan_feedback",
+            summary=f"GM feedback submitted for round {record.plan.round}.",
+            round_number=record.plan.round,
+            data={"feedback": feedback},
+        )
+        await self.event_log.log(
+            experiment_id,
+            event_type="gm_plan_revised",
+            summary=revised.plan.round_theme,
+            round_number=revised.plan.round,
+            data=self._gm_plan_summary_data(revised.plan),
+        )
+        await self.audio.prepare_narration_audio(experiment_id, revised)
+        return revised
 
     async def approve_gm_plan(
         self, experiment_id: str, modified_plan: GMPlanData | None = None
@@ -350,6 +372,10 @@ class ExperimentRuntime:
         )
         await self.audio.prepare_narration_audio(experiment_id, applied)
         return applied
+
+    async def assert_step_allowed(self, experiment_id: str) -> None:
+        state = await self.get_state(experiment_id)
+        await self._assert_step_allowed_for_state(experiment_id, state)
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
         async with self.lock:
@@ -405,19 +431,7 @@ class ExperimentRuntime:
                     "total_rounds": state.total_rounds,
                 },
             )
-
-        if not state.auto_approve:
-            record = await self.get_or_generate_gm_plan(experiment_id)
-            approved = self.gm_service.approve_plan(record)
-            state.gm_plan = self.gm_service.apply_plan(approved)
-            await self.store.save_state(state)
-            await self.event_log.log(
-                experiment_id,
-                event_type="gm_plan_approved",
-                summary=state.gm_plan.plan.round_theme,
-                round_number=state.gm_plan.plan.round,
-            )
-            await self.audio.prepare_narration_audio(experiment_id, state.gm_plan)
+        await self._assert_step_allowed_for_state(experiment_id, state)
 
         hook = self.streaming.build_hook(experiment_id)
         t0 = time.monotonic()
@@ -740,3 +754,39 @@ class ExperimentRuntime:
             is_consequence=is_consequence,
             data=data,
         ).model_dump(mode="json")
+
+    def _build_gm_planning_context(self, state: SimulationState) -> GMPlanningContext:
+        return GMPlanningContext(
+            experiment_id=state.experiment_id,
+            round_number=state.current_round + 1,
+            total_rounds=state.total_rounds,
+            arc=state.arc,
+            world_state=state.world_state,
+            threat_level=state.world_state.threat_level,
+            cooperation_ratio=0.6,
+            unresolved_plotlines=state.unresolved_plotlines,
+            relationships_summary=self._relationship_summary(state),
+            recent_events=state.recent_events[-5:],
+            auto_approve=state.auto_approve,
+        )
+
+    async def _assert_step_allowed_for_state(
+        self,
+        experiment_id: str,
+        state: SimulationState,
+    ) -> None:
+        if state.auto_approve:
+            return
+        record = await self.get_or_generate_gm_plan(experiment_id)
+        if record.status == "applied":
+            return
+        raise GMPlanApprovalRequiredError(
+            "GM plan approval is required before stepping when auto_approve is false."
+        )
+
+    def _gm_plan_summary_data(self, plan: GMPlanData) -> dict[str, Any]:
+        return {
+            "round": plan.round,
+            "round_theme": plan.round_theme,
+            "narration": plan.narration,
+        }

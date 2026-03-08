@@ -25,6 +25,10 @@ def test_docs_and_openapi_endpoints_are_available() -> None:
         == "Query the event log"
     )
     assert (
+        body["paths"]["/api/experiments/{experiment_id}/gm/revise"]["post"]["summary"]
+        == "Revise the next GM plan from feedback"
+    )
+    assert (
         body["paths"]["/api/experiments/{experiment_id}/analytics/summary"]["get"]["summary"]
         == "Get experiment analytics summary"
     )

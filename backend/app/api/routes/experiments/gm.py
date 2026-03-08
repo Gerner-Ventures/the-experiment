@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from app.api.models import ApproveGMPlanRequest
+from app.api.models import ApproveGMPlanRequest, ReviseGMPlanRequest
+from app.api.runtime import GMPlanRevisionError
 from app.gm.models import GMPlanRecord
 
 from .support import _runtime_from_request
@@ -43,3 +44,25 @@ async def approve_gm_plan(
         return await runtime.approve_gm_plan(experiment_id, body.modified_plan)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
+
+
+@router.post(
+    "/{experiment_id}/gm/revise",
+    summary="Revise the next GM plan from feedback",
+    description=(
+        "Generate or load the upcoming GM plan, revise the full draft from free-text feedback, "
+        "and persist the revised pending plan for preview before approval."
+    ),
+)
+async def revise_gm_plan(
+    experiment_id: str,
+    request: Request,
+    body: ReviseGMPlanRequest,
+) -> GMPlanRecord:
+    runtime = _runtime_from_request(request)
+    try:
+        return await runtime.revise_gm_plan(experiment_id, body.feedback)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Experiment not found") from exc
+    except GMPlanRevisionError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc

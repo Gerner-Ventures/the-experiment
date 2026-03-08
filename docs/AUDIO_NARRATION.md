@@ -39,7 +39,7 @@ This split is intentional:
 
 ```mermaid
 flowchart LR
-    GM["Applied GM Plan<br/>narration text"] --> RT["ExperimentRuntime"]
+    GM["Pending or Applied GM Plan<br/>narration text"] --> RT["ExperimentRuntime"]
     RT --> WS["WebSocket<br/>gm_audio_status"]
     RT --> META["GET /narration<br/>text + metadata"]
     RT --> TTS["NarrationTTSService"]
@@ -55,8 +55,8 @@ flowchart LR
 
 ## Runtime Flow
 
-1. A GM plan is generated or approved.
-2. If the plan is `applied` and includes narration text, `ExperimentRuntime` builds a
+1. A GM plan is generated, revised, or approved.
+2. If the plan includes narration text, `ExperimentRuntime` builds a
    `NarrationAudioRequest`.
 3. The runtime immediately broadcasts `gm_audio_status` with `pending` or `ready`.
 4. A background prewarm task asks `NarrationTTSService` to fetch and cache the audio.
@@ -68,7 +68,7 @@ flowchart LR
 
 Narration text resolution order:
 
-1. current applied GM plan for that round
+1. current pending or applied GM plan for that round
 2. persisted `round_end` summary GM narration from the event log
 
 That allows audio playback for both in-progress and already-completed rounds.
@@ -98,7 +98,7 @@ That allows audio playback for both in-progress and already-completed rounds.
 
 `ExperimentRuntime` integrates audio into the round lifecycle:
 
-- prepares narration audio once a GM plan is applied
+- prepares narration audio once a GM plan draft exists
 - emits `gm_audio_status`
 - serves narration metadata and audio streams through route handlers
 
@@ -211,7 +211,7 @@ make migrate
 BACKEND_RUNTIME_MODE=smoke_mock make backend-run
 ```
 
-3. Create an experiment and approve the GM plan.
+3. Create an experiment and generate or revise the next GM plan.
 4. Fetch narration metadata:
 
 ```bash

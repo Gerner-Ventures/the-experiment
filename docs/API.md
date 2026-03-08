@@ -29,7 +29,7 @@ GM plan statuses:
 Important behavior:
 
 - `POST /api/experiments/{id}/step` will move an experiment from `setup` to `running` automatically.
-- The current implementation does not block `step` on prior manual GM approval. If you want to inspect or replace the upcoming GM plan, do it before calling `step`.
+- When `auto_approve=false`, `POST /api/experiments/{id}/step` returns `409` until the upcoming GM plan has been approved.
 - Experiment state, GM plans, event logs, round snapshots, faction state, exile history, and sacrifice history are persisted through the store boundary.
 - The WebSocket stream is server-push only. Control actions still go through REST.
 
@@ -37,10 +37,12 @@ Important behavior:
 
 1. `POST /api/experiments` to create an experiment.
 2. Optional: `GET /api/experiments/{experiment_id}/gm/plan` to inspect the next GM plan.
-3. Optional: `POST /api/experiments/{experiment_id}/gm/approve` to approve or replace that plan.
-4. `POST /api/experiments/{experiment_id}/step` to advance one round.
-5. `GET /api/experiments/{experiment_id}` to refresh the full snapshot, or query logs and analytics endpoints as needed.
-6. Connect to `WS /api/experiments/{experiment_id}/ws` for live updates while rounds run.
+3. Optional: `POST /api/experiments/{experiment_id}/gm/revise` to revise the full upcoming draft from free-text feedback.
+4. Optional: `POST /api/experiments/{experiment_id}/gm/approve` to approve or replace that plan.
+5. In manual mode (`auto_approve=false`), approval is required before stepping.
+6. `POST /api/experiments/{experiment_id}/step` to advance one round.
+7. `GET /api/experiments/{experiment_id}` to refresh the full snapshot, or query logs and analytics endpoints as needed.
+8. Connect to `WS /api/experiments/{experiment_id}/ws` for live updates while rounds run.
 
 ## REST Endpoints
 
@@ -56,6 +58,7 @@ Important behavior:
 | `POST` | `/api/experiments/{experiment_id}/step` | Start a round in the background; results stream via WebSocket |
 | `POST` | `/api/experiments/{experiment_id}/inject` | Inject an Observer event into the simulation |
 | `GET` | `/api/experiments/{experiment_id}/gm/plan` | Get or generate the next GM plan |
+| `POST` | `/api/experiments/{experiment_id}/gm/revise` | Revise the pending GM plan from free-text feedback |
 | `POST` | `/api/experiments/{experiment_id}/gm/approve` | Approve or replace the pending GM plan |
 | `PUT` | `/api/experiments/{experiment_id}/arc` | Replace the active narrative arc |
 | `GET` | `/api/experiments/{experiment_id}/agents` | List all agents in the experiment |
@@ -160,6 +163,27 @@ curl -X PUT http://localhost:8000/api/runtime/llm-mode \
 
 `GET /api/experiments/{experiment_id}/gm/plan` returns the cached plan for `current_round + 1` when available, otherwise it generates a fresh pending plan.
 
+Revise the cached draft from free-text feedback:
+
+```bash
+curl -X POST http://localhost:8000/api/experiments/$EXPERIMENT_ID/gm/revise \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "feedback": "make it darker and add an earthquake"
+  }'
+```
+
+Rules for `feedback`:
+
+- leading and trailing whitespace is trimmed
+- blank feedback is rejected with `422`
+- feedback longer than 500 characters is rejected with `422`
+
+Each generated or revised pending draft can be previewed through:
+
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
+
 Approve the cached plan as-is:
 
 ```bash
@@ -246,6 +270,8 @@ Common event types:
 - `experiment_paused`
 - `observer_event`
 - `gm_plan_generated`
+- `gm_plan_feedback`
+- `gm_plan_revised`
 - `gm_plan_approved`
 - `dawn`
 - `morning`
@@ -393,7 +419,9 @@ Analytics persistence notes:
 - Unknown agents return `404 Agent not found`.
 - Unknown rounds return `404 Round not found`.
 - Missing round snapshots return `404 Round snapshot not found`.
-- Round narration that has not been approved or persisted yet returns `409 Narration is not available for this round yet.`.
+- In manual mode, stepping without an applied upcoming GM plan returns `409 GM plan approval is required before stepping when auto_approve is false.`.
+- Round narration that has not been generated, revised, or persisted yet returns `409 Narration is not available for this round yet.`.
+- GM revision failures return `502 GM plan revision failed.`.
 - Unconfigured ElevenLabs audio returns `503 Narration audio is not configured.`.
 - Invalid query/body payloads return FastAPI `422 Unprocessable Entity` responses.
 
