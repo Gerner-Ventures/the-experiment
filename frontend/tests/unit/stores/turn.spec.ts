@@ -180,7 +180,7 @@ describe('useTurnStore', () => {
     expect(handlers.move).not.toHaveBeenCalled()
   })
 
-  it('resets cleanly', () => {
+  it('resets cleanly including handlers', () => {
     const store = useTurnStore()
     const handlers = createMockHandlers()
     store.setHandlers(handlers)
@@ -191,5 +191,12 @@ describe('useTurnStore', () => {
     expect(store.phase).toBe('idle')
     expect(store.queue).toEqual([])
     expect(store.activeTurn).toBeNull()
+
+    // After reset, enqueuing should not call stale handlers
+    const stalePlayAction = handlers.playAction as jest.Mock
+    stalePlayAction.mockClear()
+    store.enqueue({ agentId: 'a2', agentName: 'Bob', actionType: 'stab' })
+    // Without handlers set, playAction should not be called
+    expect(stalePlayAction).not.toHaveBeenCalled()
   })
 })

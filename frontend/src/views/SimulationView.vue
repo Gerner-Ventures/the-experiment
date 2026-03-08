@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Typography } from 'ant-design-vue'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
@@ -27,6 +27,7 @@ import { useGMStore } from '@/stores/gm'
 import { useUIStore } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
+import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
@@ -226,9 +227,9 @@ function wireTurnHandlers() {
 
   turnStore.setHandlers({
     move(_agentId, _location, onComplete) {
-      // For now, movement is a no-op until pathfinding is wired.
-      // The agent stays in place and we proceed immediately.
-      onComplete()
+      // No-op until pathfinding is wired. nextTick avoids a synchronous
+      // moving→acting phase flicker in the same tick.
+      nextTick(onComplete)
     },
     playAction(agentId, animationName, onComplete) {
       pw.playAction(agentId, animationName, onComplete)
@@ -253,10 +254,6 @@ function wireTurnHandlers() {
 }
 
 // ─── Action label + target highlight reactivity ───
-
-const AGGRESSIVE_ACTIONS = new Set([
-  'attack', 'stab', 'shoot', 'threaten', 'poison',
-])
 
 watch(() => turnStore.phase, (newPhase, oldPhase) => {
   const pw = pixiWorldRef.value
@@ -292,8 +289,8 @@ watch(() => turnStore.phase, (newPhase, oldPhase) => {
 
 onMounted(async () => {
   await initExperiment()
-  // Wire turn handlers after a tick so PixiWorld has mounted
-  setTimeout(() => wireTurnHandlers(), 0)
+  await nextTick()
+  wireTurnHandlers()
 })
 
 onUnmounted(() => {

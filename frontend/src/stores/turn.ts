@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
 import { ACTION_TO_ANIMATION } from '@/types/sprite'
+import { SKIP_ACTION_PHASE } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 
 export interface Turn {
@@ -25,12 +26,12 @@ export interface TurnHandlers {
   getAgentLocation: (agentId: string) => string | undefined
 }
 
-/** Actions that skip the acting phase (animation redundant with idle/movement) */
-const SKIP_ACTION_PHASE = new Set(['move', 'rest', 'observe', 'explore'])
-
-/** Minimum time the acting phase is visible, even if the animation is shorter */
+/** Minimum time the acting phase is visible so players can register the action,
+ *  even if the sprite animation completes sooner. Tuned for ~1s readability. */
 const MIN_ACTION_DURATION_MS = 800
 
+/** How long the HUD status is shown for actions with no speech bubble,
+ *  before advancing to the next agent in the queue. */
 const HUD_ONLY_DURATION_MS = 1500
 
 export const useTurnStore = defineStore('turn', () => {
@@ -191,13 +192,14 @@ export const useTurnStore = defineStore('turn', () => {
     activeTurn.value = null
     phase.value = 'idle'
     turnCounter = 0
+    handlers = null
     drainedHandler = null
   }
 
   return {
     queue, activeTurn, phase, isProcessing, hasPendingTurns,
     setHandlers, onDrained,
-    enqueue, processNext, onBubbleDismissed,
+    enqueue, onBubbleDismissed,
     $reset,
   }
 })

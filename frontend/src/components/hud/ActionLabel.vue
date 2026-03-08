@@ -1,14 +1,13 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
+
 const props = defineProps<{
   actionType: string
   position: { x: number; y: number }
 }>()
 
-const AGGRESSIVE_ACTIONS = new Set([
-  'attack', 'stab', 'shoot', 'threaten', 'poison',
-])
-
-const isAggressive = AGGRESSIVE_ACTIONS.has(props.actionType)
+const isAggressive = computed(() => AGGRESSIVE_ACTIONS.has(props.actionType))
 </script>
 
 <template>

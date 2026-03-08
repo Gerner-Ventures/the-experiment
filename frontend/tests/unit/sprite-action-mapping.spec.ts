@@ -1,10 +1,9 @@
 import { ACTION_TO_ANIMATION } from '@/types/sprite'
 import { SILLY_ANIMATIONS } from '@/config/character-sprites'
+import { SKIP_ACTION_PHASE, AGGRESSIVE_ACTIONS } from '@/config/action-categories'
 
 describe('ACTION_TO_ANIMATION → SILLY_ANIMATIONS integration', () => {
   const sillyNames = new Set(SILLY_ANIMATIONS.map(a => a.name))
-
-  const SKIP_ACTIONS = new Set(['move', 'rest', 'observe', 'explore'])
 
   it('maps every non-skip action to a valid SpriteAnimation', () => {
     for (const [action, animation] of Object.entries(ACTION_TO_ANIMATION)) {
@@ -29,7 +28,7 @@ describe('ACTION_TO_ANIMATION → SILLY_ANIMATIONS integration', () => {
   })
 
   it('skip actions have low-impact animations (idle, walk, or think)', () => {
-    for (const action of SKIP_ACTIONS) {
+    for (const action of SKIP_ACTION_PHASE) {
       const animation = ACTION_TO_ANIMATION[action]
       if (animation) {
         expect(['idle', 'walk', 'think']).toContain(animation)
@@ -49,5 +48,14 @@ describe('ACTION_TO_ANIMATION → SILLY_ANIMATIONS integration', () => {
     const aggressive = ['attack', 'stab', 'shoot', 'threaten']
     const animations = aggressive.map(a => ACTION_TO_ANIMATION[a])
     expect(animations).toEqual(['punch', 'stab', 'shoot', 'threaten'])
+  })
+
+  it('AGGRESSIVE_ACTIONS contains all expected actions', () => {
+    expect(AGGRESSIVE_ACTIONS.has('attack')).toBe(true)
+    expect(AGGRESSIVE_ACTIONS.has('stab')).toBe(true)
+    expect(AGGRESSIVE_ACTIONS.has('shoot')).toBe(true)
+    expect(AGGRESSIVE_ACTIONS.has('threaten')).toBe(true)
+    expect(AGGRESSIVE_ACTIONS.has('poison')).toBe(true)
+    expect(AGGRESSIVE_ACTIONS.has('gather')).toBe(false)
   })
 })
