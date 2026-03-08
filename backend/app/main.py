@@ -1,6 +1,6 @@
+import traceback
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-import traceback
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

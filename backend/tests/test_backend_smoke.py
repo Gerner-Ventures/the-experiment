@@ -76,6 +76,8 @@ async def _start_server(app: Any) -> tuple[uvicorn.Server, asyncio.Task[None], s
 
 
 def _run_migrations(database_url: str) -> None:
+    # This helper mutates process-global config and is only intended for this
+    # single-server smoke test path, not for parallel test execution.
     previous_database_url = os.environ.get("DATABASE_URL")
     os.environ["DATABASE_URL"] = database_url
     get_settings.cache_clear()
