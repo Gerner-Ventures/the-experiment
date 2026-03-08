@@ -63,7 +63,7 @@ export const useGMStore = defineStore('gm', () => {
   }
 
   function onAudioStatus(msg: WSMessage) {
-    const data = msg.data as GMAudioStatusData
+    const data = msg.data as unknown as GMAudioStatusData
     narrationRound.value = msg.round
     narrationAudioStatus.value = data.status
     if (data.status === 'ready' && data.audio_url) {
