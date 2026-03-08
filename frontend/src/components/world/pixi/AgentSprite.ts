@@ -81,6 +81,17 @@ export class AgentSpriteObject {
 
     // Position
     this.updateScreenPosition()
+
+    // Pre-render common poses in idle time (idle already cached from getTexture above)
+    if (typeof requestIdleCallback === 'function') {
+      const char = this.hdCharacter
+      requestIdleCallback(() => {
+        HDFrameCache.prerender(char, [
+          'walk1', 'walk2', 'talk1', 'talk2',
+          'wave1', 'wave2', 'punch1', 'punch2',
+        ] as HDPoseName[])
+      })
+    }
   }
 
   private getTexture(pose: string): Texture {
