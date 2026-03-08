@@ -1,6 +1,6 @@
 ---
 title: "[P1] Frontend audio narration playback — consume backend narration stream"
-status: todo
+status: in_progress
 issue: 102
 priority: P1
 tags: [stream-1, frontend, backend, narration, audio]

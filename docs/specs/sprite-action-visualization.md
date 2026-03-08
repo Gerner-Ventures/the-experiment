@@ -4,7 +4,7 @@ status: todo
 issue: 109
 priority: P1
 tags: [stream-1, frontend, pixi, animation, turn-lifecycle]
-depends_on: [116]
+depends_on: [116, hd-sprite-system]
 ---
 
 # Sprite Action Visualization During Turns
@@ -46,14 +46,16 @@ skipping the action animation entirely. Sprites are also too small to clearly re
 Insert an `'acting'` phase between `'moving'` and `'talking'` in the turn sequence.
 
 **Acceptance criteria:**
-- [ ] `TurnPhase` type includes `'acting'`: `'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'`
-- [ ] `startActionPhase()` added to turn store, called after movement completes
-- [ ] Action phase looks up `ACTION_TO_ANIMATION[turn.actionType]` to resolve the animation
-- [ ] Calls `playAction` handler with agent ID, animation name, and `onComplete` callback
-- [ ] `onComplete` transitions to `startSpeechPhase()`
-- [ ] Actions without a meaningful animation (e.g., `move`, `rest`, `observe` — where the
+- [x] `TurnPhase` type includes `'acting'`: `'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'`
+<!-- canon:realized-in:PR#134 file:frontend/src/stores/turn.ts -->
+<!-- canon:realized-in:PR#116 file:frontend/src/stores/turn.ts -->
+- [x] `startActionPhase()` added to turn store, called after movement completes
+- [x] Action phase looks up `ACTION_TO_ANIMATION[turn.actionType]` to resolve the animation
+- [x] Calls `playAction` handler with agent ID, animation name, and `onComplete` callback
+- [x] `onComplete` transitions to `startSpeechPhase()`
+- [ ] Actions without a meaningful animation (e.g., `move`, `rest`, `explore` — where the
   mapped animation is `'idle'` or `'walk'`) skip directly to speech
-- [ ] Minimum acting duration of 800ms — if animation completes sooner, hold the last
+- [ ] Minimum acting duration of 1500ms — if animation completes sooner, hold the last
   meaningful pose until the floor expires
 
 ### 2. playAction Turn Handler
@@ -63,10 +65,13 @@ Add a `playAction` callback to the `TurnHandlers` interface so the turn store ca
 PixiJS animations without importing PixiJS code.
 
 **Acceptance criteria:**
-- [ ] `TurnHandlers` gains `playAction: (agentId: string, animationName: string, onComplete: () => void) => void`
-- [ ] `SimulationView` wires the handler to `usePixiWorld`, which calls `AgentSpriteObject.playAnimation()`
-- [ ] Handler calls `onComplete` immediately if agent ID is not found (defensive)
-- [ ] Turn data model (`Turn` interface) supports optional `targetAgentId` field
+- [x] `TurnHandlers` gains `playAction: (agentId: string, animationName: string, onComplete: () => void) => void`
+- [x] `SimulationView` wires the handler to `usePixiWorld`, which calls `AgentSpriteObject.playAnimation()`
+<!-- canon:realized-in:PR#134 file:frontend/src/views/SimulationView.vue -->
+<!-- canon:realized-in:PR#116 file:frontend/src/views/SimulationView.vue -->
+- [x] Handler calls `onComplete` immediately if agent ID is not found (defensive)
+<!-- canon:realized-in:PR#134 file:frontend/src/composables/usePixiWorld.ts -->
+- [x] Turn data model (`Turn` interface) supports optional `targetAgentId` field
 
 ### 3. Sprite Scale Increase
 <!-- status: todo -->
@@ -74,10 +79,12 @@ PixiJS animations without importing PixiJS code.
 Increase agent sprite render scale so action poses are clearly readable at default zoom.
 
 **Acceptance criteria:**
-- [ ] `PIXEL_SCALE` increased (2 → 3 or 4, to be tuned visually)
-- [ ] Name labels scale proportionally
-- [ ] Selection ring scales proportionally
-- [ ] Camera default zoom adjusted if needed to accommodate larger sprites
+- [x] `PIXEL_SCALE` increased (2 → 3 or 4, to be tuned visually)
+<!-- canon:realized-in:PR#134 file:frontend/src/components/world/pixi/AgentSprite.ts -->
+<!-- canon:realized-in:PR#116 file:frontend/src/config/sprites/constants.ts -->
+- [x] Name labels scale proportionally
+- [x] Selection ring scales proportionally
+- [x] Camera default zoom adjusted if needed to accommodate larger sprites
 - [ ] Zoom min/max bounds reviewed and adjusted if needed
 
 ### 4. Action Label Overlay
@@ -88,11 +95,12 @@ Show the action type as a label near the sprite during the acting phase.
 **Acceptance criteria:**
 - [ ] Vue overlay component positioned using `getAgentScreenPosition()` (same pattern as
   conversation bubbles)
-- [ ] Label shows the action type in uppercase (e.g., "STAB", "GATHER", "SABOTAGE")
+- [x] Label shows the action type in uppercase (e.g., "STAB", "GATHER", "SABOTAGE")
+<!-- canon:realized-in:PR#134 file:frontend/src/components/hud/ActionLabel.vue -->
 - [ ] Aggressive actions (`attack`, `stab`, `shoot`, `threaten`, `poison`) use an emphasized
   style (red/bold or similar)
-- [ ] Label appears when phase enters `'acting'`, disappears when phase leaves `'acting'`
-- [ ] Label does not appear for skipped (no-animation) actions
+- [x] Label appears when phase enters `'acting'`, disappears when phase leaves `'acting'`
+- [x] Label does not appear for skipped (no-animation) actions
 
 ### 5. Target Agent Highlighting
 <!-- status: todo -->
@@ -100,12 +108,13 @@ Show the action type as a label near the sprite during the acting phase.
 When an action has a target agent, visually highlight the target during the acting phase.
 
 **Acceptance criteria:**
-- [ ] `AgentSpriteObject` supports a `setHighlight(color)` / `clearHighlight()` method
+- [x] `AgentSpriteObject` supports a `setHighlight(color)` / `clearHighlight()` method
+<!-- canon:realized-in:PR#116 file:frontend/src/components/world/pixi/AgentSprite.ts -->
   (draws a colored ring, similar to the existing selection ring)
 - [ ] Target agent gets a highlight ring during the acting phase — red for aggressive actions,
   neutral/white for social actions
-- [ ] Highlight appears at start of acting phase, fades/clears when acting phase ends
-- [ ] No highlight if the action has no target
+- [x] Highlight appears at start of acting phase, fades/clears when acting phase ends
+- [x] No highlight if the action has no target
 
 ## Technical Design
 
@@ -198,9 +207,18 @@ Total: ~6-7 seconds per agent turn.
 - `frontend/src/config/character-sprites.ts` — poses, animations, pixel scale
 - `frontend/src/views/SimulationView.vue` — handler wiring
 
+## HD Sprite System Integration
+
+> See `hd-sprite-system.md` — the sprite system is being upgraded from 14×18px to 32×48px
+> composable characters. Key impacts on this spec:
+> - Sprite scale change (32×48 base) affects PIXEL_SCALE, selection ring, name label sizing
+> - 26+ poses available (up from 14) — more actions get distinct animations
+> - Composable body-part architecture means new poses are data config, not pixel art
+> - `ACTION_TO_ANIMATION` will have 1:1 mapping for all 42 action types
+> - Props (knife, gun, mug, etc.) render as part of the sprite frame
+
 ## Out of Scope
 
-- New pose artwork (uses existing 14 poses)
 - Direction-aware sprites (facing toward target) — future enhancement
 - Simultaneous multi-agent actions — turns remain sequential
 - Sound effects for actions

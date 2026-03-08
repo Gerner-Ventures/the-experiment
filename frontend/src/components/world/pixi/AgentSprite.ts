@@ -1,37 +1,15 @@
 import { Container, Graphics, Text, Texture, Sprite } from 'pixi.js'
 import type { CharacterSprite, PoseName } from '@/config/character-sprites'
-import { renderCharacter, SILLY_ANIMATIONS } from '@/config/character-sprites'
+import { SILLY_ANIMATIONS, WALK_ANIMATION, renderSpriteToCanvas } from '@/config/character-sprites'
+import { getAnimation } from '@/config/sprites/animations'
+import type { AnimationDef } from '@/config/sprites/types'
 import { tileToScreen } from './isometric-utils'
 
-const PIXEL_SCALE = 3
-const SPRITE_W = 14
-const SPRITE_H = 18
+/** Tile-to-tile movement speed: higher = faster. 4 = ~0.25s per tile (Pokemon-style). */
+const MOVE_SPEED = 4
 
-function renderToTexture(sprite: CharacterSprite, pose: PoseName): Texture {
-  const canvas = document.createElement('canvas')
-  canvas.width = SPRITE_W * PIXEL_SCALE
-  canvas.height = SPRITE_H * PIXEL_SCALE
-  const ctx = canvas.getContext('2d')!
-  ctx.imageSmoothingEnabled = false
-
-  const grid = renderCharacter(sprite, pose)
-  for (let y = 0; y < SPRITE_H; y++) {
-    for (let x = 0; x < SPRITE_W; x++) {
-      const color = grid[y][x]
-      if (color) {
-        ctx.fillStyle = color
-        ctx.fillRect(x * PIXEL_SCALE, y * PIXEL_SCALE, PIXEL_SCALE, PIXEL_SCALE)
-      }
-    }
-  }
-
-  return Texture.from(canvas)
-}
-
-/** Find a SILLY_ANIMATIONS entry by name */
-function findAnimation(name: string) {
-  return SILLY_ANIMATIONS.find(a => a.name === name) ?? null
-}
+/** Scale boost applied to the sprite container during action animations */
+const ACTION_SCALE_BOOST = 1.3
 
 export class AgentSpriteObject {
   container: Container
@@ -48,9 +26,15 @@ export class AgentSpriteObject {
 
   private animTimer: ReturnType<typeof setTimeout> | null = null
   private actionTimer: ReturnType<typeof setTimeout> | null = null
-  private currentAnimation: typeof SILLY_ANIMATIONS[number] | null = null
+  private walkTimer: ReturnType<typeof setInterval> | null = null
+  private walkFrame = 0
+  private currentAnimation: AnimationDef | null = null
   private currentFrame = 0
   private animCompleteCallback: (() => void) | null = null
+
+  // Path following (tile-by-tile)
+  private pathQueue: { x: number; y: number }[] = []
+  private pathCallback: (() => void) | null = null
 
   constructor(
     public readonly id: string,
@@ -98,7 +82,7 @@ export class AgentSpriteObject {
   private getTexture(pose: PoseName): Texture {
     let tex = this.textureCache.get(pose)
     if (!tex) {
-      tex = renderToTexture(this.characterSprite, pose)
+      tex = Texture.from(renderSpriteToCanvas(this.characterSprite, pose))
       this.textureCache.set(pose, tex)
     }
     return tex
@@ -115,53 +99,118 @@ export class AgentSpriteObject {
     this.container.zIndex = this.tileY * 100 + this.tileX
   }
 
+  /** Move directly to a single adjacent tile (used by demo random walk) */
   moveTo(x: number, y: number) {
+    this.pathQueue = []
+    this.pathCallback = null
     this.targetTileX = x
     this.targetTileY = y
     this.moveProgress = 0
+    if (!this.walkTimer) {
+      this.startWalkCycle()
+    }
+  }
+
+  /** Walk along a path of tiles, one step at a time. Calls onComplete when done. */
+  followPath(path: { x: number; y: number }[], onComplete?: () => void) {
+    this.pathQueue = [...path]
+    this.pathCallback = onComplete ?? null
+    console.debug(`[AgentSprite] ${this.name} following path of ${path.length} tiles`)
+
+    if (path.length === 0) {
+      // Already at destination
+      const cb = this.pathCallback
+      this.pathCallback = null
+      cb?.()
+      return
+    }
+
+    this.startWalkCycle()
+    this.walkNextStep()
+  }
+
+  private walkNextStep() {
+    if (this.pathQueue.length === 0) {
+      this.stopWalkCycle()
+      this.setPose('idle')
+      const cb = this.pathCallback
+      this.pathCallback = null
+      cb?.()
+      return
+    }
+    const next = this.pathQueue.shift()!
+    this.targetTileX = next.x
+    this.targetTileY = next.y
+    this.moveProgress = 0
+  }
+
+  private startWalkCycle() {
+    this.stopWalkCycle()
+    this.walkFrame = 0
+    this.setPose(WALK_ANIMATION.frames[0])
+    this.walkTimer = setInterval(() => {
+      this.walkFrame = (this.walkFrame + 1) % WALK_ANIMATION.frames.length
+      this.setPose(WALK_ANIMATION.frames[this.walkFrame])
+    }, WALK_ANIMATION.frameMs)
+  }
+
+  private stopWalkCycle() {
+    if (this.walkTimer) {
+      clearInterval(this.walkTimer)
+      this.walkTimer = null
+    }
   }
 
   update(dt: number) {
     if (this.moveProgress < 1) {
-      this.moveProgress = Math.min(1, this.moveProgress + dt * 2)
+      this.moveProgress = Math.min(1, this.moveProgress + dt * MOVE_SPEED)
       const fromScreen = tileToScreen(this.tileX, this.tileY)
       const toScreen = tileToScreen(this.targetTileX, this.targetTileY)
-      // Ease out
-      const t = 1 - Math.pow(1 - this.moveProgress, 3)
-      this.container.x = fromScreen.x + (toScreen.x - fromScreen.x) * t
-      this.container.y = fromScreen.y + (toScreen.y - fromScreen.y) * t
+      // Linear interpolation for tile-by-tile walking (no easing)
+      this.container.x = fromScreen.x + (toScreen.x - fromScreen.x) * this.moveProgress
+      this.container.y = fromScreen.y + (toScreen.y - fromScreen.y) * this.moveProgress
       this.container.zIndex = this.targetTileY * 100 + this.targetTileX
 
       if (this.moveProgress >= 1) {
         this.tileX = this.targetTileX
         this.tileY = this.targetTileY
         this.updateScreenPosition()
+
+        // If following a path, continue to next tile
+        if (this.pathQueue.length > 0) {
+          this.walkNextStep()
+        } else {
+          this.stopWalkCycle()
+          this.setPose('idle')
+          const cb = this.pathCallback
+          this.pathCallback = null
+          cb?.()
+        }
       }
     }
   }
 
   get isMoving(): boolean {
-    return this.moveProgress < 1
+    return this.moveProgress < 1 || this.pathQueue.length > 0
   }
 
   /**
-   * Play a named animation (looks up from SILLY_ANIMATIONS by name).
+   * Play a named animation (looks up from animation registry by name).
+   * Always returns a valid animation (falls back to wave if not found).
    * Calls onComplete when the animation finishes.
    */
   playAnimationByName(animName: string, onComplete?: () => void) {
-    const anim = findAnimation(animName)
-    if (!anim) {
-      onComplete?.()
-      return
-    }
+    const anim = getAnimation(animName)
     this.playAnimation(anim, onComplete)
   }
 
-  playAnimation(anim: typeof SILLY_ANIMATIONS[number], onComplete?: () => void) {
+  playAnimation(anim: AnimationDef, onComplete?: () => void) {
     this.stopAnimation()
     this.currentAnimation = anim
     this.currentFrame = 0
     this.animCompleteCallback = onComplete ?? null
+    // Scale up during action for visibility
+    this.container.scale.set(ACTION_SCALE_BOOST)
     this.advanceFrame()
   }
 
@@ -171,6 +220,7 @@ export class AgentSpriteObject {
       const cb = this.animCompleteCallback
       this.currentAnimation = null
       this.animCompleteCallback = null
+      this.container.scale.set(1) // Reset scale after animation completes
       this.setPose('idle')
       cb?.()
       return
@@ -224,10 +274,17 @@ export class AgentSpriteObject {
     this.currentAnimation = null
     this.currentFrame = 0
     this.animCompleteCallback = null
+    // Reset scale back to normal
+    this.container.scale.set(1)
   }
 
   stopAllBehavior() {
     this.stopAnimation()
+    this.stopWalkCycle()
+    this.pathQueue = []
+    const cb = this.pathCallback
+    this.pathCallback = null
+    cb?.()
     if (this.actionTimer) {
       clearTimeout(this.actionTimer)
       this.actionTimer = null

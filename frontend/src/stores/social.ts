@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { WSMessage } from '@/types/websocket'
+import type { AgentSpeechAudioData } from '@/types/websocket'
+
+export type AudioStatus = 'idle' | 'pending' | 'ready' | 'error' | 'unavailable'
 
 export interface ConversationMessage {
   id: number
@@ -9,6 +12,10 @@ export interface ConversationMessage {
   target: string
   message: string
   timestamp: string
+  round: number
+  index: number
+  audioStatus: AudioStatus
+  audioUrl: string | null
 }
 
 export interface MeetingState {
@@ -38,16 +45,39 @@ export const useSocialStore = defineStore('social', () => {
       target: string
       message: string
     }
+    addConversation(data.agent_id, data.agent_name, data.message, data.target, msg.timestamp, msg.round)
+  }
+
+  function addConversation(agentId: string, agentName: string, message: string, target = '', timestamp?: string, round = 0) {
+    // Compute index: count of messages from the same agent in the same round
+    const index = conversations.value.filter(
+      (c) => c.agentId === agentId && c.round === round,
+    ).length
     conversations.value.push({
       id: ++msgCounter,
-      agentId: data.agent_id,
-      agentName: data.agent_name,
-      target: data.target,
-      message: data.message,
-      timestamp: msg.timestamp,
+      agentId,
+      agentName,
+      target,
+      message,
+      timestamp: timestamp ?? new Date().toISOString(),
+      round,
+      index,
+      audioStatus: 'idle',
+      audioUrl: null,
     })
     if (conversations.value.length > 100) {
       conversations.value = conversations.value.slice(-100)
+    }
+  }
+
+  function onSpeechAudio(msg: WSMessage<AgentSpeechAudioData>) {
+    const data = msg.data
+    const entry = conversations.value.find(
+      (c) => c.agentId === data.agent_id && c.round === data.round && c.index === data.index,
+    )
+    if (entry) {
+      entry.audioStatus = data.status
+      entry.audioUrl = data.audio_url ?? null
     }
   }
 
@@ -88,7 +118,7 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
-  // Faction, cult, and exile events — stored as events for now, UI in future tickets
+  // Faction, cult, and exile events
   const factionUpdates = ref<Array<Record<string, unknown>>>([])
   const exileEvents = ref<Array<Record<string, unknown>>>([])
 
@@ -97,7 +127,6 @@ export const useSocialStore = defineStore('social', () => {
   }
 
   function onCultActivity(msg: WSMessage) {
-    // Cult activity is a subset of faction events
     factionUpdates.value.push({ ...msg.data as Record<string, unknown>, type: 'cult_activity' })
   }
 
@@ -126,7 +155,8 @@ export const useSocialStore = defineStore('social', () => {
   return {
     conversations, meeting, recentConversations, isMeetingActive,
     factionUpdates, exileEvents,
-    onSpeak, onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
+    onSpeak, addConversation, onSpeechAudio,
+    onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
     onFactionUpdate, onCultActivity, onExileVote, onExileResult,
     dismissMeeting, $reset,
   }

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
-import { ACTION_TO_ANIMATION } from '@/types/sprite'
+import { ACTION_TO_ANIMATION } from '@/config/sprites/animations'
 import { SKIP_ACTION_PHASE } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 
@@ -27,12 +27,15 @@ export interface TurnHandlers {
 }
 
 /** Minimum time the acting phase is visible so players can register the action,
- *  even if the sprite animation completes sooner. Tuned for ~1s readability. */
-const MIN_ACTION_DURATION_MS = 800
+ *  even if the sprite animation completes sooner. */
+const MIN_ACTION_DURATION_MS = 1500
 
 /** How long the HUD status is shown for actions with no speech bubble,
  *  before advancing to the next agent in the queue. */
 const HUD_ONLY_DURATION_MS = 1500
+
+/** Maximum time to wait for audio playback before force-advancing */
+const AUDIO_MAX_TIMEOUT_MS = 15000
 
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
@@ -47,23 +50,25 @@ export const useTurnStore = defineStore('turn', () => {
   let turnCounter = 0
   let hudTimer: ReturnType<typeof setTimeout> | null = null
   let actionFloorTimer: ReturnType<typeof setTimeout> | null = null
+  let speechAudioTimer: ReturnType<typeof setTimeout> | null = null
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
   let handlers: TurnHandlers | null = null
-  let drainedHandler: (() => void) | null = null
+  let drainedHandlers: (() => void)[] = []
 
   function setHandlers(h: TurnHandlers) {
     handlers = h
   }
 
-  /** Set a one-shot callback fired when the queue fully drains */
+  /** Add a one-shot callback fired when the queue fully drains */
   function onDrained(cb: () => void) {
-    drainedHandler = cb
+    drainedHandlers.push(cb)
   }
 
   function enqueue(turn: Omit<Turn, 'id'>) {
     const t: Turn = { ...turn, id: ++turnCounter }
     queue.value.push(t)
+    console.debug(`[Turn] Enqueued: ${turn.agentName} → ${turn.actionType} (queue: ${queue.value.length})`)
 
     // If nothing is active, start processing
     if (!activeTurn.value) {
@@ -77,14 +82,16 @@ export const useTurnStore = defineStore('turn', () => {
     if (queue.value.length === 0) {
       activeTurn.value = null
       phase.value = 'idle'
-      const cb = drainedHandler
-      drainedHandler = null
-      cb?.()
+      console.debug('[Turn] Queue drained')
+      const cbs = drainedHandlers
+      drainedHandlers = []
+      cbs.forEach(cb => cb())
       return
     }
 
     const turn = queue.value.shift()!
     activeTurn.value = turn
+    console.debug(`[Turn] Processing: ${turn.agentName} → ${turn.actionType} (remaining: ${queue.value.length})`)
 
     // Update HUD
     uiStore.setSteppingStatus(
@@ -102,12 +109,15 @@ export const useTurnStore = defineStore('turn', () => {
 
     if (needsMove && handlers) {
       phase.value = 'moving'
+      console.debug(`[Turn] Moving ${turn.agentName}: ${currentLocation} → ${turn.targetLocation}`)
       handlers.move(turn.agentId, turn.targetLocation!, () => {
+        // Movement complete — update agent location, proceed to action phase
         handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
         startActionPhase()
       })
     } else {
       if (turn.targetLocation) {
+        console.debug(`[Turn] ${turn.agentName} already at ${turn.targetLocation}`)
         handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
       }
       startActionPhase()
@@ -157,20 +167,50 @@ export const useTurnStore = defineStore('turn', () => {
 
     if (turn.thought) {
       phase.value = 'talking'
+      // Add to conversation log
       handlers?.addConversation(turn.agentId, turn.agentName, turn.thought)
-      // ConversationBubble renders because activeTurn has a thought.
+      console.debug(`[Turn] Showing bubble: ${turn.agentName}`)
+      // ConversationBubble will render because activeTurn has a thought.
       // It emits 'dismiss' → SimulationView calls onBubbleDismissed()
+      // It emits 'audioEnd' → SimulationView calls notifyAudioComplete()
+      // Safety: max timeout prevents indefinite blocking if audio never completes
+      speechAudioTimer = setTimeout(() => {
+        speechAudioTimer = null
+        onBubbleDismissed()
+      }, AUDIO_MAX_TIMEOUT_MS)
     } else {
       // HUD-only: show status briefly then advance
       phase.value = 'hud-only'
+      console.debug(`[Turn] HUD-only: ${turn.agentName} → ${turn.actionType}`)
       hudTimer = setTimeout(() => processNext(), HUD_ONLY_DURATION_MS)
     }
   }
 
+  /**
+   * Called by SimulationView when ConversationBubble emits 'audioEnd'.
+   * Clears audio timers and triggers bubble dismissal.
+   */
+  function notifyAudioComplete() {
+    if (speechAudioTimer) {
+      clearTimeout(speechAudioTimer)
+      speechAudioTimer = null
+    }
+    onBubbleDismissed()
+  }
+
+  /**
+   * Called by SimulationView when ConversationBubble emits 'dismiss' (text-only fade).
+   * Also called internally by notifyAudioComplete for audio-gated flow.
+   */
   function onBubbleDismissed() {
+    console.debug(`[Turn] Bubble dismissed, advancing`)
     // Reset agent to idle
     if (activeTurn.value) {
       handlers?.updateAgent(activeTurn.value.agentId, 'idle')
+    }
+    if (speechAudioTimer) {
+      clearTimeout(speechAudioTimer)
+      speechAudioTimer = null
     }
     processNext()
   }
@@ -184,6 +224,10 @@ export const useTurnStore = defineStore('turn', () => {
       clearTimeout(actionFloorTimer)
       actionFloorTimer = null
     }
+    if (speechAudioTimer) {
+      clearTimeout(speechAudioTimer)
+      speechAudioTimer = null
+    }
   }
 
   function $reset() {
@@ -193,13 +237,13 @@ export const useTurnStore = defineStore('turn', () => {
     phase.value = 'idle'
     turnCounter = 0
     handlers = null
-    drainedHandler = null
+    drainedHandlers = []
   }
 
   return {
     queue, activeTurn, phase, isProcessing, hasPendingTurns,
     setHandlers, onDrained,
-    enqueue, onBubbleDismissed,
+    enqueue, processNext, onBubbleDismissed, notifyAudioComplete,
     $reset,
   }
 })

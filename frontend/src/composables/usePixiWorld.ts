@@ -16,6 +16,7 @@ export interface UsePixiWorld {
   setZoom(level: number): void
   getAgents(): Map<string, AgentSpriteObject>
   moveAgentTo(id: string, tileX: number, tileY: number): void
+  moveAgentAlongPath(id: string, path: { x: number; y: number }[], onComplete?: () => void): void
   playAction(id: string, animationName: string, onComplete: () => void): void
   highlightAgent(id: string, color: string): void
   clearHighlight(id: string): void
@@ -151,6 +152,15 @@ export function usePixiWorld(): UsePixiWorld {
     }
   }
 
+  function moveAgentAlongPath(id: string, path: { x: number; y: number }[], onComplete?: () => void) {
+    const agent = agents.get(id)
+    if (agent) {
+      agent.followPath(path, onComplete)
+    } else {
+      onComplete?.()
+    }
+  }
+
   function playAction(id: string, animationName: string, onComplete: () => void) {
     const agent = agents.get(id)
     if (agent) {
@@ -167,6 +177,7 @@ export function usePixiWorld(): UsePixiWorld {
   function clearHighlight(id: string) {
     agents.get(id)?.clearHighlight()
   }
+
 
   function onAgentClick(callback: (agentId: string) => void) {
     agentClickCallback = callback
@@ -224,6 +235,7 @@ export function usePixiWorld(): UsePixiWorld {
     setZoom,
     getAgents,
     moveAgentTo,
+    moveAgentAlongPath,
     playAction,
     highlightAgent,
     clearHighlight,

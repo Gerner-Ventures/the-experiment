@@ -1,6 +1,6 @@
 ---
 title: "Consolidate WS broadcast paths (broadcast_round → RoundHook)"
-status: todo
+status: done
 priority: P2
 review_status: approved
 tags: [stream-2, backend, refactor]
@@ -16,8 +16,8 @@ There are two code paths that broadcast WebSocket messages during a round:
 2. **`_StreamingHook`** — New path used by `start_step()` / `_step_streaming()`. Broadcasts events live as each phase completes via the `RoundHook` callback interface.
 
 Both paths use the shared `_EVENT_KIND_TO_WS_TYPE` mapping, but they produce different WS message sequences for the same logical round:
-- `broadcast_round` emits `agent_move`, `resource_update`, and `threat_update` as separate messages
-- `_StreamingHook` does not emit these (relies on per-action `agent_action` broadcasts and the final `round_end` payload)
+- `broadcast_round` emits `resource_update` and `threat_update` as separate messages
+- `_StreamingHook` relies on per-action `agent_action` broadcasts for mid-round movement via `action.location`, then finishes with the final `round_end` payload
 
 This duplication will drift as new event types or broadcast behaviors are added.
 

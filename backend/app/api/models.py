@@ -367,6 +367,20 @@ class NarrationAudioMetadata(APIRequestModel):
     cache_hit: bool = False
 
 
+class AgentSpeechAudioMetadata(APIRequestModel):
+    experiment_id: str
+    agent_id: str
+    round_number: int
+    index: int
+    text: str
+    voice_id: str
+    model_id: str
+    output_format: str
+    status: NarrationAudioStatus
+    audio_url: str | None = None
+    cache_hit: bool = False
+
+
 class RelationshipAnalytics(APIRequestModel):
     items: list[RelationshipEdge] = Field(default_factory=list)
 

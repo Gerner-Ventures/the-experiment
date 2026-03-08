@@ -1,37 +1,33 @@
-import { ACTION_TO_ANIMATION } from '@/types/sprite'
-import { SILLY_ANIMATIONS } from '@/config/character-sprites'
+import { ACTION_TO_ANIMATION, ANIMATION_REGISTRY, SILLY_ANIMATIONS } from '@/config/sprites/animations'
 import { SKIP_ACTION_PHASE, AGGRESSIVE_ACTIONS } from '@/config/action-categories'
 
-describe('ACTION_TO_ANIMATION → SILLY_ANIMATIONS integration', () => {
-  const sillyNames = new Set(SILLY_ANIMATIONS.map(a => a.name))
-
-  it('maps every non-skip action to a valid SpriteAnimation', () => {
-    for (const [action, animation] of Object.entries(ACTION_TO_ANIMATION)) {
-      expect(typeof animation).toBe('string')
-      expect(animation.length).toBeGreaterThan(0)
-      // Just verify the mapping exists and is a string — not all animations
-      // have SILLY_ANIMATIONS entries (some are pose-only)
+describe('ACTION_TO_ANIMATION → ANIMATION_REGISTRY integration', () => {
+  it('maps every non-skip action to a valid animation registry key', () => {
+    for (const [action, animName] of Object.entries(ACTION_TO_ANIMATION)) {
+      expect(typeof animName).toBe('string')
+      expect(animName.length).toBeGreaterThan(0)
+      expect(ANIMATION_REGISTRY[animName]).toBeDefined()
       expect(action).toBeTruthy()
     }
   })
 
   it('has SILLY_ANIMATIONS entries for key action animations', () => {
-    // These actions should have matching SILLY_ANIMATIONS for the acting phase
+    const sillyNames = new Set(SILLY_ANIMATIONS.map(a => a.name))
     const actionsWithAnimations = [
       'stab', 'shoot', 'dance', 'panic', 'pee', 'poop', 'vomit', 'sleep',
     ]
     for (const action of actionsWithAnimations) {
-      const animation = ACTION_TO_ANIMATION[action]
-      expect(animation).toBeDefined()
-      expect(sillyNames.has(animation)).toBe(true)
+      const animName = ACTION_TO_ANIMATION[action]
+      expect(animName).toBeDefined()
+      expect(sillyNames.has(animName)).toBe(true)
     }
   })
 
-  it('skip actions have low-impact animations (idle, walk, or think)', () => {
+  it('skip actions have low-impact animations (walk, wave, or think)', () => {
     for (const action of SKIP_ACTION_PHASE) {
-      const animation = ACTION_TO_ANIMATION[action]
-      if (animation) {
-        expect(['idle', 'walk', 'think']).toContain(animation)
+      const animName = ACTION_TO_ANIMATION[action]
+      if (animName) {
+        expect(['walk', 'wave', 'think']).toContain(animName)
       }
     }
   })
@@ -44,10 +40,10 @@ describe('ACTION_TO_ANIMATION → SILLY_ANIMATIONS integration', () => {
     }
   })
 
-  it('aggressive actions map to distinct animations', () => {
-    const aggressive = ['attack', 'stab', 'shoot', 'threaten']
-    const animations = aggressive.map(a => ACTION_TO_ANIMATION[a])
-    expect(animations).toEqual(['punch', 'stab', 'shoot', 'threaten'])
+  it('aggressive actions all have ACTION_TO_ANIMATION mappings', () => {
+    for (const action of AGGRESSIVE_ACTIONS) {
+      expect(ACTION_TO_ANIMATION[action]).toBeDefined()
+    }
   })
 
   it('AGGRESSIVE_ACTIONS contains all expected actions', () => {

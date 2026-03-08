@@ -21,7 +21,12 @@ from app.world import build_default_world_state, resolve_spawn_tile, tile_distan
 
 
 class _StubAgentService(AgentService):
-    def __init__(self, scripted_actions: dict[str, list[tuple[str, str | None]]]) -> None:
+    def __init__(
+        self,
+        scripted_actions: dict[
+            str, list[tuple[str, str | None] | tuple[str, str | None, str | None]]
+        ],
+    ) -> None:
         super().__init__()
         self.scripted_actions = scripted_actions
         self.calls: dict[str, int] = {agent_id: 0 for agent_id in scripted_actions}
@@ -32,14 +37,19 @@ class _StubAgentService(AgentService):
         agent_context = cast(AgentContext, context)
         index = self.calls[agent_context.agent_id]
         self.calls[agent_context.agent_id] += 1
-        action_type, location = self.scripted_actions[agent_context.agent_id][index]
+        script = self.scripted_actions[agent_context.agent_id][index]
+        if len(script) == 2:
+            action_type, location = script
+            target = location or "well"
+        else:
+            action_type, location, target = script
         return AgentTurnResult(
             decision=AgentDecision(
                 inner_thought="A choice is made.",
                 suspicion="The town is slightly off." if action_type == "explore" else None,
                 action=DecisionAction(
                     type=cast(DecisionActionType, action_type),
-                    target=location or "well",
+                    target=target,
                     location=location,
                 ),
                 dialogue=None,
@@ -127,6 +137,82 @@ def test_action_outcome_only_marks_observe_and_move_rewrites_as_non_resolved() -
     assert engine._action_outcome(blocked) == "blocked"
     assert engine._action_outcome(rerouted) == "rerouted"
     assert engine._action_outcome(resolved) == "resolved"
+
+
+@pytest.mark.asyncio
+async def test_hostile_actions_generate_target_consequence_events() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("shoot", "well", "Jon"), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    engine = SimulationEngine(agent_service=service, random_seed=2)
+
+    result = await engine.run_round(_state())
+    morning_phase = next(phase for phase in result.phases if phase.phase == "morning")
+
+    morning_events = [
+        event for event in morning_phase.events if event.data.get("kind") == "agent_action"
+    ]
+    assert [bool(event.data.get("is_consequence")) for event in morning_events[:2]] == [False, True]
+    assert morning_events[0].data["agent_name"] == "Mara"
+    assert morning_events[1].data["agent_name"] == "Jon"
+    assert morning_events[1].data["source_agent_name"] == "Mara"
+    assert morning_events[1].data["source_action_type"] == "shoot"
+    assert morning_events[1].data["action_type"] in {"bleeding", "injured"}
+
+    consequence_resolutions = [
+        action for action in result.action_resolutions if action.is_consequence
+    ]
+    assert len(consequence_resolutions) == 1
+    assert consequence_resolutions[0].agent_name == "Jon"
+    assert consequence_resolutions[0].source_agent_name == "Mara"
+    assert consequence_resolutions[0].source_action_type == "shoot"
+    assert consequence_resolutions[0].resolved_action_type in {"bleeding", "injured"}
+
+
+@pytest.mark.asyncio
+async def test_attack_can_generate_burning_consequences() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("attack", "well", "Jon"), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    engine = SimulationEngine(agent_service=service, random_seed=0)
+
+    result = await engine.run_round(_state())
+
+    consequence_resolutions = [
+        action for action in result.action_resolutions if action.is_consequence
+    ]
+
+    assert len(consequence_resolutions) == 1
+    assert consequence_resolutions[0].resolved_action_type == "burning"
+    assert consequence_resolutions[0].source_action_type == "attack"
+
+
+@pytest.mark.asyncio
+async def test_hostile_actions_without_explicit_target_do_not_hit_nearest_agent() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("shoot", "well", None), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    engine = SimulationEngine(agent_service=service, random_seed=2)
+
+    result = await engine.run_round(_state())
+
+    consequence_resolutions = [
+        action for action in result.action_resolutions if action.is_consequence
+    ]
+
+    assert consequence_resolutions == []
 
 
 @pytest.mark.asyncio

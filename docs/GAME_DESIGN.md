@@ -40,7 +40,7 @@ An LLM-powered agent that operates within the player's arc. Each round, the GM:
 2. Analyzes agent relationships, tension levels, resources, unresolved plotlines
 3. Selects a **round theme** (e.g., "Betrayal Revealed", "Resource Crisis", "Power Vacuum")
 4. Generates crisis events, environmental changes, and modifiers
-5. Writes narration for the player
+5. Writes a brief narration beat for the player, roughly 15-20 seconds aloud
 
 The GM optimizes for narrative coherence, dramatic tension, moral dilemmas, pacing, and keeping all agents relevant.
 

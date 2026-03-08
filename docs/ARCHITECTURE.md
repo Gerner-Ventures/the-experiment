@@ -88,7 +88,6 @@ const messageRouter: Record<string, (data: any) => void> = {
   'gm_plan':          (d) => gmStore.onPlan(d),
   'gm_narration':     (d) => gmStore.onNarration(d),
   'agent_action':     (d) => agentStore.onAction(d),
-  'agent_move':       (d) => agentStore.onMove(d),
   'agent_speak':      (d) => socialStore.onSpeak(d),
   'crisis_event':     (d) => worldStore.onCrisis(d),
   'threat_update':    (d) => worldStore.onThreatUpdate(d),
@@ -101,6 +100,9 @@ const messageRouter: Record<string, (data: any) => void> = {
   'experiment_end':   (d) => experimentStore.onEnd(d),
 }
 ```
+
+`agent_action` is the only mid-round agent activity message. Location changes now come through
+`agent_action.data.action.location`; the final authoritative state still arrives in `round_end`.
 
 **Rules:**
 - One WebSocket connection per experiment session.

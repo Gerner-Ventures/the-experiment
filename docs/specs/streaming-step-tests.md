@@ -1,6 +1,6 @@
 ---
 title: "Streaming step test coverage"
-status: todo
+status: in_progress
 issue: 90
 priority: P1
 tags: [backend, testing, runtime]
@@ -36,7 +36,7 @@ Test the 4 hook methods broadcast the correct WS message types:
 - `on_round_start` → broadcasts `round_start`
 - `on_phase_start` → broadcasts `phase_change` with `status: "starting"`
 - `on_phase_complete` → broadcasts `phase_change` with events + individual typed messages
-- `on_agent_action` → broadcasts `agent_action` and optionally `agent_move`
+- `on_agent_action` → broadcasts `agent_action`, including any movement in `action.location`
 
 ### 4. `AgentBrain.decide()` LLM fallback
 

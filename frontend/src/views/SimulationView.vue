@@ -15,22 +15,24 @@ import RoundCounter from '@/components/hud/RoundCounter.vue'
 import ArcTimeline from '@/components/hud/ArcTimeline.vue'
 import GMPlanPanel from '@/components/hud/GMPlanPanel.vue'
 import NarrationOverlay from '@/components/hud/NarrationOverlay.vue'
-import ActionLabel from '@/components/hud/ActionLabel.vue'
 import AgentDossier from '@/components/dossier/AgentDossier.vue'
 import ExperimentLog from '@/components/log/ExperimentLog.vue'
 import ConversationBubble from '@/components/social/ConversationBubble.vue'
+import RelationshipWeb from '@/components/social/RelationshipWeb.vue'
 import TownMeeting from '@/components/social/TownMeeting.vue'
 import { useExperimentStore } from '@/stores/experiment'
 import { useAgentStore } from '@/stores/agent'
 import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
-import { useUIStore } from '@/stores/ui'
+import { useUIStore, PANELS } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
 import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
+import { MUTE_STORAGE_KEY } from '@/config/audio'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
+import type { AgentStatus } from '@/types/agent'
 
 const locale = useLocale()
 const route = useRoute()
@@ -45,11 +47,8 @@ const socialStore = useSocialStore()
 const turnStore = useTurnStore()
 const ws = useWebSocket()
 
-const pixiWorldRef = ref<InstanceType<typeof PixiWorld>>()
+const pixiWorldRef = ref<InstanceType<typeof PixiWorld> | null>(null)
 
-// Reactive state for the action label overlay
-const actionLabelPosition = ref<{ x: number; y: number } | null>(null)
-const actionLabelType = ref('')
 const highlightedTargetId = ref<string | null>(null)
 
 // Theme and arc from sessionStorage (set by SetupView) or defaults
@@ -61,6 +60,24 @@ const ready = ref(false)
 const experimentCreated = ref(false)
 const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
+
+// Mute state for agent voice narration
+const isMuted = ref(window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
+
+// TODO: toggling mute while audio is mid-playback does not stop the current bubble's audio
+function toggleMute() {
+  isMuted.value = !isMuted.value
+  window.localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))
+}
+
+// Find the socialStore conversation entry matching the active turn bubble (for audio data)
+const activeBubbleAudio = computed(() => {
+  const turn = turnStore.activeTurn
+  if (!turn?.thought) return null
+  return socialStore.conversations.find(
+    (c) => c.agentId === turn.agentId && c.message === turn.thought,
+  ) ?? null
+})
 
 async function initExperiment() {
   const experimentId = route.params.id as string
@@ -149,7 +166,7 @@ async function handleStart() {
   if (!experimentStore.id) return
   try {
     await api.startExperiment(experimentStore.id)
-    uiStore.isPlaying = true
+    uiStore.setPlaying(true)
   } catch (err) {
     console.error('Start failed:', err)
   }
@@ -159,7 +176,7 @@ async function handlePause() {
   if (!experimentStore.id) return
   try {
     await api.pauseExperiment(experimentStore.id)
-    uiStore.isPlaying = false
+    uiStore.setPlaying(false)
   } catch (err) {
     console.error('Pause failed:', err)
   }
@@ -188,6 +205,7 @@ watch(() => uiStore.isPlaying, (playing) => {
       autoPlayTimer = null
     }
     waitingForRound = false
+    uiStore.clearStepping()
   }
 })
 
@@ -197,10 +215,13 @@ watch(() => experimentStore.completedRounds, () => {
   waitingForRound = false
 
   if (experimentStore.isComplete) {
-    uiStore.isPlaying = false
+    uiStore.setPlaying(false)
     router.push({ name: 'report', params: { id: experimentStore.id! } })
     return
   }
+
+  // Keep status visible during delay between rounds
+  uiStore.setSteppingStatus(locale.hud.steppingNextRound)
 
   const delay = 3000 / uiStore.playbackSpeed
   autoPlayTimer = setTimeout(autoStep, delay)
@@ -208,7 +229,7 @@ watch(() => experimentStore.completedRounds, () => {
 
 function autoStep() {
   if (!uiStore.isPlaying || experimentStore.isComplete) {
-    uiStore.isPlaying = false
+    uiStore.setPlaying(false)
     return
   }
   waitingForRound = true
@@ -226,28 +247,19 @@ function wireTurnHandlers() {
   if (!pw) return
 
   turnStore.setHandlers({
-    move(_agentId, _location, onComplete) {
-      // No-op until pathfinding is wired. nextTick avoids a synchronous
-      // moving→acting phase flicker in the same tick.
-      nextTick(onComplete)
+    move(agentId: string, location: string, onComplete: () => void) {
+      pw.moveAgentToLocation(agentId, location, onComplete)
     },
-    playAction(agentId, animationName, onComplete) {
+    playAction(agentId: string, animationName: string, onComplete: () => void) {
       pw.playAction(agentId, animationName, onComplete)
     },
-    updateAgent(agentId, status, location) {
-      const updates: Record<string, unknown> = { status }
-      if (location) updates.location = location
-      agentStore.onAgentUpdate(agentId, updates)
+    updateAgent(agentId: string, status: AgentStatus, location?: string) {
+      agentStore.updateAgentStatus(agentId, status, location)
     },
-    addConversation(agentId, agentName, message) {
-      socialStore.onSpeak({
-        type: 'agent_speak',
-        round: experimentStore.currentRound,
-        timestamp: new Date().toISOString(),
-        data: { agent_id: agentId, agent_name: agentName, target: 'all', message },
-      })
+    addConversation(agentId: string, agentName: string, message: string) {
+      socialStore.addConversation(agentId, agentName, message)
     },
-    getAgentLocation(agentId) {
+    getAgentLocation(agentId: string) {
       return agentStore.getAgent(agentId)?.location
     },
   })
@@ -261,13 +273,7 @@ watch(() => turnStore.phase, (newPhase, oldPhase) => {
 
   if (newPhase === 'acting' && turnStore.activeTurn) {
     const turn = turnStore.activeTurn
-    // Show action label
-    const pos = pw.getAgentScreenPosition(turn.agentId)
-    if (pos) {
-      actionLabelPosition.value = pos
-      actionLabelType.value = turn.actionType
-    }
-    // Highlight target
+    // Highlight target agent during action
     if (turn.targetAgentId) {
       const color = AGGRESSIVE_ACTIONS.has(turn.actionType) ? '#ff4444' : '#ffffff'
       pw.highlightAgent(turn.targetAgentId, color)
@@ -276,10 +282,6 @@ watch(() => turnStore.phase, (newPhase, oldPhase) => {
   }
 
   if (oldPhase === 'acting') {
-    // Clear action label
-    actionLabelPosition.value = null
-    actionLabelType.value = ''
-    // Clear target highlight
     if (highlightedTargetId.value) {
       pw.clearHighlight(highlightedTargetId.value)
       highlightedTargetId.value = null
@@ -321,7 +323,7 @@ watch(() => ws.state.value, (state) => {
       waitingForRound = false
     }
     if (uiStore.isPlaying) {
-      uiStore.isPlaying = false
+      uiStore.setPlaying(false)
     }
   }
 })
@@ -410,10 +412,13 @@ function goBack() {
             :stepping-status="uiStore.steppingStatus"
             :is-complete="experimentStore.isComplete"
             :has-experiment="experimentCreated"
+            :is-muted="isMuted"
             @step="handleStep"
             @play="handleStart"
             @pause="handlePause"
-            @toggle-log="uiStore.togglePanel('log')"
+            @toggle-log="uiStore.togglePanel(PANELS.LOG)"
+            @toggle-relationship-web="uiStore.togglePanel(PANELS.RELATIONSHIP_WEB)"
+            @toggle-mute="toggleMute"
           />
         </div>
 
@@ -435,22 +440,19 @@ function goBack() {
           />
         </div>
 
-        <!-- Action label overlay (during acting phase) -->
-        <ActionLabel
-          v-if="actionLabelPosition && actionLabelType"
-          class="pointer-events-none"
-          :action-type="actionLabelType"
-          :position="actionLabelPosition"
-        />
-
-        <!-- Conversation bubbles (pointer-events-auto so future interactions work) -->
+        <!-- Turn-driven conversation bubble -->
         <ConversationBubble
-          v-for="(conv, i) in socialStore.recentConversations.slice(-3)"
-          :key="conv.id"
+          v-if="turnStore.phase === 'talking' && turnStore.activeTurn?.thought"
+          :key="turnStore.activeTurn.id"
           class="pointer-events-auto"
-          :agent-name="conv.agentName"
-          :message="conv.message"
-          :index="i"
+          :agent-name="turnStore.activeTurn.agentName"
+          :message="turnStore.activeTurn.thought"
+          :agent-id="turnStore.activeTurn.agentId"
+          :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
+          :audio-status="activeBubbleAudio?.audioStatus ?? 'idle'"
+          :audio-url="activeBubbleAudio?.audioUrl ?? null"
+          @dismiss="turnStore.onBubbleDismissed()"
+          @audio-end="turnStore.notifyAudioComplete()"
         />
       </div>
     </div>
@@ -478,7 +480,7 @@ function goBack() {
     <!-- Agent Dossier Drawer -->
     <AgentDossier
       :agent-id="uiStore.selectedAgentId"
-      :visible="uiStore.activePanel === 'dossier'"
+      :visible="uiStore.activePanel === PANELS.DOSSIER"
       @close="uiStore.deselectAgent()"
     />
 
@@ -492,8 +494,14 @@ function goBack() {
     <!-- Event Log Drawer -->
     <ExperimentLog
       :events="experimentStore.events"
-      :visible="uiStore.activePanel === 'log'"
-      @close="uiStore.setPanel('none')"
+      :visible="uiStore.activePanel === PANELS.LOG"
+      @close="uiStore.setPanel(PANELS.NONE)"
+    />
+
+    <!-- Relationship Web Drawer -->
+    <RelationshipWeb
+      :visible="uiStore.activePanel === PANELS.RELATIONSHIP_WEB"
+      @close="uiStore.setPanel(PANELS.NONE)"
     />
   </div>
 </template>

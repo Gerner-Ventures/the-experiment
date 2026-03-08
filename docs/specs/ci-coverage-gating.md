@@ -1,6 +1,6 @@
 ---
 title: "CI Coverage Gating with diff-cover"
-status: todo
+status: in_progress
 priority: P1
 tags: [ci, testing, coverage, infrastructure]
 depends_on: []

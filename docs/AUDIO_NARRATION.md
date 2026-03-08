@@ -231,10 +231,60 @@ afplay /tmp/narration.mp3
 If `file` reports JSON instead of MPEG audio, the backend returned an error payload instead of an
 MP3 stream.
 
+## Agent Speech Audio
+
+In addition to GM narration, the backend generates per-agent TTS audio for dialogue spoken during
+the simulation. Each of the 22 character sprites has a unique ElevenLabs voice.
+
+### Voice Mapping
+
+`CHARACTER_VOICE_IDS` in `backend/app/core/config.py` maps character ID to ElevenLabs voice ID.
+Unmapped characters fall back to `ELEVENLABS_VOICE_ID`.
+
+`NarrationTTSService.voice_id_for_character(character_id)` resolves the voice for a given character.
+
+### Pregeneration
+
+When agent decisions are resolved for a round, the runtime pregenerates TTS audio for all agent
+dialogue in parallel via `asyncio.gather()`. This happens before the frontend enters the talking
+phase, so audio is typically ready when the speech bubble appears.
+
+### Transport
+
+Agent speech audio uses the same split transport as GM narration:
+
+- `agent_speech_audio` WebSocket message carries readiness status per utterance
+- `GET /api/experiments/{id}/agents/{agent_id}/speech` returns metadata
+- `GET /api/experiments/{id}/agents/{agent_id}/speech/audio?round=N&index=I` streams MP3 audio
+
+The `round` and `index` parameters identify which utterance (an agent may speak multiple times per
+round).
+
+### Frontend Playback
+
+`ConversationBubble.vue` plays audio when the bubble appears:
+
+- If audio is `ready` on mount: plays immediately
+- If audio is `pending`: waits up to 3s, then falls back to text-only (6s auto-dismiss)
+- If audio is `unavailable` or `error`: text-only behavior
+- Turn pacing waits for audio completion before advancing (max 15s timeout)
+- A mute toggle in the HUD control bar persists via localStorage
+
+### Cache
+
+Agent speech audio uses the same in-memory LRU/TTL cache as GM narration. Cache keys include the
+text, voice ID, model ID, and voice settings, so identical utterances with the same voice hit cache.
+
 ## Code References
 
 - `backend/app/api/routes/narration.py`
 - `backend/app/api/runtime.py`
 - `backend/app/tts/service.py`
 - `backend/app/tts/elevenlabs.py`
+- `backend/app/core/config.py` — `CHARACTER_VOICE_IDS`
 - `backend/tests/test_tts_service.py`
+- `backend/tests/test_agent_speech.py`
+- `frontend/src/components/social/ConversationBubble.vue`
+- `frontend/src/stores/social.ts`
+- `frontend/src/stores/turn.ts`
+- `frontend/src/config/audio.ts`

@@ -173,6 +173,10 @@ class ActionResolution(EngineModel):
     target: str | None = None
     dialogue_target: str | None = None
     suspicion_level: float = Field(ge=0, le=100)
+    is_consequence: bool = False
+    source_agent_id: str | None = None
+    source_agent_name: str | None = None
+    source_action_type: str | None = None
 
 
 class ConversationTurn(EngineModel):

@@ -27,6 +27,7 @@ WSMessageType = Literal[
     "observer_event",
     "experiment_end",
     "step_error",
+    "agent_speech_audio",
 ]
 
 
@@ -35,4 +36,5 @@ class WSMessage(APIModel):
     round: int
     phase: str | None = None
     timestamp: datetime
+    is_consequence: bool = False
     data: dict[str, Any]

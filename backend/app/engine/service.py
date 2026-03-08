@@ -9,7 +9,12 @@ from random import Random
 from typing import Literal, cast
 
 from app.agents.memory import append_recent_event
-from app.agents.models import AgentMemoryState, AgentTurnResult, MemoryEvent
+from app.agents.models import (
+    AgentMemoryState,
+    AgentTurnResult,
+    ConsequenceActionType,
+    MemoryEvent,
+)
 from app.agents.suspicion import apply_suspicion_trigger
 from app.agents.service import AgentService
 from app.core import langfuse as lf
@@ -84,6 +89,23 @@ class SimulationEngine:
         "repair": {"workshop", "meeting_hall", "boundary", "mystery"},
         "hoard": {"farm", "water_source", "store", "residence", "bar", "brothel"},
         "vote": {"meeting_hall"},
+    }
+    ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = {
+        "shoot": ("bleeding", "injured"),
+        "stab": ("bleeding", "injured"),
+        "attack": ("injured", "knocked_down", "stunned", "burning"),
+        "poison": ("poisoned",),
+        "threaten": ("crying", "fleeing", "stunned"),
+    }
+    CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionType, float] = {
+        "bleeding": 8.0,
+        "injured": 7.0,
+        "stunned": 6.0,
+        "knocked_down": 7.0,
+        "burning": 9.0,
+        "poisoned": 8.0,
+        "crying": 4.0,
+        "fleeing": 5.0,
     }
 
     def __init__(
@@ -703,6 +725,7 @@ class SimulationEngine:
                 for prepared in group:
                     agent = prepared.agent
                     turn = prepared.turn
+                    resolved_target = self._resolve_target_agent(state, prepared)
                     sacrifice = None
                     if prepared.action_type == "self_sacrifice":
                         sacrifice = self._apply_self_sacrifice(state, agent, location)
@@ -726,6 +749,16 @@ class SimulationEngine:
                                 "location": location,
                                 "action_type": prepared.action_type,
                                 "requested_action_type": turn.decision.action.type,
+                                "action": turn.decision.action.model_dump(mode="json"),
+                                "is_consequence": False,
+                                **(
+                                    {
+                                        "target_agent_id": resolved_target.agent_id,
+                                        "target_agent_name": resolved_target.name,
+                                    }
+                                    if resolved_target is not None
+                                    else {}
+                                ),
                                 **(
                                     {
                                         "kind": "self_sacrifice",
@@ -744,8 +777,20 @@ class SimulationEngine:
                             resolved_action_type=prepared.action_type,
                             summary=summary,
                             outcome=self._action_outcome(prepared),
+                            resolved_target=resolved_target,
                         )
                     )
+                    consequence = self._build_consequence_result(
+                        state,
+                        phase=phase,
+                        prepared=prepared,
+                        target=resolved_target,
+                        location=location,
+                    )
+                    if consequence is not None:
+                        event, resolution = consequence
+                        events.append(event)
+                        action_resolutions.append(resolution)
 
         if faction_refresh_needed:
             self._refresh_factions(state)
@@ -760,6 +805,7 @@ class SimulationEngine:
         resolved_action_type: str,
         summary: str,
         outcome: ActionResolutionOutcome,
+        resolved_target: EngineAgentState | None = None,
     ) -> ActionResolution:
         dialogue_target = (
             prepared.turn.decision.dialogue.target if prepared.turn.decision.dialogue else None
@@ -775,7 +821,11 @@ class SimulationEngine:
             cooperation_intent=prepared.turn.decision.cooperation_intent,
             goal_progress=prepared.turn.decision.goal_progress,
             summary=summary,
-            target=prepared.turn.decision.action.target,
+            target=(
+                resolved_target.agent_id
+                if resolved_target is not None
+                else prepared.turn.decision.action.target
+            ),
             dialogue_target=dialogue_target,
             suspicion_level=prepared.agent.suspicion_level,
         )
@@ -799,6 +849,190 @@ class SimulationEngine:
         if agent.agent_id not in occupancy:
             occupancy.append(agent.agent_id)
         self._apply_resource_effect(state, action_type)
+
+    def _build_consequence_result(
+        self,
+        state: SimulationState,
+        *,
+        phase: Literal["morning", "afternoon"],
+        prepared: PreparedAction,
+        target: EngineAgentState | None,
+        location: str,
+    ) -> tuple[RoundEvent, ActionResolution] | None:
+        options = self.ACTION_CONSEQUENCE_TYPES.get(prepared.action_type)
+        if not options or target is None:
+            return None
+        consequence_type = self.random.choice(options)
+        consequence_location = target.location or location
+        summary = self._consequence_summary(
+            source=prepared.agent,
+            target=target,
+            source_action_type=prepared.action_type,
+            consequence_type=consequence_type,
+            location=consequence_location,
+        )
+        self._record_consequence_on_target(
+            state,
+            target=target,
+            consequence_type=consequence_type,
+            source=prepared.agent,
+            source_action_type=prepared.action_type,
+            summary=summary,
+        )
+        return (
+            RoundEvent(
+                phase=phase,
+                summary=summary,
+                data={
+                    "kind": "agent_action",
+                    "agent_id": target.agent_id,
+                    "agent_name": target.name,
+                    "location": consequence_location,
+                    "action_type": consequence_type,
+                    "requested_action_type": consequence_type,
+                    "resolved_action_type": consequence_type,
+                    "action": {
+                        "type": consequence_type,
+                        "target": prepared.agent.agent_id,
+                        "location": consequence_location,
+                    },
+                    "is_consequence": True,
+                    "source_agent_id": prepared.agent.agent_id,
+                    "source_agent_name": prepared.agent.name,
+                    "source_action_type": prepared.action_type,
+                },
+            ),
+            ActionResolution(
+                phase=phase,
+                agent_id=target.agent_id,
+                agent_name=target.name,
+                location=consequence_location,
+                requested_action_type=consequence_type,
+                resolved_action_type=consequence_type,
+                cooperation_intent="none",
+                goal_progress=(
+                    f"System consequence from {prepared.agent.name}'s {prepared.action_type}."
+                ),
+                summary=summary,
+                target=prepared.agent.agent_id,
+                suspicion_level=target.suspicion_level,
+                is_consequence=True,
+                source_agent_id=prepared.agent.agent_id,
+                source_agent_name=prepared.agent.name,
+                source_action_type=prepared.action_type,
+            ),
+        )
+
+    def _record_consequence_on_target(
+        self,
+        state: SimulationState,
+        *,
+        target: EngineAgentState,
+        consequence_type: ConsequenceActionType,
+        source: EngineAgentState,
+        source_action_type: str,
+        summary: str,
+    ) -> None:
+        target.suspicion_level = min(
+            100.0,
+            target.suspicion_level + self.CONSEQUENCE_SUSPICION_DELTAS.get(consequence_type, 5.0),
+        )
+        target.memory = append_recent_event(
+            target.memory,
+            MemoryEvent(
+                round_number=state.world_state.round_number,
+                summary=summary,
+                emotional_charge=18
+                if consequence_type in {"bleeding", "injured", "poisoned"}
+                else 12,
+                tags=["consequence", consequence_type, source_action_type, source.agent_id],
+            ),
+        )
+
+    def _consequence_summary(
+        self,
+        *,
+        source: EngineAgentState,
+        target: EngineAgentState,
+        source_action_type: str,
+        consequence_type: ConsequenceActionType,
+        location: str,
+    ) -> str:
+        action_phrase = {
+            "shoot": "shoots",
+            "stab": "stabs",
+            "attack": "attacks",
+            "poison": "poisons",
+            "threaten": "threatens",
+        }.get(source_action_type, f"uses {source_action_type} on")
+        consequence_text: dict[ConsequenceActionType, str] = {
+            "bleeding": (
+                f"{target.name} is left bleeding after {source.name} {action_phrase} them at {location}."
+            ),
+            "injured": (
+                f"{target.name} is injured after {source.name} {action_phrase} them at {location}."
+            ),
+            "stunned": (
+                f"{target.name} is stunned after {source.name} {action_phrase} them at {location}."
+            ),
+            "knocked_down": (
+                f"{target.name} is knocked down after {source.name} {action_phrase} them at {location}."
+            ),
+            "burning": (
+                f"{target.name} is burning after {source.name} {action_phrase} them at {location}."
+            ),
+            "poisoned": (
+                f"{target.name} is poisoned after {source.name} {action_phrase} them at {location}."
+            ),
+            "crying": (
+                f"{target.name} breaks down crying after {source.name} {action_phrase} them at {location}."
+            ),
+            "fleeing": f"{target.name} flees after {source.name} {action_phrase} them at {location}.",
+        }
+        return consequence_text[consequence_type]
+
+    def _resolve_target_agent(
+        self,
+        state: SimulationState,
+        prepared: PreparedAction,
+    ) -> EngineAgentState | None:
+        if prepared.action_type not in self.AGENT_INTERACTION_ACTIONS:
+            return None
+        origin = self._agent_tile(prepared.agent)
+        nearby_agents = [
+            other
+            for other in self._active_agents(state)
+            if other.agent_id != prepared.agent.agent_id
+            and tile_distance(
+                origin,
+                self._agent_tile(other),
+            )
+            <= self._interaction_range(prepared.action_type)
+        ]
+        if not nearby_agents:
+            return None
+        requested_target = prepared.turn.decision.action.target
+        if prepared.action_type in self.ACTION_CONSEQUENCE_TYPES and not requested_target:
+            return None
+        if isinstance(requested_target, str) and requested_target:
+            requested_target_normalized = requested_target.casefold()
+            for other in nearby_agents:
+                if (
+                    other.agent_id == requested_target
+                    or other.name.casefold() == requested_target_normalized
+                ):
+                    return other
+        return min(
+            nearby_agents,
+            key=lambda other: (tile_distance(origin, self._agent_tile(other)), other.name),
+        )
+
+    def _interaction_range(self, action_type: str) -> int:
+        return (
+            self.RANGED_CONTACT_RANGE_TILES
+            if action_type in self.RANGED_ACTIONS
+            else self.CONTACT_RANGE_TILES
+        )
 
     def _apply_conflict_consequences(
         self,

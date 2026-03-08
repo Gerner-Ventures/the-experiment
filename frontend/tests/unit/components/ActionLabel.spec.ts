@@ -2,11 +2,18 @@ import { mount } from '@vue/test-utils'
 import ActionLabel from '@/components/hud/ActionLabel.vue'
 
 describe('ActionLabel', () => {
-  it('renders action type in uppercase', () => {
+  it('renders action type from locale (title case)', () => {
     const wrapper = mount(ActionLabel, {
       props: { actionType: 'stab', position: { x: 100, y: 200 } },
     })
-    expect(wrapper.text()).toBe('STAB')
+    expect(wrapper.text()).toBe('Stab')
+  })
+
+  it('falls back to uppercase for unknown action types', () => {
+    const wrapper = mount(ActionLabel, {
+      props: { actionType: 'xyzzy', position: { x: 100, y: 200 } },
+    })
+    expect(wrapper.text()).toBe('XYZZY')
   })
 
   it('applies aggressive style for aggressive actions', () => {

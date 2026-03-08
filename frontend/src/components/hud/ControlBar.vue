@@ -6,6 +6,9 @@ import {
   StepForwardOutlined,
   UnorderedListOutlined,
   LoadingOutlined,
+  SoundOutlined,
+  StopOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons-vue'
 import { useLocale } from '@/locales'
 
@@ -17,6 +20,7 @@ defineProps<{
   steppingStatus: string
   isComplete: boolean
   hasExperiment: boolean
+  isMuted: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,6 +28,8 @@ const emit = defineEmits<{
   play: []
   pause: []
   toggleLog: []
+  toggleMute: []
+  toggleRelationshipWeb: []
 }>()
 </script>
 
@@ -31,7 +37,7 @@ const emit = defineEmits<{
   <div class="flex flex-col items-center gap-1 px-6 py-2.5 bg-base/90 backdrop-blur-sm border-t border-white/[0.06]">
     <!-- Stepping status -->
     <Transition name="fade">
-      <div v-if="isStepping && steppingStatus" class="flex items-center gap-2 text-accent/70">
+      <div v-if="(isStepping || isPlaying) && steppingStatus" class="flex items-center gap-2 text-accent/70">
         <LoadingOutlined class="text-xs" />
         <span class="font-mono text-[11px] tracking-wide">{{ steppingStatus }}</span>
       </div>
@@ -50,24 +56,49 @@ const emit = defineEmits<{
         </Button>
       </Tooltip>
 
-      <div class="w-px h-5 bg-white/[0.08] mx-1" />
-
-      <!-- Play/Pause -->
-      <Tooltip :title="isPlaying ? locale.hud.pause : locale.hud.play">
+      <!-- Relationship Web toggle -->
+      <Tooltip :title="locale.relationshipWeb.title">
         <Button
-          :type="isPlaying ? 'default' : 'primary'"
+          size="small"
           shape="circle"
-          size="large"
-          class="!inline-flex !items-center !justify-center"
-          :disabled="!hasExperiment || isComplete"
-          @click="isPlaying ? emit('pause') : emit('play')"
+          class="!border-white/10 !inline-flex !items-center !justify-center"
+          @click="emit('toggleRelationshipWeb')"
+        >
+          <template #icon><ShareAltOutlined class="!text-white/40" /></template>
+        </Button>
+      </Tooltip>
+
+      <!-- Mute toggle -->
+      <Tooltip :title="isMuted ? locale.social.speech.unmute : locale.social.speech.mute">
+        <Button
+          size="small"
+          shape="circle"
+          class="!border-white/10 !inline-flex !items-center !justify-center"
+          @click="emit('toggleMute')"
         >
           <template #icon>
-            <PauseOutlined v-if="isPlaying" />
-            <CaretRightOutlined v-else />
+            <StopOutlined v-if="isMuted" class="!text-white/40" />
+            <SoundOutlined v-else class="!text-white/40" />
           </template>
         </Button>
       </Tooltip>
+
+      <div class="w-px h-5 bg-white/[0.08] mx-1" />
+
+      <!-- Play/Pause -->
+      <Button
+        :type="isPlaying ? 'default' : 'primary'"
+        shape="circle"
+        size="large"
+        class="!inline-flex !items-center !justify-center"
+        :disabled="!hasExperiment || isComplete"
+        @click="isPlaying ? emit('pause') : emit('play')"
+      >
+        <template #icon>
+          <PauseOutlined v-if="isPlaying" />
+          <CaretRightOutlined v-else />
+        </template>
+      </Button>
 
       <!-- Step -->
       <Tooltip :title="isStepping ? locale.hud.steppingRunning : locale.hud.step">
