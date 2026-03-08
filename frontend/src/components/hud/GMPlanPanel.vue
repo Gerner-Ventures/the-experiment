@@ -22,7 +22,7 @@ const reasoningOpen = ref<string[]>([])
 const VALID_SEVERITIES: readonly string[] = ['low', 'medium', 'high', 'critical']
 
 function severityColor(severity: string): string {
-  const key = VALID_SEVERITIES.includes(severity) ? severity : 'low'
+  const key = VALID_SEVERITIES.includes(severity) ? severity : 'critical'
   return `var(--color-threat-${key})`
 }
 
@@ -81,7 +81,7 @@ function resourceColor(key: string): string {
         </div>
 
         <!-- Resource Modifiers -->
-        <div class="flex flex-col gap-1.5">
+        <div v-if="Object.keys(plan.resourceModifiers).length" class="flex flex-col gap-1.5">
           <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.resourceModifiers }}</div>
           <div class="grid grid-cols-2 gap-2">
             <div

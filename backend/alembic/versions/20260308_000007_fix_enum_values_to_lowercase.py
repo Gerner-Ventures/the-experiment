@@ -71,13 +71,17 @@ def upgrade() -> None:
     conn = op.get_bind()
     for enum_name, mappings in ENUM_FIXES.items():
         for old_val, new_val in mappings:
-            if _has_enum_value(conn, enum_name, old_val):
-                op.execute(f"ALTER TYPE {enum_name} RENAME VALUE '{old_val}' TO '{new_val}'")
+            if _has_enum_value(conn, enum_name, old_val) and not _has_enum_value(
+                conn, enum_name, new_val
+            ):
+                op.execute(f"ALTER TYPE \"{enum_name}\" RENAME VALUE '{old_val}' TO '{new_val}'")
 
 
 def downgrade() -> None:
     conn = op.get_bind()
     for enum_name, mappings in ENUM_FIXES.items():
         for old_val, new_val in mappings:
-            if _has_enum_value(conn, enum_name, new_val):
-                op.execute(f"ALTER TYPE {enum_name} RENAME VALUE '{new_val}' TO '{old_val}'")
+            if _has_enum_value(conn, enum_name, new_val) and not _has_enum_value(
+                conn, enum_name, old_val
+            ):
+                op.execute(f"ALTER TYPE \"{enum_name}\" RENAME VALUE '{new_val}' TO '{old_val}'")

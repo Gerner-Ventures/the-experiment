@@ -73,7 +73,8 @@ jobs:
           # POSTHOG_KEY may be empty on first deploy before terraform apply.
           # Both frontend and backend handle an empty key gracefully (PostHog is disabled).
           POSTHOG_KEY: ${{ steps.secrets.outputs.POSTHOG_KEY }}
-          PLATFORM_URL: ${{ steps.secrets.outputs.PLATFORM_URL }}
+          # Falls back to production URL if not set in Doppler.
+          PLATFORM_URL: ${{ steps.secrets.outputs.PLATFORM_URL || 'https://the-experiment.gernerventures.com' }}
         run: |
           REGISTRY="registry.digitalocean.com/${{ steps.secrets.outputs.DOCR_REGISTRY_NAME }}"
           TAG="sha-${GITHUB_SHA::7}"
