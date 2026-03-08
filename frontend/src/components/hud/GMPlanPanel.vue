@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { Drawer, Button, Tag, Space, Collapse } from 'ant-design-vue'
 import { CheckOutlined } from '@ant-design/icons-vue'
+import AutoCountdownButton from '@/components/ui/AutoCountdownButton.vue'
 import type { GMPlan } from '@/types/gm'
 import { useLocale } from '@/locales'
 
@@ -135,12 +136,18 @@ function resourceColor(key: string): string {
     </template>
 
     <template #footer>
-      <Space class="w-full justify-end">
+      <Space class="w-full justify-end items-center">
         <Button @click="emit('close')">{{ locale.gm.dismiss }}</Button>
-        <Button type="primary" size="large" @click="emit('approve')">
+        <AutoCountdownButton
+          :delay="5000"
+          :active="visible"
+          type="primary"
+          size="large"
+          @fire="emit('approve')"
+        >
           <template #icon><CheckOutlined /></template>
           {{ locale.gm.approve }}
-        </Button>
+        </AutoCountdownButton>
       </Space>
     </template>
   </Drawer>

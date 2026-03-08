@@ -34,9 +34,13 @@ help: ## Show this help message
 
 .PHONY: setup env
 
-setup: ## Install all dependencies (backend + frontend)
+setup: install-hooks ## Install all dependencies (backend + frontend) + git hooks
 	cd backend && poetry install
 	cd frontend && npm install
+
+install-hooks: ## Install git commit hooks (lint, test, conventional commits)
+	git config core.hooksPath .githooks
+	@echo "✓ Git hooks installed from .githooks/"
 
 env: ## Copy .env.example to backend/.env if missing
 	@if [ -f backend/.env ]; then \
@@ -53,10 +57,14 @@ env: ## Copy .env.example to backend/.env if missing
 
 .PHONY: dev dev-detached stop restart restart-backend restart-frontend status
 
-dev: ## Start all services via docker compose
+dev: ## Start all services via docker compose (secrets from Doppler)
+	doppler secrets download -p the-experiment -c dev --no-file --format env-no-quotes > backend/.env.doppler \
+	  || (rm -f backend/.env.doppler && echo "Doppler failed — falling back to backend/.env" && true)
 	docker compose up --build
 
-dev-detached: ## Start all services in background
+dev-detached: ## Start all services in background (secrets from Doppler)
+	doppler secrets download -p the-experiment -c dev --no-file --format env-no-quotes > backend/.env.doppler \
+	  || (rm -f backend/.env.doppler && echo "Doppler failed — falling back to backend/.env" && true)
 	docker compose up --build -d
 
 stop: ## Stop all services

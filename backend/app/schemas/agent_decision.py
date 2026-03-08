@@ -11,8 +11,8 @@ DECISION_ACTION_TYPES: tuple[DecisionActionType, ...] = cast(
 )
 CooperationIntent = Literal["high", "medium", "low", "none"]
 
-AGENT_INNER_THOUGHT_MAX_LENGTH = 160
-AGENT_DECISION_MAX_TOKENS = 384
+AGENT_INNER_THOUGHT_MAX_LENGTH = 300
+AGENT_DECISION_MAX_TOKENS = 2048
 
 
 class DecisionAction(APIModel):

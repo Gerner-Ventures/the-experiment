@@ -752,6 +752,20 @@ class SimulationEngine:
                             },
                         )
                     )
+                    if turn.decision.dialogue and turn.decision.dialogue.message.strip():
+                        events.append(
+                            RoundEvent(
+                                phase=phase,
+                                summary=turn.decision.dialogue.message,
+                                data={
+                                    "kind": "agent_speak",
+                                    "agent_id": agent.agent_id,
+                                    "agent_name": agent.name,
+                                    "target": turn.decision.dialogue.target or "all",
+                                    "message": turn.decision.dialogue.message,
+                                },
+                            )
+                        )
                     action_resolutions.append(
                         self._action_resolution(
                             phase=phase,
@@ -1434,6 +1448,13 @@ class SimulationEngine:
                     summary=turn.content,
                     data={
                         "kind": "agent_speak",
+                        # Canonical fields used by frontend/streaming:
+                        "agent_id": turn.speaker_id,
+                        "agent_name": turn.speaker_name,
+                        "message": turn.content,
+                        "target": turn.listener_name or "all",
+                        # TODO: remove legacy speaker_*/listener_* fields once
+                        # no downstream consumers reference them
                         "speaker_id": turn.speaker_id,
                         "speaker_name": turn.speaker_name,
                         "listener_id": turn.listener_id,

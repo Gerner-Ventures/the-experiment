@@ -3,8 +3,15 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    environment:
+      # Override DB/Redis to use compose service names instead of localhost
+      DATABASE_URL: "postgresql+asyncpg://experiment:experiment@postgres:5432/experiment?ssl=disable"
+      REDIS_URL: "redis://redis:6379/0"
     env_file:
-      - ./backend/.env
+      - path: ./backend/.env.doppler
+        required: false
+      - path: ./backend/.env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -12,12 +19,17 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      - /app/.venv
+    command: python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: build
     ports:
       - "5173:5173"
+    environment:
+      VITE_API_TARGET: "http://backend:8000"
     volumes:
       - ./frontend:/app
       - /app/node_modules

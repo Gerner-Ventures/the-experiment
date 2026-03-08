@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+echo "── pre-push: frontend tests ──"
+cd "$ROOT/frontend"
+npx jest --passWithNoTests
+
+echo "── pre-push: backend tests ──"
+cd "$ROOT/backend"
+.venv/bin/pytest -x -q
+
+echo "✓ pre-push passed"

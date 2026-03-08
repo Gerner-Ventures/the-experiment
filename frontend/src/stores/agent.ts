@@ -54,6 +54,7 @@ export const useAgentStore = defineStore('agent', () => {
       agent_name?: string
       action: Record<string, unknown> | string
       inner_thought?: string
+      dialogue?: string | null
       cooperation_intent?: string
     }
     const agent = agents.value.get(data.agent_id)
@@ -79,12 +80,15 @@ export const useAgentStore = defineStore('agent', () => {
     console.debug(`[AgentStore] onAction: ${agentName} → ${actionType}${targetLocation ? ` @ ${targetLocation}` : ''}`)
 
     // Enqueue in the turn store — it handles movement, bubbles, and HUD in sequence
+    const hasDialogue = !!data.dialogue?.trim()
     useTurnStore().enqueue({
       agentId: data.agent_id,
       agentName,
       actionType,
       targetLocation,
-      thought: data.inner_thought,
+      thought: hasDialogue ? data.dialogue ?? undefined : data.inner_thought,
+      // Dialogue was already added to conversation log via agent_speak WS event
+      fromSpeakEvent: hasDialogue,
     })
   }
 

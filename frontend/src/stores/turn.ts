@@ -14,6 +14,8 @@ export interface Turn {
   targetAgentId?: string
   targetLocation?: string
   thought?: string
+  /** When true, the conversation row was already added by agent_speak — skip addConversation */
+  fromSpeakEvent?: boolean
 }
 
 export type TurnPhase = 'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'
@@ -167,8 +169,10 @@ export const useTurnStore = defineStore('turn', () => {
 
     if (turn.thought) {
       phase.value = 'talking'
-      // Add to conversation log
-      handlers?.addConversation(turn.agentId, turn.agentName, turn.thought)
+      // Add to conversation log — skip if already added via agent_speak WS event
+      if (!turn.fromSpeakEvent) {
+        handlers?.addConversation(turn.agentId, turn.agentName, turn.thought)
+      }
       console.debug(`[Turn] Showing bubble: ${turn.agentName}`)
       // ConversationBubble will render because activeTurn has a thought.
       // It emits 'dismiss' → SimulationView calls onBubbleDismissed()

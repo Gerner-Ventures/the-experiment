@@ -258,6 +258,7 @@ class StreamingHook:
                     "action": turn.decision.action.model_dump(mode="json"),
                     "is_consequence": False,
                     "inner_thought": turn.decision.inner_thought,
+                    "dialogue": turn.decision.dialogue.message if turn.decision.dialogue else None,
                     "cooperation_intent": turn.decision.cooperation_intent,
                     "goal_progress": turn.decision.goal_progress,
                 },
