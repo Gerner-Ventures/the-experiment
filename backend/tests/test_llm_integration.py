@@ -11,7 +11,11 @@ from app.core.config import Settings
 from app.llm import LLMClient, get_default_model_configs
 from app.llm.models import LLMUsage, LLMResult, UsageRecord
 from app.llm.service import LLMService
-from app.schemas.agent_decision import AgentDecision
+from app.schemas.agent_decision import (
+    AGENT_DECISION_MAX_TOKENS,
+    AGENT_INNER_THOUGHT_MAX_LENGTH,
+    AgentDecision,
+)
 from app.schemas.gm_plan import GMPlanRead
 
 
@@ -162,6 +166,48 @@ def test_agent_decision_rejects_invalid_cooperation_intent() -> None:
         )
 
 
+def test_agent_decision_rejects_overlong_inner_thought() -> None:
+    with pytest.raises(Exception):
+        AgentDecision.model_validate(
+            {
+                "inner_thought": "x" * (AGENT_INNER_THOUGHT_MAX_LENGTH + 1),
+                "suspicion": None,
+                "action": {"type": "observe"},
+                "dialogue": None,
+                "goal_progress": "No progress.",
+                "cooperation_intent": "medium",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_passes_max_tokens_to_router() -> None:
+    content = json.dumps(
+        {
+            "inner_thought": "I should keep quiet.",
+            "suspicion": None,
+            "action": {"type": "observe", "target": "bar", "location": "town_hall"},
+            "dialogue": None,
+            "goal_progress": "No progress yet.",
+            "cooperation_intent": "medium",
+        }
+    )
+    client = LLMClient()
+    fake_router = _FakeRouter([_FakeResponse("openai/gpt-4o-mini", content)])
+    client.router = fake_router
+
+    await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-9", "round_number": 1, "agent_id": "a-1"},
+            max_tokens=AGENT_DECISION_MAX_TOKENS,
+        )
+    )
+
+    assert fake_router.calls[0]["max_tokens"] == AGENT_DECISION_MAX_TOKENS
+
+
 @pytest.mark.asyncio
 async def test_usage_summary_groups_by_agent_and_round() -> None:
     service = LLMService()
@@ -210,7 +256,13 @@ async def test_memory_classifier_raises_when_result_is_unparsed() -> None:
         )
 
 
-def client_request(role: str, response_format: type[Any], metadata: dict[str, object]) -> Any:
+def client_request(
+    role: str,
+    response_format: type[Any],
+    metadata: dict[str, object],
+    *,
+    max_tokens: int | None = None,
+) -> Any:
     from app.llm.models import LLMRequest
 
     return LLMRequest(
@@ -218,4 +270,5 @@ def client_request(role: str, response_format: type[Any], metadata: dict[str, ob
         messages=[{"role": "system", "content": "Return structured output."}],
         response_format=response_format,
         metadata=metadata,
+        max_tokens=max_tokens,
     )

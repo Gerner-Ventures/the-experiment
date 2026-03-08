@@ -42,7 +42,7 @@ def _setup_otel_logging(log_level: int) -> None:
 
 def shutdown_logging() -> None:
     if _log_provider is not None:
-        _log_provider.shutdown()
+        _log_provider.shutdown()  # type: ignore[no-untyped-call]
 
 
 def setup_logging() -> None:

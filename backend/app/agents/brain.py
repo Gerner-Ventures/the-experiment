@@ -13,7 +13,12 @@ from app.agents.models import (
 from app.agents.registry import get_action_definition
 from app.agents.suspicion import apply_suspicion_trigger
 from app.llm import LLMService
-from app.schemas.agent_decision import AgentDecision, DecisionAction
+from app.schemas.agent_decision import (
+    AGENT_DECISION_MAX_TOKENS,
+    AGENT_INNER_THOUGHT_MAX_LENGTH,
+    AgentDecision,
+    DecisionAction,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +52,13 @@ def build_agent_prompt(context: AgentContext) -> str:
         f"Relationships: {relationship_lines if relationship_lines else 'None'}\n"
         f"Available actions: {list(ACTION_TYPES)}\n"
         "Decide what you do next. Balance short-term social reality, your subjective memories, and your secret goal. "
-        "You may misread motives, but you should remain basically competent."
+        "You may misread motives, but you should remain basically competent.\n"
+        "Response style:\n"
+        f"- Keep `inner_thought` to 1-2 short sentences under {AGENT_INNER_THOUGHT_MAX_LENGTH} characters.\n"
+        "- Focus `inner_thought` on your immediate next-step reasoning, not backstory or monologue.\n"
+        "- Keep `suspicion`, `goal_progress`, and any dialogue concise.\n"
+        "- Good `inner_thought`: \"Jon is testing me; I should probe without showing fear.\"\n"
+        "- Bad `inner_thought`: multi-paragraph self-analysis or recap."
     )
 
 
@@ -60,7 +71,14 @@ class AgentBrain:
         try:
             result = await self.llm_service.generate_agent_decision(
                 messages=[
-                    {"role": "system", "content": "Return a structured agent decision."},
+                    {
+                        "role": "system",
+                        "content": (
+                            "Return a structured agent decision as JSON. Keep every prose field concise. "
+                            f"`inner_thought` must be 1-2 short sentences under {AGENT_INNER_THOUGHT_MAX_LENGTH} "
+                            "characters, with no monologue."
+                        ),
+                    },
                     {"role": "user", "content": prompt},
                 ],
                 response_format=AgentDecision,
@@ -76,6 +94,7 @@ class AgentBrain:
                 },
                 model_override=None,
                 generation_name=f"agent:{context.name}",
+                max_tokens=AGENT_DECISION_MAX_TOKENS,
             )
             parsed = result.parsed or {}
             decision = AgentDecision.model_validate(parsed)

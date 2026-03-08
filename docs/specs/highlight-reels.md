@@ -20,11 +20,13 @@ Curated highlight reels at the end of each round and game, showcasing the most d
 
 ### Acceptance Criteria
 
-- [ ] Events scored by dramatic significance
-- [ ] Round highlights: top 3-5 per round
-- [ ] Game highlights: top 10-15 across simulation
-- [ ] API endpoint returns scored, ordered events
-- [ ] Selection accounts for variety
+- [x] Events scored by dramatic significance
+<!-- canon:realized-in:PR#99 file:backend/app/highlights/selector.py -->
+- [x] Round highlights: top 3-5 per round
+- [x] Game highlights: top 10-15 across simulation
+- [x] API endpoint returns scored, ordered events
+<!-- canon:realized-in:PR#99 file:backend/app/api/routes/experiments.py -->
+- [x] Selection accounts for variety
 
 ## Frontend: Round Highlight Reel
 
@@ -57,4 +59,4 @@ Curated highlight reels at the end of each round and game, showcasing the most d
 
 ## Key Files
 
-`backend/app/highlights/`, `components/highlights/RoundHighlights.vue`, `views/ReportView.vue`
+`backend/app/highlights/selector.py`, `backend/app/api/routes/experiments.py`, `backend/app/api/models.py`, `components/highlights/RoundHighlights.vue`, `views/ReportView.vue`

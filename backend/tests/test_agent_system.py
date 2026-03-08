@@ -4,7 +4,7 @@ from typing import Any
 
 import pytest
 
-from app.agents.brain import build_agent_prompt
+from app.agents.brain import AgentBrain, build_agent_prompt
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
@@ -35,10 +35,14 @@ from app.llm.models import (
     RelationshipConsolidationDecision,
 )
 from app.llm.service import LLMService
+from app.schemas.agent_decision import AGENT_DECISION_MAX_TOKENS
 from app.world import build_default_world_state
 
 
 class _StubLLMService(LLMService):
+    def __init__(self) -> None:
+        self.last_max_tokens: int | None = None
+
     async def generate_agent_decision(
         self,
         *,
@@ -47,7 +51,9 @@ class _StubLLMService(LLMService):
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
         generation_name: str | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResult:
+        self.last_max_tokens = max_tokens
         return LLMResult(
             model="openai/gpt-4o-mini",
             content="",
@@ -278,6 +284,23 @@ def test_prompt_renders_plain_none_for_empty_relationships() -> None:
 
     assert "Relationships: None" in prompt
     assert "Relationships: ['None']" not in prompt
+
+
+def test_prompt_instructs_concise_inner_thoughts() -> None:
+    prompt = build_agent_prompt(_context())
+
+    assert "Keep `inner_thought` to 1-2 short sentences" in prompt
+    assert "Good `inner_thought`" in prompt
+
+
+@pytest.mark.asyncio
+async def test_decide_uses_agent_decision_token_cap() -> None:
+    service = _StubLLMService()
+    brain = AgentBrain(llm_service=service)
+
+    await brain.decide(_context())
+
+    assert service.last_max_tokens == AGENT_DECISION_MAX_TOKENS
 
 
 @pytest.mark.asyncio

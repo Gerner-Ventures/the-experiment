@@ -67,8 +67,10 @@ Important behavior:
 | `GET` | `/api/experiments/{experiment_id}/analytics/relationships` | Relationship graph edges derived from agent memory |
 | `GET` | `/api/experiments/{experiment_id}/analytics/factions` | Current faction state plus pressure and membership-change timeline |
 | `GET` | `/api/experiments/{experiment_id}/analytics/gm` | GM narration and crisis timeline by round |
-| `GET` | `/api/experiments/{experiment_id}/analytics/highlights` | High-signal events ranked from the log |
+| `GET` | `/api/experiments/{experiment_id}/highlights` | Variety-aware highlight reel for a round or the full game |
 | `GET` | `/api/experiments/{experiment_id}/replay` | Replay index with round summaries and highlights |
+| `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/narration` | Round narration text and backend audio metadata |
+| `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio` | Stream round narration audio |
 | `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/snapshot` | World snapshot and per-round events |
 | `GET` | `/api/experiments/{experiment_id}/usage` | Aggregated LLM usage by role, model, agent, and round |
 | `GET` | `/api/experiments/{experiment_id}/usage/traces` | Paginated prompt-level usage traces |
@@ -180,7 +182,14 @@ Useful follow-up reads after a round completes:
 
 - `GET /api/experiments/{id}/log?round_number=N`
 - `GET /api/experiments/{id}/rounds/{N}/snapshot`
-- `GET /api/experiments/{id}/analytics/highlights`
+- `GET /api/experiments/{id}/highlights?scope=round&round=N`
+  - returns the end-of-round reel for one completed round
+  - up to 5 highlights, scored and ordered by dramatic significance
+  - categories currently include `betrayal`, `crisis`, `resource_swing`, `alliance_shift`, `close_vote`, and `suspicion_spike`
+- `GET /api/experiments/{id}/highlights?scope=game`
+  - returns the cross-game reel
+  - up to 12 highlights, ranked from the persisted log and round summaries
+  - selection prefers category variety before filling the remaining slots by score
 - `GET /api/experiments/{id}/usage?round_number=N`
 
 ## Event Log Filters
@@ -254,11 +263,15 @@ Additional report-grade analytics endpoints expose persisted derived views for f
   - round theme
   - narration
   - crisis payload
+- `GET /api/experiments/{experiment_id}/highlights`
+  - `scope=round` requires `round`
+  - items include the ranked category, source `event_type`, optional `event_kind`, round, phase, score, summary, and contextual data
+  - the hidden compatibility alias at `GET /api/experiments/{experiment_id}/analytics/highlights` now returns this normalized highlight schema too; it no longer returns raw event-type categories like `crisis_event`
 
 `GET /api/experiments/{experiment_id}/replay` returns a replay-friendly index:
 
 - one item per completed round with a summary, threat level, event count, cooperation score, sabotage count, betrayal count, and GM context
-- the same highlight feed used by the analytics highlight endpoint
+- the same game-scoped highlight feed used by the highlights endpoint
 
 `GET /api/experiments/{experiment_id}/usage` and `.../usage/traces` expose LLM usage:
 
@@ -297,6 +310,7 @@ Connection semantics:
 | `connected` | `{ "experiment_id": "<id>" }` |
 | `round_start` | `{ "theme": "<round theme>" }` |
 | `gm_plan` | Full `GMPlanRecord` payload |
+| `gm_audio_status` | `{ "status": "pending|ready|error", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
 | `agent_action` | `{ "agent_id", "action", "cooperation_intent", "goal_progress" }` |
@@ -336,7 +350,10 @@ Analytics persistence notes:
 
 - Unknown experiments return `404 Experiment not found`.
 - Unknown agents return `404 Agent not found`.
+- Unknown rounds return `404 Round not found`.
 - Missing round snapshots return `404 Round snapshot not found`.
+- Round narration that has not been approved or persisted yet returns `409 Narration is not available for this round yet.`.
+- Unconfigured ElevenLabs audio returns `503 Narration audio is not configured.`.
 - Invalid query/body payloads return FastAPI `422 Unprocessable Entity` responses.
 
 ## Notes

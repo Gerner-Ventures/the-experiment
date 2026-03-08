@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from collections.abc import Generator
+from collections.abc import AsyncIterator
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -10,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.agents.models import AgentTurnResult
 from app.agents.service import AgentService
+from app.api.models import EventLogItem
 from app.api.runtime import ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
 from app.core.config import Settings
@@ -18,6 +21,8 @@ from app.llm import UsageTracker
 from app.llm.models import LLMUsage, UsageRecord
 from app.main import create_app
 from app.schemas.agent_decision import AgentDecision, DecisionAction
+from app.tts import NarrationAudioError, NarrationTTSService
+from app.tts.models import NarrationAudioRequest, ProviderAudioStream
 
 API_PREFIX = "/api"
 
@@ -79,6 +84,31 @@ class _ScriptedAgentService(AgentService):
         )
 
 
+class _FakeNarrationProvider:
+    def __init__(self, chunks: list[bytes] | None = None, error: Exception | None = None) -> None:
+        self._chunks = chunks or [b"audio-chunk-1", b"audio-chunk-2"]
+        self._error = error
+        self.calls = 0
+
+    async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
+        self.calls += 1
+        if self._error is not None:
+            raise self._error
+
+        async def iterate() -> AsyncIterator[bytes]:
+            for chunk in self._chunks:
+                yield chunk
+
+        return ProviderAudioStream(
+            content_type="audio/mpeg",
+            request_id=f"req-{request.round_number}",
+            stream=iterate(),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def runtime() -> ExperimentRuntime:
     runtime, _ = build_runtime(
@@ -97,6 +127,15 @@ def runtime() -> ExperimentRuntime:
         )
     else:
         runtime.engine.gm_service.llm_service.client.tracker = gm_tracker
+    runtime.tts_service = NarrationTTSService(
+        Settings(
+            backend_runtime_mode="smoke_mock",
+            elevenlabs_api_key="test-key",
+            elevenlabs_voice_id="voice-test",
+            elevenlabs_model_id="model-test",
+        ),
+        provider=_FakeNarrationProvider(),
+    )
     return runtime
 
 
@@ -239,6 +278,7 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
         required = {
             "round_start",
             "gm_plan",
+            "gm_audio_status",
             "crisis_event",
             "agent_action",
             "resource_update",
@@ -276,10 +316,57 @@ def test_analytics_and_replay_endpoints_return_round_data(client: TestClient) ->
     assert snapshot.json()["round_number"] == 1
     assert snapshot.json()["events"]
 
-    highlights = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/highlights")
-    assert highlights.status_code == 200
-    assert highlights.json()["items"]
-    assert highlights.json()["items"][0]["category"] == "crisis_event"
+
+def test_round_narration_metadata_and_audio_routes(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 200
+    assert metadata.json()["round_number"] == 1
+    assert metadata.json()["text"]
+    assert metadata.json()["audio_url"].endswith("/rounds/1/narration/audio")
+    assert metadata.json()["status"] in {"pending", "ready"}
+
+    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    assert audio.status_code == 200
+    assert audio.headers["content-type"].startswith("audio/mpeg")
+    assert audio.content == b"audio-chunk-1audio-chunk-2"
+
+
+def test_round_narration_requires_available_narration_text(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 409
+
+
+def test_round_narration_audio_surfaces_provider_errors(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    runtime.tts_service = NarrationTTSService(
+        Settings(
+            backend_runtime_mode="smoke_mock",
+            elevenlabs_api_key="test-key",
+            elevenlabs_voice_id="voice-test",
+            elevenlabs_model_id="model-test",
+        ),
+        provider=_FakeNarrationProvider(
+            error=NarrationAudioError(
+                "Narration audio provider is rate limited.",
+                status_code=503,
+            )
+        ),
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+
+    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    assert audio.status_code == 503
 
 
 def test_derived_round_logs_are_persisted(client: TestClient) -> None:
@@ -309,6 +396,111 @@ def test_derived_round_logs_are_persisted(client: TestClient) -> None:
     )
     assert round_end.status_code == 200
     assert round_end.json()["total"] == 1
+
+
+def test_highlights_endpoint_supports_round_and_game_scope(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    _seed_highlight_logs(runtime, experiment_id)
+
+    game_highlights = client.get(f"{API_PREFIX}/experiments/{experiment_id}/highlights")
+    assert game_highlights.status_code == 200
+    assert game_highlights.json()["scope"] == "game"
+    assert len(game_highlights.json()["items"]) <= 12
+    scores = [item["score"] for item in game_highlights.json()["items"]]
+    assert scores == sorted(scores, reverse=True)
+    game_categories = {item["category"] for item in game_highlights.json()["items"]}
+    assert {
+        "crisis",
+        "betrayal",
+        "resource_swing",
+        "alliance_shift",
+        "close_vote",
+    } <= game_categories
+    suspicion_spikes = [
+        item for item in game_highlights.json()["items"] if item["category"] == "suspicion_spike"
+    ]
+    assert len(suspicion_spikes) == 2
+    assert len({item["id"] for item in suspicion_spikes}) == 2
+
+    round_highlights = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/highlights",
+        params={"scope": "round", "round": 2},
+    )
+    assert round_highlights.status_code == 200
+    assert round_highlights.json()["scope"] == "round"
+    assert len(round_highlights.json()["items"]) <= 5
+    assert all(item["round_number"] == 2 for item in round_highlights.json()["items"])
+    round_categories = {item["category"] for item in round_highlights.json()["items"]}
+    assert {
+        "betrayal",
+        "resource_swing",
+        "alliance_shift",
+        "close_vote",
+        "suspicion_spike",
+    } <= round_categories
+
+    legacy_alias = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/analytics/highlights",
+        params={"scope": "round", "round": 2},
+    )
+    assert legacy_alias.status_code == 200
+    assert legacy_alias.json() == round_highlights.json()
+
+
+def test_round_highlights_require_round_query(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    response = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/highlights",
+        params={"scope": "round"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "round is required when scope=round"
+
+
+def test_round_highlights_return_404_for_future_round(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    response = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/highlights",
+        params={"scope": "round", "round": 1},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Round highlights not found"
+
+
+def test_highlights_ignore_invalid_vote_tally_payloads(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    _seed_highlight_logs(runtime, experiment_id)
+    runtime.store.logs[experiment_id].append(
+        EventLogItem(
+            id="highlight-invalid-vote-r2",
+            experiment_id=experiment_id,
+            round_number=2,
+            phase="midday",
+            type="midday",
+            summary="A malformed vote payload lands in the log.",
+            data={
+                "kind": "meeting_result",
+                "tally": {"support": "two", "oppose": 1},
+            },
+            timestamp=datetime(2026, 3, 7, 12, 7, tzinfo=UTC),
+        )
+    )
+
+    response = client.get(f"{API_PREFIX}/experiments/{experiment_id}/highlights")
+    assert response.status_code == 200
+    assert all(
+        item["id"] != "highlight-invalid-vote-r2:close_vote" for item in response.json()["items"]
+    )
 
 
 def test_report_grade_analytics_use_resolved_action_outcomes(
@@ -574,3 +766,123 @@ def _wait_for_round_completion(
     raise AssertionError(
         f"Timed out waiting for experiment {experiment_id} to reach round {expected_round}."
     )
+
+
+def _seed_highlight_logs(runtime: ExperimentRuntime, experiment_id: str) -> None:
+    state = runtime.store.states[experiment_id]
+    state.current_round = 2
+    runtime.store.states[experiment_id] = state
+    timestamps = [
+        datetime(2026, 3, 7, 12, 0, tzinfo=UTC) + timedelta(minutes=index) for index in range(6)
+    ]
+    items = [
+        EventLogItem(
+            id="highlight-crisis-r1",
+            experiment_id=experiment_id,
+            round_number=1,
+            phase="dawn",
+            type="crisis_event",
+            summary="A public accusation turns the first dawn into open panic.",
+            data={
+                "crisis_event": {
+                    "type": "social",
+                    "description": "A public accusation turns the first dawn into open panic.",
+                    "affects": ["trust"],
+                    "severity": "high",
+                }
+            },
+            timestamp=timestamps[0],
+        ),
+        EventLogItem(
+            id="highlight-betrayal-r1",
+            experiment_id=experiment_id,
+            round_number=1,
+            phase="afternoon",
+            agent_id="mara",
+            type="agent_action",
+            summary="Mara sabotages the generator while the town searches for answers.",
+            data={
+                "requested_action_type": "sabotage",
+                "resolved_action_type": "sabotage",
+            },
+            timestamp=timestamps[1],
+        ),
+        EventLogItem(
+            id="highlight-round-end-r1",
+            experiment_id=experiment_id,
+            round_number=1,
+            phase="round_end",
+            type="round_end",
+            summary="Round 1 closes with brittle calm.",
+            data={
+                "summary": "Round 1 closes with brittle calm.",
+                "resources": {"food": 10.0, "water": 10.0, "materials": 8.0, "power": 7.0},
+                "factions": [],
+                "suspicion": [
+                    {"agent_id": "mara", "agent_name": "Mara", "suspicion_level": 22.0},
+                    {"agent_id": "jon", "agent_name": "Jon", "suspicion_level": 14.0},
+                ],
+            },
+            timestamp=timestamps[2],
+        ),
+        EventLogItem(
+            id="highlight-betrayal-r2",
+            experiment_id=experiment_id,
+            round_number=2,
+            phase="afternoon",
+            agent_id="mara",
+            type="agent_action",
+            summary="Mara openly threatens Jon to keep control of the town square.",
+            data={
+                "requested_action_type": "threaten",
+                "resolved_action_type": "threaten",
+            },
+            timestamp=timestamps[3],
+        ),
+        EventLogItem(
+            id="highlight-vote-r2",
+            experiment_id=experiment_id,
+            round_number=2,
+            phase="midday",
+            type="midday",
+            summary="The town barely backs Jon's search plan with two votes to one.",
+            data={
+                "kind": "meeting_result",
+                "proposal": "Search the perimeter for the missing supplies",
+                "tally": {"support": 2, "oppose": 1, "abstain": 0},
+                "passed": True,
+            },
+            timestamp=timestamps[4],
+        ),
+        EventLogItem(
+            id="highlight-round-end-r2",
+            experiment_id=experiment_id,
+            round_number=2,
+            phase="round_end",
+            type="round_end",
+            summary="Round 2 ends with the town split into camps.",
+            data={
+                "summary": "Round 2 ends with the town split into camps.",
+                "resources": {"food": 5.0, "water": 10.0, "materials": 8.0, "power": 7.0},
+                "factions": [
+                    {
+                        "faction_id": "alliance:jon",
+                        "name": "Jon's Watch",
+                        "kind": "alliance",
+                        "leader_id": "jon",
+                        "member_ids": ["jon", "mara"],
+                        "influence": 61.0,
+                        "formed_round": 2,
+                        "pressure": 58.0,
+                    }
+                ],
+                "suspicion": [
+                    {"agent_id": "mara", "agent_name": "Mara", "suspicion_level": 40.0},
+                    {"agent_id": "jon", "agent_name": "Jon", "suspicion_level": 24.0},
+                ],
+            },
+            timestamp=timestamps[5],
+        ),
+    ]
+    for item in items:
+        runtime.store.logs[experiment_id].append(item)

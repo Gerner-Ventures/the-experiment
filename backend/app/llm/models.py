@@ -31,6 +31,7 @@ class LLMRequest(LLMModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
     temperature: float | None = None
     generation_name: str | None = None
+    max_tokens: int | None = Field(default=None, ge=1)
 
 
 class LLMUsage(LLMModel):

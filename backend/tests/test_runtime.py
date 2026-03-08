@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -10,8 +11,21 @@ from starlette.websockets import WebSocketState
 from app.api.models import CreateExperimentRequest, EventLogItem
 from app.api.runtime import ConnectionManager, ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
+from app.core.config import Settings
 from app.engine.models import ActionResolution, RoundResult
 from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
+from app.tts import NarrationTTSService
+from app.tts.models import NarrationAudioRequest, ProviderAudioStream
+
+
+class _CountingStore(InMemoryExperimentStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.list_logs_calls = 0
+
+    async def list_logs(self, experiment_id: str) -> list[EventLogItem]:
+        self.list_logs_calls += 1
+        return await super().list_logs(experiment_id)
 
 
 def _request() -> CreateExperimentRequest:
@@ -85,9 +99,34 @@ def _gm_plan(round_number: int) -> GMPlanRecord:
     )
 
 
+class _FakeNarrationProvider:
+    async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
+        async def iterate() -> AsyncIterator[bytes]:
+            yield b"audio"
+
+        return ProviderAudioStream(
+            content_type="audio/mpeg",
+            request_id=f"req-{request.round_number}",
+            stream=iterate(),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def runtime_instance() -> ExperimentRuntime:
-    return ExperimentRuntime(store=InMemoryExperimentStore())
+    return ExperimentRuntime(
+        store=InMemoryExperimentStore(),
+        tts_service=NarrationTTSService(
+            Settings(
+                elevenlabs_api_key="test-key",
+                elevenlabs_voice_id="voice-test",
+                elevenlabs_model_id="model-test",
+            ),
+            provider=_FakeNarrationProvider(),
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -104,6 +143,7 @@ async def test_create_experiment_persists_initial_state_and_log(
     assert len(stored.agents) == 2
     assert total == 1
     assert logs[0].type == "experiment_created"
+    assert logs[0].data["resources"] == stored.world_state.resources.model_dump(mode="json")
 
 
 @pytest.mark.asyncio
@@ -251,6 +291,54 @@ async def test_connection_manager_broadcasts_encoded_payload_to_all_connected_so
 
 
 @pytest.mark.asyncio
+async def test_replay_index_reuses_loaded_logs() -> None:
+    store = _CountingStore()
+    runtime = ExperimentRuntime(store=store)
+    state = await runtime.create_experiment(_request())
+
+    await store.append_log(
+        EventLogItem(
+            id="round-end",
+            experiment_id=state.experiment_id,
+            round_number=1,
+            phase="round_end",
+            type="round_end",
+            summary="Round 1 concludes.",
+            data={
+                "summary": "Round 1 concludes.",
+                "threat_level": 10.0,
+                "resources": state.world_state.resources.model_dump(mode="json"),
+                "cooperation": {"score": 0.5, "cooperative_actions": 1, "total_actions": 2},
+                "betrayal_count": 0,
+                "sabotage_count": 0,
+                "gm": {"round_theme": "Pressure", "narration": "The town watches itself."},
+                "factions": [],
+                "suspicion": [],
+            },
+            timestamp=datetime.now(UTC),
+        )
+    )
+    await store.record_round_result(
+        state.experiment_id,
+        RoundResult(
+            round_number=1,
+            gm_plan=_gm_plan(1),
+            phases=[],
+            cooperation_ratio=0.0,
+            threat_level=10.0,
+            world_state=state.world_state,
+            action_resolutions=[],
+            created_at=datetime.now(UTC),
+        ),
+    )
+
+    replay = await runtime.get_replay_index(state.experiment_id)
+
+    assert replay.rounds[0].round_number == 1
+    assert store.list_logs_calls == 1
+
+
+@pytest.mark.asyncio
 async def test_connection_manager_removes_dead_sockets_during_broadcast() -> None:
     manager = ConnectionManager()
     live_socket = AsyncMock()
@@ -290,3 +378,29 @@ async def test_connection_manager_prunes_non_connected_sockets_before_sending(
     non_connected_socket.send_json.assert_not_awaited()
     assert live_socket in manager.connections["exp-1"]
     assert non_connected_socket not in manager.connections["exp-1"]
+
+
+@pytest.mark.asyncio
+async def test_approve_gm_plan_emits_audio_status(runtime_instance: ExperimentRuntime) -> None:
+    runtime_instance.connection_manager = AsyncMock()
+    state = await runtime_instance.create_experiment(_request())
+
+    applied = await runtime_instance.approve_gm_plan(state.experiment_id)
+    await asyncio.sleep(0.01)
+
+    sent_types = [
+        call.args[1]["type"]
+        for call in runtime_instance.connection_manager.broadcast.await_args_list
+    ]
+    assert applied.status == "applied"
+    assert "gm_audio_status" in sent_types
+
+
+@pytest.mark.asyncio
+async def test_broadcast_narration_audio_status_is_noop_without_tts_service() -> None:
+    runtime = ExperimentRuntime(store=InMemoryExperimentStore())
+    runtime.connection_manager = AsyncMock()
+
+    await runtime._broadcast_narration_audio_status_for_plan("exp-1", _gm_plan(1))
+
+    runtime.connection_manager.broadcast.assert_not_awaited()

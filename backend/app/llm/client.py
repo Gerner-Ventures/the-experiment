@@ -82,6 +82,7 @@ class LLMClient:
             temperature=request.temperature
             if request.temperature is not None
             else model_config.temperature,
+            max_tokens=request.max_tokens,
             timeout=model_config.timeout_seconds,
             metadata=metadata,
         )
