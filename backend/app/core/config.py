@@ -13,28 +13,28 @@ MAP_NARRATOR_VOICE_IDS: dict[str, str] = {
 
 # Per-character voice IDs for agent speech TTS. Character ID → ElevenLabs voice ID.
 CHARACTER_VOICE_IDS: dict[str, str] = {
-    "intern": "TX3LPaxmHKxFdv7VOQHJ",          # Liam — energetic, young
-    "patient-zero": "IKne3meq5aSn9XLyUdCD",     # Charlie — young, australian
-    "volunteer": "bIHbv24MWmeRgasZH58o",         # Will — relaxed optimist
-    "whistleblower": "cjVigY5qzO86Huf0OWal",    # Eric — smooth, trustworthy
-    "middle-mgmt": "onwK4e9ZLuTAKqWW03F9",      # Daniel — steady broadcaster
-    "hall-monitor": "CwhRBWXzGAHq8TQ4Fs17",     # Roger — laid-back, casual
-    "influencer": "cgSgspJ2msm6clMCkdW9",       # Jessica — playful, bright
-    "politician": "JBFqnCBsd6RMkjVDRZzb",       # George — warm storyteller
-    "prepper": "nPczCjzI2devNBz1zQrb",           # Brian — deep, resonant
-    "medic": "Xb7hH8MSUJpSbSDYk0k2",            # Alice — clear, engaging
-    "engineer": "iP95p4xoKVk53GoZ742B",         # Chris — down-to-earth
-    "chef": "N2lVS1w4EtoT3dr4eOWO",             # Callum — husky trickster
-    "philosopher": "XrExE9yKIg1WjnnlVkGX",      # Matilda — knowledgeable
-    "child": "FGY2WhTYpPnrIDTdsKH5",            # Laura — quirky attitude
-    "therapist": "pFZP5JQG7iQjIQuC4Bku",        # Lily — velvety actress
-    "con-artist": "SOYHLrjzK2X1ezoPC6cr",       # Harry — fierce warrior
-    "nihilist": "SAz9YHcvj6GT2YYXdXww",         # River — relaxed, neutral
-    "optimist": "hpp4J3VqNfWAUOO0d1Us",          # Bella — bright, warm
-    "conspiracy": "YI5bDiiDOYHHb2eLadHv",       # Storm Styles — dark, suspenseful
-    "sleeper": "EXAVITQu4vr4xnSDxMaL",          # Sarah — mature, reassuring
-    "clone": "pNInz6obpgDQGcFmaJgB",            # Adam — dominant, firm
-    "mascot": "pqHfZKP75CvOlQylNhV4",           # Bill — wise, mature
+    "intern": "TX3LPaxmHKxFdv7VOQHJ",  # Liam — energetic, young
+    "patient-zero": "IKne3meq5aSn9XLyUdCD",  # Charlie — young, australian
+    "volunteer": "bIHbv24MWmeRgasZH58o",  # Will — relaxed optimist
+    "whistleblower": "cjVigY5qzO86Huf0OWal",  # Eric — smooth, trustworthy
+    "middle-mgmt": "onwK4e9ZLuTAKqWW03F9",  # Daniel — steady broadcaster
+    "hall-monitor": "CwhRBWXzGAHq8TQ4Fs17",  # Roger — laid-back, casual
+    "influencer": "cgSgspJ2msm6clMCkdW9",  # Jessica — playful, bright
+    "politician": "JBFqnCBsd6RMkjVDRZzb",  # George — warm storyteller
+    "prepper": "nPczCjzI2devNBz1zQrb",  # Brian — deep, resonant
+    "medic": "Xb7hH8MSUJpSbSDYk0k2",  # Alice — clear, engaging
+    "engineer": "iP95p4xoKVk53GoZ742B",  # Chris — down-to-earth
+    "chef": "N2lVS1w4EtoT3dr4eOWO",  # Callum — husky trickster
+    "philosopher": "XrExE9yKIg1WjnnlVkGX",  # Matilda — knowledgeable
+    "child": "FGY2WhTYpPnrIDTdsKH5",  # Laura — quirky attitude
+    "therapist": "pFZP5JQG7iQjIQuC4Bku",  # Lily — velvety actress
+    "con-artist": "SOYHLrjzK2X1ezoPC6cr",  # Harry — fierce warrior
+    "nihilist": "SAz9YHcvj6GT2YYXdXww",  # River — relaxed, neutral
+    "optimist": "hpp4J3VqNfWAUOO0d1Us",  # Bella — bright, warm
+    "conspiracy": "YI5bDiiDOYHHb2eLadHv",  # Storm Styles — dark, suspenseful
+    "sleeper": "EXAVITQu4vr4xnSDxMaL",  # Sarah — mature, reassuring
+    "clone": "pNInz6obpgDQGcFmaJgB",  # Adam — dominant, firm
+    "mascot": "pqHfZKP75CvOlQylNhV4",  # Bill — wise, mature
 }
 
 
