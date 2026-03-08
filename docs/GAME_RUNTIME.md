@@ -422,6 +422,8 @@ Narration audio is exposed separately over REST:
 The websocket only carries narration-audio readiness state; audio bytes are streamed over HTTP from
 the backend rather than sent through the experiment websocket.
 
+For the full narration-audio design, see `docs/AUDIO_NARRATION.md`.
+
 Code references:
 
 - `backend/app/api/runtime.py`

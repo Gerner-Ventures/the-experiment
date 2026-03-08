@@ -3,6 +3,7 @@
 This document is the contributor-oriented map of the FastAPI backend: how it is structured, how to run it locally, which configuration matters, and where to make changes.
 
 For the external API contract, see [docs/API.md](API.md).
+For narration audio architecture and local verification, see [docs/AUDIO_NARRATION.md](AUDIO_NARRATION.md).
 For deployment and persistence details, see [docs/INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 
 ## System Map
