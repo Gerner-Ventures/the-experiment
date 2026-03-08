@@ -43,12 +43,18 @@ export function useWebSocket(): UseWebSocket {
     }
 
     ws.onmessage = (event) => {
+      let msg: WSMessage
       try {
-        const msg = JSON.parse(event.data) as WSMessage
-        console.debug('[WS]', msg.type, msg.phase ?? '', msg.data)
-        routeMessage(msg)
+        msg = JSON.parse(event.data) as WSMessage
       } catch (err) {
         console.warn('[WS] Failed to parse message:', err, event.data)
+        return
+      }
+      console.debug('[WS]', msg.type, msg.phase ?? '', msg.data)
+      try {
+        routeMessage(msg)
+      } catch (err) {
+        console.error('[WS] Error handling message type:', msg.type, err)
       }
     }
 

@@ -79,8 +79,8 @@ class _ScriptedAgentService(AgentService):
 def reset_runtime_store() -> None:
     runtime.store = InMemoryExperimentStore()
     runtime.connection_manager.connections.clear()
-    runtime._step_in_progress = False
-    runtime._current_task = None
+    runtime._steps_in_progress.clear()
+    runtime._current_tasks.clear()
     runtime.gm_service.llm_service.client.tracker = UsageTracker()
     runtime.engine.gm_service.llm_service.client.tracker = UsageTracker()
     runtime.engine.agent_service = _StubAgentService()

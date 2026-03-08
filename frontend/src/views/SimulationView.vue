@@ -202,6 +202,14 @@ onUnmounted(() => {
   socialStore.$reset()
 })
 
+// When stepping clears (from step_error, disconnect, etc.), reset waitingForRound
+// so auto-play doesn't stall permanently
+watch(() => uiStore.isStepping, (stepping) => {
+  if (!stepping) {
+    waitingForRound = false
+  }
+})
+
 // Clear stepping and auto-play state if WebSocket disconnects mid-round
 watch(() => ws.state.value, (state) => {
   if (state === 'disconnected') {

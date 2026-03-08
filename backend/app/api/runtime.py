@@ -332,7 +332,12 @@ class ExperimentRuntime:
         self._steps_in_progress[experiment_id] = True
         task = asyncio.create_task(self._step_streaming(experiment_id))
         self._current_tasks[experiment_id] = task
-        task.add_done_callback(lambda _: self._steps_in_progress.pop(experiment_id, None))
+
+        def _on_step_done(_: asyncio.Task[None]) -> None:
+            self._steps_in_progress.pop(experiment_id, None)
+            self._current_tasks.pop(experiment_id, None)
+
+        task.add_done_callback(_on_step_done)
 
     async def _step_streaming(self, experiment_id: str) -> None:
         """Run a round using SimulationEngine.run_round() with a streaming hook."""
@@ -401,14 +406,17 @@ class ExperimentRuntime:
             )
         except Exception:
             logger.exception("Background step failed for %s", experiment_id)
-            await self.connection_manager.broadcast(
-                experiment_id,
-                self._message(
-                    "step_error",
-                    round_number=intended_round,
-                    data={"error": "Round execution failed. Check server logs."},
-                ),
-            )
+            try:
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "step_error",
+                        round_number=intended_round,
+                        data={"error": "Round execution failed. Check server logs."},
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to broadcast step_error for %s", experiment_id)
 
     async def list_agents(self, experiment_id: str) -> list[EngineAgentState]:
         return (await self.get_state(experiment_id)).agents
