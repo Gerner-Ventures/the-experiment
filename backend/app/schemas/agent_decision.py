@@ -2,47 +2,12 @@ from typing import Literal, cast
 
 from pydantic import Field
 
-from app.actions import DECISION_ACTION_IDS
+from app.actions import DecisionActionName
 from app.schemas.common import APIModel
 
-DecisionActionType = Literal[
-    "move",
-    "gather",
-    "repair",
-    "trade",
-    "talk",
-    "hoard",
-    "sabotage",
-    "explore",
-    "accuse",
-    "vote",
-    "rest",
-    "observe",
-    "attack",
-    "threaten",
-    "stab",
-    "shoot",
-    "poison",
-    "dance",
-    "pray",
-    "rally",
-    "mourn",
-    "celebrate",
-    "argue",
-    "pee",
-    "poop",
-    "vomit",
-    "sleep",
-    "eat",
-    "drink",
-    "investigate",
-    "monologue",
-    "panic",
-    "breakdown",
-    "self_sacrifice",
-]
+DecisionActionType = DecisionActionName
 DECISION_ACTION_TYPES: tuple[DecisionActionType, ...] = cast(
-    tuple[DecisionActionType, ...], DECISION_ACTION_IDS
+    tuple[DecisionActionType, ...], tuple(DecisionActionName)
 )
 CooperationIntent = Literal["high", "medium", "low", "none"]
 

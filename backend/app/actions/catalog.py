@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from typing import get_args
 
-from app.actions.models import ActionSpec, ActionTag
+from app.actions.models import (
+    ACTION_IDS,
+    CONSEQUENCE_ACTION_IDS,
+    DECISION_ACTION_IDS,
+    ActionSpec,
+    ActionTag,
+    ConsequenceActionName,
+    DecisionActionName,
+)
 
 
 def _tags(*values: ActionTag) -> frozenset[ActionTag]:
@@ -15,14 +23,14 @@ def _location_types(*values: str) -> frozenset[str]:
 
 ACTION_SPECS: tuple[ActionSpec, ...] = (
     ActionSpec(
-        id="move",
+        id=DecisionActionName.MOVE,
         kind="decision",
         category="neutral",
         description="Move to a new location.",
         requires_location=True,
     ),
     ActionSpec(
-        id="gather",
+        id=DecisionActionName.GATHER,
         kind="decision",
         category="cooperative",
         description="Gather or produce a resource.",
@@ -31,7 +39,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         allowed_location_types=_location_types("farm", "water_source", "store"),
     ),
     ActionSpec(
-        id="repair",
+        id=DecisionActionName.REPAIR,
         kind="decision",
         category="cooperative",
         description="Repair town infrastructure.",
@@ -40,7 +48,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         allowed_location_types=_location_types("workshop", "meeting_hall", "boundary", "mystery"),
     ),
     ActionSpec(
-        id="trade",
+        id=DecisionActionName.TRADE,
         kind="decision",
         category="social",
         description="Exchange goods or favors.",
@@ -48,7 +56,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("cooperative", "interaction", "mock_cooperative"),
     ),
     ActionSpec(
-        id="talk",
+        id=DecisionActionName.TALK,
         kind="decision",
         category="social",
         description="Speak to another agent.",
@@ -56,7 +64,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("cooperative", "interaction", "mock_cooperative"),
     ),
     ActionSpec(
-        id="hoard",
+        id=DecisionActionName.HOARD,
         kind="decision",
         category="selfish",
         description="Privately accumulate supplies.",
@@ -71,7 +79,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         ),
     ),
     ActionSpec(
-        id="sabotage",
+        id=DecisionActionName.SABOTAGE,
         kind="decision",
         category="selfish",
         description="Undermine a structure or plan.",
@@ -79,14 +87,14 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("sabotage"),
     ),
     ActionSpec(
-        id="explore",
+        id=DecisionActionName.EXPLORE,
         kind="decision",
         category="neutral",
         description="Search the town or its edges.",
         requires_location=True,
     ),
     ActionSpec(
-        id="accuse",
+        id=DecisionActionName.ACCUSE,
         kind="decision",
         category="social",
         description="Openly accuse another agent.",
@@ -94,7 +102,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("hostile", "interaction"),
     ),
     ActionSpec(
-        id="vote",
+        id=DecisionActionName.VOTE,
         kind="decision",
         category="social",
         description="Cast a meeting vote.",
@@ -102,100 +110,109 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         allowed_location_types=_location_types("meeting_hall"),
     ),
     ActionSpec(
-        id="rest",
+        id=DecisionActionName.REST,
         kind="decision",
         category="neutral",
         description="Recover privately.",
         tags=_tags("cooperative", "mock_cooperative"),
     ),
     ActionSpec(
-        id="observe",
+        id=DecisionActionName.OBSERVE,
         kind="decision",
         category="neutral",
         description="Watch without intervening.",
         tags=_tags("cooperative", "mock_cooperative"),
     ),
     ActionSpec(
-        id="attack",
+        id=DecisionActionName.ATTACK,
         kind="decision",
         category="selfish",
         description="Launch an overtly violent attack.",
         requires_target=True,
         tags=_tags("hostile", "interaction"),
-        consequence_pool=("injured", "knocked_down", "stunned", "burning"),
+        consequence_pool=(
+            ConsequenceActionName.INJURED,
+            ConsequenceActionName.KNOCKED_DOWN,
+            ConsequenceActionName.STUNNED,
+            ConsequenceActionName.BURNING,
+        ),
     ),
     ActionSpec(
-        id="threaten",
+        id=DecisionActionName.THREATEN,
         kind="decision",
         category="social",
         description="Intimidate someone with implied harm.",
         requires_target=True,
         tags=_tags("hostile", "interaction"),
-        consequence_pool=("crying", "fleeing", "stunned"),
+        consequence_pool=(
+            ConsequenceActionName.CRYING,
+            ConsequenceActionName.FLEEING,
+            ConsequenceActionName.STUNNED,
+        ),
     ),
     ActionSpec(
-        id="stab",
+        id=DecisionActionName.STAB,
         kind="decision",
         category="selfish",
         description="Use a blade or improvised weapon in close quarters.",
         requires_target=True,
         tags=_tags("hostile", "interaction"),
-        consequence_pool=("bleeding", "injured"),
+        consequence_pool=(ConsequenceActionName.BLEEDING, ConsequenceActionName.INJURED),
     ),
     ActionSpec(
-        id="shoot",
+        id=DecisionActionName.SHOOT,
         kind="decision",
         category="selfish",
         description="Attack from range with a firearm or similar weapon.",
         requires_target=True,
         tags=_tags("hostile", "interaction", "ranged"),
         interaction_range=4,
-        consequence_pool=("bleeding", "injured"),
+        consequence_pool=(ConsequenceActionName.BLEEDING, ConsequenceActionName.INJURED),
     ),
     ActionSpec(
-        id="poison",
+        id=DecisionActionName.POISON,
         kind="decision",
         category="selfish",
         description="Secretly contaminate food, drink, or supplies.",
         requires_target=True,
         tags=_tags("hostile", "interaction"),
-        consequence_pool=("poisoned",),
+        consequence_pool=(ConsequenceActionName.POISONED,),
     ),
     ActionSpec(
-        id="dance",
+        id=DecisionActionName.DANCE,
         kind="decision",
         category="social",
         description="Perform a dramatic or celebratory dance.",
     ),
     ActionSpec(
-        id="pray",
+        id=DecisionActionName.PRAY,
         kind="decision",
         category="social",
         description="Offer a public or private prayer.",
         tags=_tags("cooperative"),
     ),
     ActionSpec(
-        id="rally",
+        id=DecisionActionName.RALLY,
         kind="decision",
         category="social",
         description="Try to unite the group around a cause or plan.",
         tags=_tags("cooperative"),
     ),
     ActionSpec(
-        id="mourn",
+        id=DecisionActionName.MOURN,
         kind="decision",
         category="social",
         description="Publicly grieve a loss or setback.",
         tags=_tags("cooperative"),
     ),
     ActionSpec(
-        id="celebrate",
+        id=DecisionActionName.CELEBRATE,
         kind="decision",
         category="social",
         description="Mark a win with loud, visible enthusiasm.",
     ),
     ActionSpec(
-        id="argue",
+        id=DecisionActionName.ARGUE,
         kind="decision",
         category="social",
         description="Escalate a disagreement into a heated exchange.",
@@ -203,49 +220,49 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("interaction"),
     ),
     ActionSpec(
-        id="pee",
+        id=DecisionActionName.PEE,
         kind="decision",
         category="neutral",
         description="Take a brief biological break.",
         requires_location=True,
     ),
     ActionSpec(
-        id="poop",
+        id=DecisionActionName.POOP,
         kind="decision",
         category="neutral",
         description="Take a private biological break.",
         requires_location=True,
     ),
     ActionSpec(
-        id="vomit",
+        id=DecisionActionName.VOMIT,
         kind="decision",
         category="neutral",
         description="Get sick in a visible and disruptive way.",
         requires_location=True,
     ),
     ActionSpec(
-        id="sleep",
+        id=DecisionActionName.SLEEP,
         kind="decision",
         category="neutral",
         description="Sleep deeply rather than simply resting briefly.",
         requires_location=True,
     ),
     ActionSpec(
-        id="eat",
+        id=DecisionActionName.EAT,
         kind="decision",
         category="neutral",
         description="Consume food or rations.",
         requires_location=True,
     ),
     ActionSpec(
-        id="drink",
+        id=DecisionActionName.DRINK,
         kind="decision",
         category="neutral",
         description="Drink water, booze, or something suspicious.",
         requires_location=True,
     ),
     ActionSpec(
-        id="investigate",
+        id=DecisionActionName.INVESTIGATE,
         kind="decision",
         category="neutral",
         description="Closely inspect a clue, rumor, or suspicious area.",
@@ -253,25 +270,25 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("interaction"),
     ),
     ActionSpec(
-        id="monologue",
+        id=DecisionActionName.MONOLOGUE,
         kind="decision",
         category="social",
         description="Deliver an extended dramatic speech.",
     ),
     ActionSpec(
-        id="panic",
+        id=DecisionActionName.PANIC,
         kind="decision",
         category="neutral",
         description="Lose composure and react chaotically.",
     ),
     ActionSpec(
-        id="breakdown",
+        id=DecisionActionName.BREAKDOWN,
         kind="decision",
         category="neutral",
         description="Suffer an emotional collapse in public or private.",
     ),
     ActionSpec(
-        id="self_sacrifice",
+        id=DecisionActionName.SELF_SACRIFICE,
         kind="decision",
         category="cooperative",
         description="Give up your life in a ritualized sacrifice to steady the town.",
@@ -279,56 +296,56 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         tags=_tags("terminal"),
     ),
     ActionSpec(
-        id="bleeding",
+        id=ConsequenceActionName.BLEEDING,
         kind="consequence",
         category="consequence",
         description="A visible wound leaves blood in the aftermath of violence.",
         suspicion_delta=8.0,
     ),
     ActionSpec(
-        id="injured",
+        id=ConsequenceActionName.INJURED,
         kind="consequence",
         category="consequence",
         description="A painful injury slows or destabilizes the target.",
         suspicion_delta=7.0,
     ),
     ActionSpec(
-        id="stunned",
+        id=ConsequenceActionName.STUNNED,
         kind="consequence",
         category="consequence",
         description="Shock leaves the target briefly reeling.",
         suspicion_delta=6.0,
     ),
     ActionSpec(
-        id="knocked_down",
+        id=ConsequenceActionName.KNOCKED_DOWN,
         kind="consequence",
         category="consequence",
         description="The target is thrown to the ground by force.",
         suspicion_delta=7.0,
     ),
     ActionSpec(
-        id="burning",
+        id=ConsequenceActionName.BURNING,
         kind="consequence",
         category="consequence",
         description="Flame or heat leaves the target in immediate distress.",
         suspicion_delta=9.0,
     ),
     ActionSpec(
-        id="poisoned",
+        id=ConsequenceActionName.POISONED,
         kind="consequence",
         category="consequence",
         description="The target suffers from contamination or toxin exposure.",
         suspicion_delta=8.0,
     ),
     ActionSpec(
-        id="crying",
+        id=ConsequenceActionName.CRYING,
         kind="consequence",
         category="consequence",
         description="Fear or grief breaks through in a visible emotional reaction.",
         suspicion_delta=4.0,
     ),
     ActionSpec(
-        id="fleeing",
+        id=ConsequenceActionName.FLEEING,
         kind="consequence",
         category="consequence",
         description="The target tries to escape immediate danger.",
@@ -336,18 +353,11 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
     ),
 )
 
-ACTION_CATALOG: dict[str, ActionSpec] = {spec.id: spec for spec in ACTION_SPECS}
-ACTION_IDS: tuple[str, ...] = tuple(spec.id for spec in ACTION_SPECS)
-DECISION_ACTION_IDS: tuple[str, ...] = tuple(
-    spec.id for spec in ACTION_SPECS if spec.kind == "decision"
-)
-CONSEQUENCE_ACTION_IDS: tuple[str, ...] = tuple(
-    spec.id for spec in ACTION_SPECS if spec.kind == "consequence"
-)
+ACTION_CATALOG: dict[str, ActionSpec] = {spec.id.value: spec for spec in ACTION_SPECS}
 
 
 def _tagged_action_ids(tag: ActionTag) -> tuple[str, ...]:
-    return tuple(spec.id for spec in ACTION_SPECS if tag in spec.tags)
+    return tuple(spec.id.value for spec in ACTION_SPECS if tag in spec.tags)
 
 
 COOPERATIVE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("cooperative")
@@ -362,13 +372,17 @@ ACTION_IDS_BY_TAG: dict[ActionTag, frozenset[str]] = {
     tag: frozenset(_tagged_action_ids(tag)) for tag in get_args(ActionTag)
 }
 ACTION_ALLOWED_LOCATION_TYPES: dict[str, frozenset[str]] = {
-    spec.id: spec.allowed_location_types for spec in ACTION_SPECS if spec.allowed_location_types
+    spec.id.value: spec.allowed_location_types
+    for spec in ACTION_SPECS
+    if spec.allowed_location_types
 }
 ACTION_CONSEQUENCE_POOLS: dict[str, tuple[str, ...]] = {
-    spec.id: spec.consequence_pool for spec in ACTION_SPECS if spec.consequence_pool
+    spec.id.value: tuple(consequence.value for consequence in spec.consequence_pool)
+    for spec in ACTION_SPECS
+    if spec.consequence_pool
 }
 CONSEQUENCE_SUSPICION_DELTAS: dict[str, float] = {
-    spec.id: spec.suspicion_delta for spec in ACTION_SPECS if spec.suspicion_delta is not None
+    spec.id.value: spec.suspicion_delta for spec in ACTION_SPECS if spec.suspicion_delta is not None
 }
 
 
@@ -397,6 +411,8 @@ def _validate_catalog() -> None:
     errors: list[str] = []
     if len(ACTION_CATALOG) != len(ACTION_SPECS):
         errors.append("Action ids must be unique.")
+    if set(ACTION_IDS) != set(ACTION_CATALOG):
+        errors.append("Enum-defined action ids and catalog action ids must match exactly.")
 
     for spec in ACTION_SPECS:
         if spec.interaction_range is not None and "interaction" not in spec.tags:

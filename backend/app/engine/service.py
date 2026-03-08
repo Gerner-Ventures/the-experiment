@@ -12,6 +12,8 @@ from app.actions import (
     ACTION_ALLOWED_LOCATION_TYPES,
     ACTION_CONSEQUENCE_POOLS,
     CONSEQUENCE_SUSPICION_DELTAS as ACTION_CONSEQUENCE_SUSPICION_DELTAS,
+    ConsequenceActionName,
+    DecisionActionName,
     INTERACTION_ACTION_IDS,
     RANGED_ACTION_IDS,
 )
@@ -948,28 +950,30 @@ class SimulationEngine:
             "threaten": "threatens",
         }.get(source_action_type, f"uses {source_action_type} on")
         consequence_text: dict[ConsequenceActionType, str] = {
-            "bleeding": (
+            ConsequenceActionName.BLEEDING: (
                 f"{target.name} is left bleeding after {source.name} {action_phrase} them at {location}."
             ),
-            "injured": (
+            ConsequenceActionName.INJURED: (
                 f"{target.name} is injured after {source.name} {action_phrase} them at {location}."
             ),
-            "stunned": (
+            ConsequenceActionName.STUNNED: (
                 f"{target.name} is stunned after {source.name} {action_phrase} them at {location}."
             ),
-            "knocked_down": (
+            ConsequenceActionName.KNOCKED_DOWN: (
                 f"{target.name} is knocked down after {source.name} {action_phrase} them at {location}."
             ),
-            "burning": (
+            ConsequenceActionName.BURNING: (
                 f"{target.name} is burning after {source.name} {action_phrase} them at {location}."
             ),
-            "poisoned": (
+            ConsequenceActionName.POISONED: (
                 f"{target.name} is poisoned after {source.name} {action_phrase} them at {location}."
             ),
-            "crying": (
+            ConsequenceActionName.CRYING: (
                 f"{target.name} breaks down crying after {source.name} {action_phrase} them at {location}."
             ),
-            "fleeing": f"{target.name} flees after {source.name} {action_phrase} them at {location}.",
+            ConsequenceActionName.FLEEING: (
+                f"{target.name} flees after {source.name} {action_phrase} them at {location}."
+            ),
         }
         return consequence_text[consequence_type]
 
@@ -1105,7 +1109,7 @@ class SimulationEngine:
             agent_id=agent.agent_id,
             agent_name=agent.name,
             location=location,
-            action_type="self_sacrifice",
+            action_type=DecisionActionName.SELF_SACRIFICE,
             reason=(
                 f"{agent.name} performs a ritual self-sacrifice at {location}, "
                 "shocking the town into temporary order."

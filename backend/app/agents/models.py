@@ -4,7 +4,13 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.actions import ACTION_IDS, ActionCategory, CONSEQUENCE_ACTION_IDS
+from app.actions import (
+    ACTION_IDS,
+    CONSEQUENCE_ACTION_IDS,
+    ActionCategory,
+    ActionName,
+    ConsequenceActionName,
+)
 from app.db.models import AgentStatus
 from app.llm.models import MemorySalienceType
 from app.schemas.agent_decision import AgentDecision
@@ -25,60 +31,8 @@ GoalArchetype = Literal[
     "personal_redemption",
     "obsession_desire",
 ]
-ConsequenceActionType = Literal[
-    "bleeding",
-    "injured",
-    "stunned",
-    "knocked_down",
-    "burning",
-    "poisoned",
-    "crying",
-    "fleeing",
-]
-ActionType = Literal[
-    "move",
-    "gather",
-    "repair",
-    "trade",
-    "talk",
-    "hoard",
-    "sabotage",
-    "explore",
-    "accuse",
-    "vote",
-    "rest",
-    "observe",
-    "attack",
-    "threaten",
-    "stab",
-    "shoot",
-    "poison",
-    "dance",
-    "pray",
-    "rally",
-    "mourn",
-    "celebrate",
-    "argue",
-    "pee",
-    "poop",
-    "vomit",
-    "sleep",
-    "eat",
-    "drink",
-    "investigate",
-    "monologue",
-    "panic",
-    "breakdown",
-    "self_sacrifice",
-    "bleeding",
-    "injured",
-    "stunned",
-    "knocked_down",
-    "burning",
-    "poisoned",
-    "crying",
-    "fleeing",
-]
+ConsequenceActionType = ConsequenceActionName
+ActionType = ActionName
 SuspicionTrigger = Literal[
     "edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"
 ]

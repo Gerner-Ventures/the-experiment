@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from app.actions import DecisionActionName
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
@@ -108,7 +109,7 @@ class AgentBrain:
             decision = AgentDecision(
                 inner_thought="I need a moment to read the room.",
                 suspicion=None,
-                action=DecisionAction(type="observe", location=context.location),
+                action=DecisionAction(type=DecisionActionName.OBSERVE, location=context.location),
                 dialogue=None,
                 goal_progress="No clear progress this turn.",
                 cooperation_intent="medium",
