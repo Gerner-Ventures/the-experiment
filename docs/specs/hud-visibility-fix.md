@@ -1,6 +1,6 @@
 ---
 title: "HUD Controls Disappear on Pan/Refresh"
-status: todo
+status: in_progress
 issue: 96
 priority: P1
 tags: [stream-1, frontend, bugfix, hud, pixi]

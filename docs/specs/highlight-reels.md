@@ -1,6 +1,6 @@
 ---
 title: "[P1] Highlight reels — round recaps & post-game cinematic moments"
-status: todo
+status: in_progress
 issue: 46
 priority: P1
 tags: [stream-1, frontend, backend, highlights, narration]

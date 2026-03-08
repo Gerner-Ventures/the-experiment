@@ -1,6 +1,6 @@
 ---
 title: "Zoom Sensitivity & Camera Centering Fix"
-status: todo
+status: done
 issue: 95
 priority: P1
 tags: [stream-1, frontend, bugfix, pixi, camera]

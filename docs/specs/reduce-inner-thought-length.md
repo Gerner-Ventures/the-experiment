@@ -1,7 +1,7 @@
 ---
 title: "Reduce Agent Inner Thought Length"
 type: spec
-status: draft
+status: in_progress
 owner: ""
 team: backend
 review_status: draft

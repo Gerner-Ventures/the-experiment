@@ -1,6 +1,6 @@
 ---
 title: "Streaming step test coverage"
-status: todo
+status: in_progress
 issue: 90
 priority: P1
 tags: [backend, testing, runtime]
