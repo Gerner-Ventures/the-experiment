@@ -100,7 +100,7 @@ async function initExperiment() {
           gmStore.hydrateNarration(
             planNarration,
             planRound,
-            meta.status === 'ready' ? 'ready' : meta.status === 'pending' ? 'pending' : 'unavailable',
+            meta.status === 'ready' ? 'ready' : 'unavailable',
             meta.status === 'ready' ? meta.audio_url ?? null : null,
           )
         } catch {
@@ -370,8 +370,8 @@ function goBack() {
       :audio-url="gmStore.narrationAudioUrl"
       :autoplay-blocked="gmStore.audioAutoplayBlocked"
       @dismiss="gmStore.dismissNarration()"
-      @update:playing="gmStore.isNarrationPlaying = $event"
-      @update:autoplay-blocked="gmStore.audioAutoplayBlocked = $event"
+      @update:playing="gmStore.setNarrationPlaying($event)"
+      @update:autoplay-blocked="gmStore.setAutoplayBlocked($event)"
     />
 
     <!-- Agent Dossier Drawer -->

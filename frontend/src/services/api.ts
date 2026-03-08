@@ -158,10 +158,6 @@ export const api = {
     return request(`${BASE}/${experimentId}/rounds/${roundNumber}/narration`)
   },
 
-  getRoundNarrationAudioUrl(experimentId: string, roundNumber: number): string {
-    return `${API_BASE}${BASE}/${experimentId}/rounds/${roundNumber}/narration/audio`
-  },
-
   // Arc
   updateArc(id: string, arc: Record<string, unknown>): Promise<ExperimentDetail> {
     return request(`${BASE}/${id}/arc`, {

@@ -128,6 +128,32 @@ describe('useGMStore', () => {
     })
   })
 
+  describe('legacy onNarration', () => {
+    it('resets stale audio state from previous round', () => {
+      const store = useGMStore()
+      // Simulate audio loaded for round 1
+      store.onPlan(makeMsg('gm_plan', {
+        plan: {
+          round: 1, round_theme: 'R1', reasoning: '',
+          crisis_event: { type: 'resource', description: '', severity: 'low' },
+          resource_modifiers: {}, narration: 'Day one.', meta_hint: null,
+        },
+      }))
+      store.onAudioStatus(makeMsg('gm_audio_status', {
+        status: 'ready', audio_url: '/audio/r1',
+      } as GMAudioStatusData, 1))
+      expect(store.narrationAudioStatus).toBe('ready')
+      expect(store.narrationAudioUrl).toBe('/audio/r1')
+
+      // Legacy narration arrives — should clear stale audio state
+      store.onNarration(makeMsg('gm_narration', { text: 'New text.' }, 2))
+      expect(store.narrationText).toBe('New text.')
+      expect(store.narrationRound).toBe(2)
+      expect(store.narrationAudioStatus).toBe('idle')
+      expect(store.narrationAudioUrl).toBeNull()
+    })
+  })
+
   describe('dismissNarration', () => {
     it('hides narration and stops playing', () => {
       const store = useGMStore()
@@ -142,7 +168,7 @@ describe('useGMStore', () => {
           meta_hint: null,
         },
       }))
-      store.isNarrationPlaying = true
+      store.setNarrationPlaying(true)
       store.dismissNarration()
       expect(store.showNarration).toBe(false)
       expect(store.isNarrationPlaying).toBe(false)

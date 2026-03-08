@@ -15,9 +15,15 @@ export const useGMStore = defineStore('gm', () => {
   const narrationRound = ref<number | null>(null)
   const narrationAudioStatus = ref<NarrationAudioStatus | 'idle'>('idle')
   const narrationAudioUrl = ref<string | null>(null)
-  const narrationAudioError = ref<string | null>(null)
   const audioAutoplayBlocked = ref(false)
   const isNarrationPlaying = ref(false)
+
+  function resetAudioState() {
+    narrationAudioStatus.value = 'idle'
+    narrationAudioUrl.value = null
+    audioAutoplayBlocked.value = false
+    isNarrationPlaying.value = false
+  }
 
   function onPlan(msg: WSMessage) {
     const raw = msg.data as Record<string, unknown>
@@ -46,32 +52,26 @@ export const useGMStore = defineStore('gm', () => {
     narrationText.value = currentPlan.value.narration
     narrationRound.value = currentPlan.value.round
     showNarration.value = !!narrationText.value
-
-    // Reset audio state for new plan
-    narrationAudioStatus.value = 'idle'
-    narrationAudioUrl.value = null
-    narrationAudioError.value = null
-    audioAutoplayBlocked.value = false
-    isNarrationPlaying.value = false
+    resetAudioState()
   }
 
   function onNarration(msg: WSMessage) {
     // Legacy handler — kept for backward compatibility
     const data = msg.data as { text: string }
     narrationText.value = data.text
+    narrationRound.value = msg.round
     showNarration.value = true
+    resetAudioState()
   }
 
-  function onAudioStatus(msg: WSMessage) {
-    const data = msg.data as unknown as GMAudioStatusData
+  function onAudioStatus(msg: WSMessage<GMAudioStatusData>) {
+    const data = msg.data
     // Ignore stale messages from previous rounds
     if (narrationRound.value !== null && msg.round !== narrationRound.value) return
     narrationAudioStatus.value = data.status
     if (data.status === 'ready' && data.audio_url) {
       narrationAudioUrl.value = data.audio_url
-      narrationAudioError.value = null
     } else if (data.status === 'error') {
-      narrationAudioError.value = data.error ?? 'Unknown error'
       narrationAudioUrl.value = null
     }
   }
@@ -81,7 +81,6 @@ export const useGMStore = defineStore('gm', () => {
     narrationRound.value = round
     narrationAudioStatus.value = status
     narrationAudioUrl.value = audioUrl
-    narrationAudioError.value = null
     audioAutoplayBlocked.value = false
     isNarrationPlaying.value = false
     showNarration.value = !!text
@@ -90,6 +89,14 @@ export const useGMStore = defineStore('gm', () => {
   function approvePlan() {
     planApproved.value = true
     showPlanPanel.value = false
+  }
+
+  function setNarrationPlaying(value: boolean) {
+    isNarrationPlaying.value = value
+  }
+
+  function setAutoplayBlocked(value: boolean) {
+    audioAutoplayBlocked.value = value
   }
 
   function dismissNarration() {
@@ -106,7 +113,6 @@ export const useGMStore = defineStore('gm', () => {
     narrationRound.value = null
     narrationAudioStatus.value = 'idle'
     narrationAudioUrl.value = null
-    narrationAudioError.value = null
     audioAutoplayBlocked.value = false
     isNarrationPlaying.value = false
   }
@@ -118,6 +124,7 @@ export const useGMStore = defineStore('gm', () => {
     audioAutoplayBlocked, isNarrationPlaying,
     onPlan, onNarration, onAudioStatus, hydrateNarration,
     approvePlan, dismissNarration,
+    setNarrationPlaying, setAutoplayBlocked,
     $reset,
   }
 })
