@@ -35,6 +35,9 @@ class MemoryLLMService(Protocol):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryPromotionDecision: ...
 
     async def consolidate_memory_events(
@@ -44,6 +47,9 @@ class MemoryLLMService(Protocol):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision: ...
 
     async def consolidate_relationship_memory(
@@ -53,6 +59,10 @@ class MemoryLLMService(Protocol):
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        round_number: int | None = None,
     ) -> RelationshipConsolidationDecision: ...
 
 
@@ -82,6 +92,9 @@ class AgentService:
         goal: SecretGoal | None = None,
         suspicion_level: float = 0,
         classify: bool = True,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> AgentMemoryState:
         event = MemoryEvent(
             round_number=round_number,
@@ -103,6 +116,9 @@ class AgentService:
                     goal=goal,
                     suspicion_level=suspicion_level,
                     recent_key_memories=memory.key_memories,
+                    experiment_id=experiment_id,
+                    agent_id=agent_id,
+                    agent_name=agent_name,
                 )
             except Exception:
                 logger.warning(
@@ -142,6 +158,9 @@ class AgentService:
         *,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> AgentMemoryState:
         unconsolidated_events = [
             event
@@ -157,6 +176,9 @@ class AgentService:
                 goal=goal,
                 suspicion_level=suspicion_level,
                 recent_key_memories=memory.key_memories,
+                experiment_id=experiment_id,
+                agent_id=agent_id,
+                agent_name=agent_name,
             )
         except Exception:
             logger.warning(
@@ -184,6 +206,10 @@ class AgentService:
         *,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        round_number: int | None = None,
     ) -> AgentMemoryState:
         relationships = dict(memory.relationship_memory)
         consolidation_signatures = dict(memory.relationship_consolidation_signatures)
@@ -201,6 +227,10 @@ class AgentService:
                     relationship=relationship,
                     goal=goal,
                     suspicion_level=suspicion_level,
+                    experiment_id=experiment_id,
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                    round_number=round_number,
                 )
             except Exception:
                 logger.warning(

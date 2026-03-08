@@ -85,9 +85,15 @@ class AgentBrain:
                 metadata={
                     "experiment_id": context.experiment_id,
                     "agent_id": context.agent_id,
+                    "agent_name": context.name,
                     "round_number": context.world_state.round_number,
+                    "tags": [
+                        "role:agent",
+                        f"archetype:{context.goal.archetype}" if context.goal else "archetype:none",
+                    ],
                 },
                 model_override=None,
+                generation_name=f"agent:{context.name}",
                 max_tokens=AGENT_DECISION_MAX_TOKENS,
             )
             parsed = result.parsed or {}

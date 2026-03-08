@@ -50,6 +50,7 @@ class _StubLLMService(LLMService):
         response_format: dict[str, object] | type[Any],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        generation_name: str | None = None,
         max_tokens: int | None = None,
     ) -> LLMResult:
         self.last_max_tokens = max_tokens
@@ -108,6 +109,9 @@ class _StubMemoryLLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryPromotionDecision:
         self.classify_calls += 1
         return self._decision
@@ -119,6 +123,9 @@ class _StubMemoryLLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         return self._consolidation
 
@@ -129,6 +136,10 @@ class _StubMemoryLLMService:
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        round_number: int | None = None,
     ) -> RelationshipConsolidationDecision:
         self.relationship_consolidation_calls += 1
         return self._relationship_consolidation
@@ -142,6 +153,9 @@ class _FailingMemoryConsolidationLLMService(_StubMemoryLLMService):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         raise RuntimeError("memory consolidation unavailable")
 
