@@ -314,7 +314,6 @@ Connection semantics:
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
 | `agent_action` | `{ "agent_id", "action", "cooperation_intent", "goal_progress" }` |
-| `agent_move` | `{ "agent_id", "location" }` |
 | `agent_speak` | `{ "kind", "speaker_id", "speaker_name", "listener_id", "listener_name", "tone", "location", "trust_delta" }` |
 | `meeting_start` | `{ "kind", "proposal" }` |
 | `meeting_speech` | `{ "kind", "agent_id", "agent_name", "stance", "content" }` |
@@ -323,9 +322,13 @@ Connection semantics:
 | `resource_update` | Current resource snapshot, usually `{ "food", "water", "materials", "power" }` |
 | `threat_update` | `{ "threat_level": <number> }` |
 | `observer_event` | `{ "description": "<observer event text>" }` |
-| `round_end` | `{ "threat_level": <number>, "resources": { ... } }` |
+| `round_end` | `{ "status", "current_round", "total_rounds", "threat_level", "resources", "agents" }` |
 | `experiment_end` | `{ "status": "<completed|collapsed>", "total_rounds": <number> }` |
 | `step_error` | `{ "error": "<message>" }` — sent when a background round fails |
+
+`round_end` is the final synchronization payload for the round. Clients should treat it as the
+authoritative end-of-round state snapshot for experiment status, resources, threat, and agent
+locations/status.
 
 `phase_change` is the most complete event feed. Its embedded `RoundEvent.data.kind` values currently include conversation, meeting, exile, and faction-specific records such as:
 

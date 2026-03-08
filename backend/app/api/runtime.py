@@ -75,7 +75,7 @@ GOAL_PARTIAL_KEYWORDS = ("closer", "progress", "holding", "step", "movement", "a
 logger = logging.getLogger(__name__)
 
 # Maps RoundEvent.data["kind"] to WSMessageType for per-event WS broadcasts.
-# Used by both _StreamingHook (live) and broadcast_round (legacy).
+# Used by the shared RoundHook-based websocket path.
 _EVENT_KIND_TO_WS_TYPE: dict[str, WSMessageType] = {
     "agent_speak": "agent_speak",
     "meeting_start": "meeting_start",
@@ -296,7 +296,7 @@ class ExperimentRuntime:
         return applied
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
-        """Run a full round synchronously (legacy). Prefer step_async for streaming."""
+        """Run a full round synchronously while broadcasting via the shared hook path."""
         async with self.lock:
             state = await self.get_state(experiment_id)
             was_setup = state.status == "setup"
@@ -324,7 +324,11 @@ class ExperimentRuntime:
                 )
                 await self._prepare_narration_audio(experiment_id, state.gm_plan)
             t0 = time.monotonic()
-            round_result = await self.engine.run_round(state)
+            hook = _StreamingHook(
+                experiment_id=experiment_id,
+                runtime=self,
+            )
+            round_result = await self.engine.run_round(state, hook=hook)
             round_duration = time.monotonic() - t0
             await self.store.save_state(state)
             await self.store.record_round_result(experiment_id, round_result)
@@ -366,7 +370,7 @@ class ExperimentRuntime:
                     },
                 )
 
-        await self.broadcast_round(experiment_id, round_result)
+        await self._broadcast_round_end(experiment_id, round_result, state)
         return round_result, state
 
     def start_step(self, experiment_id: str) -> None:
@@ -463,54 +467,7 @@ class ExperimentRuntime:
                             "total_rounds": state.total_rounds,
                         },
                     )
-                await self.connection_manager.broadcast(
-                    experiment_id,
-                    self._message(
-                        "resource_update",
-                        round_number=round_result.round_number,
-                        data=state.world_state.resources.model_dump(mode="json"),
-                    ),
-                )
-                await self.connection_manager.broadcast(
-                    experiment_id,
-                    self._message(
-                        "threat_update",
-                        round_number=round_result.round_number,
-                        data={"threat_level": state.world_state.threat_level},
-                    ),
-                )
-
-            # Broadcast round_end with full state so FE can do a final sync
-            await self.connection_manager.broadcast(
-                experiment_id,
-                self._message(
-                    "round_end",
-                    round_number=round_result.round_number,
-                    data={
-                        "status": state.status,
-                        "current_round": state.current_round,
-                        "total_rounds": state.total_rounds,
-                        "threat_level": state.world_state.threat_level,
-                        "resources": state.world_state.resources.model_dump(mode="json"),
-                        "agents": [
-                            {
-                                "agent_id": a.agent_id,
-                                "name": a.name,
-                                "character_id": a.character_id,
-                                "status": a.status.value
-                                if hasattr(a.status, "value")
-                                else str(a.status),
-                                "location": a.location,
-                                "suspicion_level": a.suspicion_level,
-                                "faction_id": a.faction_id,
-                                "faction_role": a.faction_role,
-                                "influence": a.influence,
-                            }
-                            for a in state.agents
-                        ],
-                    },
-                ),
-            )
+            await self._broadcast_round_end(experiment_id, round_result, state)
         except Exception:
             logger.exception("Background step failed for %s", experiment_id)
             try:
@@ -1041,89 +998,18 @@ class ExperimentRuntime:
         )
         return result.content_type, result.stream
 
-    async def broadcast_round(self, experiment_id: str, round_result: RoundResult) -> None:
-        await self.connection_manager.broadcast(
-            experiment_id,
-            self._message(
-                "round_start",
-                round_number=round_result.round_number,
-                data={"theme": round_result.gm_plan.plan.round_theme},
-            ),
-        )
-        await self.connection_manager.broadcast(
-            experiment_id,
-            self._message(
-                "gm_plan",
-                round_number=round_result.round_number,
-                data=round_result.gm_plan.model_dump(mode="json"),
-            ),
-        )
-        await self.connection_manager.broadcast(
-            experiment_id,
-            self._message(
-                "crisis_event",
-                round_number=round_result.round_number,
-                phase="dawn",
-                data=round_result.gm_plan.plan.crisis_event.model_dump(mode="json"),
-            ),
-        )
-        await self._broadcast_narration_audio_status_for_plan(experiment_id, round_result.gm_plan)
-        for phase in round_result.phases:
-            await self.connection_manager.broadcast(
-                experiment_id,
-                self._message(
-                    "phase_change",
-                    round_number=round_result.round_number,
-                    phase=phase.phase,
-                    data={"events": [event.model_dump(mode="json") for event in phase.events]},
-                ),
-            )
-            for event in phase.events:
-                kind = str(event.data.get("kind", ""))
-                msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
-                if msg_type:
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            msg_type,
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-        for agent_id, turns in round_result.agent_turns.items():
-            for turn in turns:
-                await self.connection_manager.broadcast(
-                    experiment_id,
-                    self._message(
-                        "agent_action",
-                        round_number=round_result.round_number,
-                        data={
-                            "agent_id": agent_id,
-                            "action": turn.decision.action.model_dump(mode="json"),
-                            "cooperation_intent": turn.decision.cooperation_intent,
-                            "goal_progress": turn.decision.goal_progress,
-                        },
-                    ),
-                )
-                if turn.decision.action.location:
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "agent_move",
-                            round_number=round_result.round_number,
-                            data={
-                                "agent_id": agent_id,
-                                "location": turn.decision.action.location,
-                            },
-                        ),
-                    )
+    async def _broadcast_round_end(
+        self,
+        experiment_id: str,
+        round_result: RoundResult,
+        state: SimulationState,
+    ) -> None:
         await self.connection_manager.broadcast(
             experiment_id,
             self._message(
                 "resource_update",
                 round_number=round_result.round_number,
-                data=round_result.world_state.resources.model_dump(),
+                data=state.world_state.resources.model_dump(mode="json"),
             ),
         )
         await self.connection_manager.broadcast(
@@ -1131,7 +1017,7 @@ class ExperimentRuntime:
             self._message(
                 "threat_update",
                 round_number=round_result.round_number,
-                data={"threat_level": round_result.threat_level},
+                data={"threat_level": state.world_state.threat_level},
             ),
         )
         await self.connection_manager.broadcast(
@@ -1140,12 +1026,28 @@ class ExperimentRuntime:
                 "round_end",
                 round_number=round_result.round_number,
                 data={
-                    "threat_level": round_result.threat_level,
-                    "resources": round_result.world_state.resources.model_dump(),
+                    "status": state.status,
+                    "current_round": state.current_round,
+                    "total_rounds": state.total_rounds,
+                    "threat_level": state.world_state.threat_level,
+                    "resources": state.world_state.resources.model_dump(mode="json"),
+                    "agents": [
+                        {
+                            "agent_id": agent.agent_id,
+                            "name": agent.name,
+                            "character_id": agent.character_id,
+                            "status": self._status_value(agent.status),
+                            "location": agent.location,
+                            "suspicion_level": agent.suspicion_level,
+                            "faction_id": agent.faction_id,
+                            "faction_role": agent.faction_role,
+                            "influence": agent.influence,
+                        }
+                        for agent in state.agents
+                    ],
                 },
             ),
         )
-        state = await self.get_state(experiment_id)
         if state.status in ("completed", "collapsed"):
             await self.connection_manager.broadcast(
                 experiment_id,
