@@ -122,9 +122,10 @@ async def test_structured_generation_parses_schema_output() -> None:
 
 @pytest.mark.asyncio
 async def test_invalid_json_raises_value_error() -> None:
-    broken = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    broken1 = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    broken2 = _FakeResponse("openai/gpt-4o-mini", "not-json")
     client = LLMClient()
-    fake_router = _FakeRouter([broken])
+    fake_router = _FakeRouter([broken1, broken2])
     client.router = fake_router
 
     with pytest.raises(ValueError, match="did not match expected structured format"):
@@ -135,6 +136,59 @@ async def test_invalid_json_raises_value_error() -> None:
                 {"experiment_id": "exp-2", "round_number": 2, "agent_id": "a-1"},
             )
         )
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_retries_on_parse_failure() -> None:
+    """When the first response fails to parse, retry once before raising."""
+    broken = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    valid_content = json.dumps(
+        {
+            "inner_thought": "I should keep quiet.",
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "No progress yet.",
+            "cooperation_intent": "medium",
+        }
+    )
+    valid = _FakeResponse("openai/gpt-4o-mini", valid_content)
+    client = LLMClient()
+    fake_router = _FakeRouter([broken, valid])
+    client.router = fake_router
+
+    result = await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-retry", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    assert result.parsed is not None
+    assert result.parsed["inner_thought"] == "I should keep quiet."
+    assert len(fake_router.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_raises_after_retry_exhausted() -> None:
+    """When both attempts fail to parse, raise ValueError."""
+    broken1 = _FakeResponse("openai/gpt-4o-mini", "not-json-1")
+    broken2 = _FakeResponse("openai/gpt-4o-mini", "not-json-2")
+    client = LLMClient()
+    fake_router = _FakeRouter([broken1, broken2])
+    client.router = fake_router
+
+    with pytest.raises(ValueError, match="did not match expected structured format"):
+        await client.generate_structured(
+            request=client_request(
+                "agent",
+                AgentDecision,
+                {"experiment_id": "exp-retry2", "round_number": 1, "agent_id": "a-1"},
+            )
+        )
+
+    assert len(fake_router.calls) == 2
 
 
 def test_agent_decision_rejects_invalid_cooperation_intent() -> None:

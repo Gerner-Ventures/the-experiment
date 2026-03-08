@@ -67,50 +67,67 @@ class LLMClient:
             generation_name=metadata.get("generation_name"),
             has_context=bool(get_trace_context()),
         )
-        response = await self.router.acompletion(
-            model=request.model_override or model_config.primary_model,
-            messages=cast(Any, messages),
-            response_format=api_response_format,
-            temperature=request.temperature
-            if request.temperature is not None
-            else model_config.temperature,
-            max_tokens=request.max_tokens,
-            timeout=model_config.timeout_seconds,
-            metadata=metadata,
-        )
-        result = self._build_result(response)
-        finish_reason = (
-            getattr(response.choices[0], "finish_reason", None) if response.choices else None
-        )
 
-        if request.response_format is not None:
-            parsed = self._parse_structured_content(result.content, request.response_format)
-            if parsed is None:
-                log.error(
-                    "llm_structured_parse_failed",
-                    role=request.role,
-                    model=result.model,
-                    experiment_id=request.metadata.get("experiment_id"),
-                    content_preview=result.content[:300],
-                    finish_reason=finish_reason,
-                    completion_tokens=result.usage.completion_tokens,
-                    max_tokens_requested=request.max_tokens,
-                )
-                ph.capture(
-                    "llm_parse_failure",
-                    {
-                        "role": request.role,
-                        "model": result.model,
-                        "experiment_id": request.metadata.get("experiment_id"),
-                    },
-                )
-                raise ValueError(
-                    f"model response did not match expected structured format. "
-                    f"Raw content: {result.content[:300]}"
-                )
+        max_attempts = 2 if request.response_format is not None else 1
+        result: LLMResult | None = None
+
+        for attempt in range(max_attempts):
+            response = await self.router.acompletion(
+                model=request.model_override or model_config.primary_model,
+                messages=cast(Any, messages),
+                response_format=api_response_format,
+                temperature=request.temperature
+                if request.temperature is not None
+                else model_config.temperature,
+                max_tokens=request.max_tokens,
+                timeout=model_config.timeout_seconds,
+                metadata=metadata,
+            )
+            result = self._build_result(response)
+            finish_reason = (
+                getattr(response.choices[0], "finish_reason", None) if response.choices else None
+            )
+
+            if request.response_format is not None:
+                parsed = self._parse_structured_content(result.content, request.response_format)
+                if parsed is None:
+                    is_final_attempt = attempt == max_attempts - 1
+                    log.warning(
+                        "llm_structured_parse_failed",
+                        role=request.role,
+                        model=result.model,
+                        experiment_id=request.metadata.get("experiment_id"),
+                        content_preview=result.content[:300],
+                        finish_reason=finish_reason,
+                        completion_tokens=result.usage.completion_tokens,
+                        max_tokens_requested=request.max_tokens,
+                        attempt=attempt + 1,
+                        max_attempts=max_attempts,
+                    )
+                    if not is_final_attempt:
+                        continue
+                    ph.capture(
+                        "llm_parse_failure",
+                        {
+                            "role": request.role,
+                            "model": result.model,
+                            "experiment_id": request.metadata.get("experiment_id"),
+                            "finish_reason": finish_reason,
+                            "completion_tokens": result.usage.completion_tokens,
+                            "max_tokens_requested": request.max_tokens,
+                        },
+                    )
+                    raise ValueError(
+                        f"model response did not match expected structured format. "
+                        f"Raw content: {result.content[:300]}"
+                    )
+                else:
+                    result.parsed = parsed
+                    break
             else:
-                result.parsed = parsed
+                break
 
+        assert result is not None
         self._track_usage(request, result)
         return result
 
