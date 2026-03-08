@@ -28,9 +28,11 @@ flowchart LR
 | Path | Responsibility |
 |------|----------------|
 | `backend/app/main.py` | FastAPI app wiring, middleware, OpenAPI setup |
+| `backend/app/core/runtime_factory.py` | Runtime/store construction for default and smoke modes |
 | `backend/app/api/routes/` | REST and WebSocket route definitions |
 | `backend/app/api/runtime.py` | High-level experiment orchestration, persistence boundary, broadcast fanout, analytics/replay assembly |
 | `backend/app/api/store.py` | Store interface plus in-memory and SQLAlchemy-backed implementations |
+| `backend/app/e2e/` | Real-server smoke client and checked-in smoke scenario payload |
 | `backend/app/engine/` | Core simulation loop and round-phase execution |
 | `backend/app/gm/` | Director arc models, preset arcs, GM planning/generation |
 | `backend/app/agents/` | Agent prompts, decisions, observation recording, memory consolidation, relationship state |
@@ -57,6 +59,9 @@ Operationally important details:
 
 - The default runtime store is `SqlAlchemyExperimentStore`, not the in-memory store.
 - The in-memory store is used mainly in tests.
+- `backend/app/main.py` now builds the FastAPI app through `create_app(...)` and attaches the
+  selected `ExperimentRuntime` to `app.state.runtime`.
+- Routes resolve the runtime from `app.state` instead of importing a module-global singleton.
 - WebSocket connections are process-local and are not restored after a backend restart.
 - Redis is provisioned but is not yet the real-time fanout mechanism.
 
@@ -89,6 +94,8 @@ Useful commands:
 - `make lint-backend`
 - `make db-shell`
 - `make db-reset`
+- `make backend-run`
+- `make backend-e2e`
 
 Notes:
 
@@ -118,6 +125,43 @@ Behavior:
 This is the fastest way to sanity-check that the backend round loop, derived analytics, and
 persisted event logs match your mental model before you involve the HTTP API or real persistence.
 
+### Local Postgres-Backed Backend E2E Smoke
+
+Use this workflow when you need the real FastAPI runtime path that the frontend talks to:
+
+```bash
+make migrate
+BACKEND_RUNTIME_MODE=smoke_mock make backend-run
+make backend-e2e
+```
+
+What it covers:
+
+- real `uvicorn` startup
+- real HTTP requests against the running backend
+- real websocket delivery from `/api/experiments/{id}/ws`
+- real `SqlAlchemyExperimentStore` persistence through Postgres
+- GM plan fetch and approval
+- one full round step plus log, analytics, replay, and snapshot reads
+
+Runtime modes:
+
+- `default`: Postgres-backed runtime with the existing GM and agent wiring
+- `smoke_mock`: Postgres-backed runtime with rule-based GM planning, seeded mock agents, and no
+  provider-key requirement
+- `smoke_live`: Postgres-backed runtime with the live LLM-backed services
+
+Command notes:
+
+- `make backend-run` starts `poetry run uvicorn app.main:app --reload`
+- set `BACKEND_RUNTIME_MODE=smoke_mock` for the repeatable local smoke path
+- `make backend-e2e` runs `python -m app.e2e.smoke` against `http://127.0.0.1:8000` by default
+- override `BACKEND_HOST`, `BACKEND_PORT`, or `BACKEND_BASE_URL` when needed
+- migrations must be applied before the smoke client runs
+
+Use `headless` when you only need a fast mechanics harness. Use `backend-e2e` when you need to
+validate app wiring, route/schema integration, persistence, or websocket fanout end to end.
+
 ## Configuration Reference
 
 The backend settings are defined in `backend/app/core/config.py` and sample values live in `backend/.env.example`.
@@ -125,6 +169,8 @@ The backend settings are defined in `backend/app/core/config.py` and sample valu
 | Variable | Default | Required | Purpose |
 |----------|---------|----------|---------|
 | `DATABASE_URL` | `postgresql+asyncpg://experiment:experiment@localhost:5432/experiment` | Yes | Durable experiment state, logs, GM plans, snapshots |
+| `BACKEND_RUNTIME_MODE` | `default` | No | Runtime wiring mode: `default`, `smoke_mock`, or `smoke_live` |
+| `SMOKE_SEED` | `11` | No | Seed used for deterministic mock smoke runs |
 | `REDIS_URL` | `redis://localhost:6379/0` | No | Reserved for future ephemeral coordination and fanout |
 | `ENV` | `development` | No | Environment label |
 | `LOG_LEVEL` | `debug` | No | Logging verbosity |

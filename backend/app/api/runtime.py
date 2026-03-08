@@ -2,15 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast, get_args
 
-from fastapi import WebSocket
-from fastapi.encoders import jsonable_encoder
-from starlette.websockets import WebSocketState
-
+import structlog
 from app.agents.models import AgentMemoryState
 from app.api.models import (
     AnalyticsSummary,
@@ -38,6 +36,7 @@ from app.api.models import (
     UsageReport,
 )
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
+from app.api.ws_manager import ConnectionManager
 from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
 from app.agents.models import AgentTurnResult
@@ -47,7 +46,10 @@ from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
 from app.schemas.ws_message import WSMessage, WSMessageType
+from app.core import posthog as ph
 from app.world import build_default_world_state, resolve_spawn_tile
+
+log = structlog.get_logger(__name__)
 
 COOPERATIVE_ACTION_TYPES = {
     "gather",
@@ -89,59 +91,6 @@ class CooperationMetrics(TypedDict):
 
 
 GoalOutcome = Literal["achieved", "partial", "failed", "unknown"]
-
-
-class ConnectionManager:
-    def __init__(self) -> None:
-        self.connections: defaultdict[str, set[WebSocket]] = defaultdict(set)
-
-    async def connect(self, experiment_id: str, websocket: WebSocket) -> None:
-        await websocket.accept()
-        self.connections[experiment_id].add(websocket)
-        logger.info(
-            "WS connected: experiment=%s total=%d",
-            experiment_id,
-            len(self.connections[experiment_id]),
-        )
-
-    def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
-        sockets = self.connections.get(experiment_id)
-        if sockets is None:
-            return
-        sockets.discard(websocket)
-        if not sockets:
-            self.connections.pop(experiment_id, None)
-        logger.info(
-            "WS disconnected: experiment=%s remaining=%d",
-            experiment_id,
-            len(self.connections.get(experiment_id, ())),
-        )
-
-    async def broadcast(self, experiment_id: str, payload: dict[str, Any]) -> None:
-        sockets = list(self.connections.get(experiment_id, ()))
-        if not sockets:
-            return
-        encoded_payload = jsonable_encoder(payload)
-        dead_sockets: list[WebSocket] = []
-        for socket in sockets:
-            try:
-                if socket.client_state == WebSocketState.CONNECTED:
-                    await socket.send_json(encoded_payload)
-                else:
-                    logger.debug(
-                        "WS pruning disconnected socket before broadcast: experiment=%s",
-                        experiment_id,
-                    )
-                    dead_sockets.append(socket)
-            except Exception:
-                logger.warning(
-                    "WS broadcast failed; pruning socket: experiment=%s",
-                    experiment_id,
-                    exc_info=True,
-                )
-                dead_sockets.append(socket)
-        for socket in dead_sockets:
-            self.disconnect(experiment_id, socket)
 
 
 class ExperimentRuntime:
@@ -207,6 +156,23 @@ class ExperimentRuntime:
                 event_type="experiment_created",
                 summary=f"Experiment '{request.name}' created.",
             )
+            log.info(
+                "experiment_created",
+                experiment_id=experiment_id,
+                name=request.name,
+                agent_count=len(agents),
+                total_rounds=request.total_rounds,
+            )
+            ph.capture(
+                "experiment_created",
+                {
+                    "experiment_id": experiment_id,
+                    "name": request.name,
+                    "agent_count": len(agents),
+                    "total_rounds": request.total_rounds,
+                    "preset_arc_id": request.preset_arc_id,
+                },
+            )
             return state
 
     async def get_state(self, experiment_id: str) -> SimulationState:
@@ -218,6 +184,15 @@ class ExperimentRuntime:
         await self.store.save_state(state)
         await self._log(
             experiment_id, event_type="experiment_started", summary="Experiment started."
+        )
+        log.info("experiment_started", experiment_id=experiment_id)
+        ph.capture(
+            "experiment_started",
+            {
+                "experiment_id": experiment_id,
+                "agent_count": len(state.agents),
+                "total_rounds": state.total_rounds,
+            },
         )
         return state
 
@@ -305,8 +280,18 @@ class ExperimentRuntime:
         """Run a full round synchronously (legacy). Prefer step_async for streaming."""
         async with self.lock:
             state = await self.get_state(experiment_id)
-            if state.status == "setup":
+            was_setup = state.status == "setup"
+            if was_setup:
                 state.status = "running"
+                log.info("experiment_started", experiment_id=experiment_id)
+                ph.capture(
+                    "experiment_started",
+                    {
+                        "experiment_id": experiment_id,
+                        "agent_count": len(state.agents),
+                        "total_rounds": state.total_rounds,
+                    },
+                )
             if not state.auto_approve:
                 record = await self.get_or_generate_gm_plan(experiment_id)
                 approved = self.gm_service.approve_plan(record)
@@ -318,10 +303,49 @@ class ExperimentRuntime:
                     summary=state.gm_plan.plan.round_theme,
                     round_number=state.gm_plan.plan.round,
                 )
+            t0 = time.monotonic()
             round_result = await self.engine.run_round(state)
+            round_duration = time.monotonic() - t0
             await self.store.save_state(state)
             await self.store.record_round_result(experiment_id, round_result)
             await self._log_round_result(experiment_id, round_result, state)
+
+            log.info(
+                "round_completed",
+                experiment_id=experiment_id,
+                round_number=round_result.round_number,
+                total_rounds=state.total_rounds,
+                threat_level=round_result.threat_level,
+                duration_seconds=round(round_duration, 2),
+            )
+            ph.capture(
+                "round_completed",
+                {
+                    "experiment_id": experiment_id,
+                    "round_number": round_result.round_number,
+                    "total_rounds": state.total_rounds,
+                    "threat_level": round_result.threat_level,
+                    "duration_seconds": round(round_duration, 2),
+                },
+            )
+
+            is_final = state.status in ("completed", "collapsed")
+            if is_final:
+                log.info(
+                    "experiment_finished",
+                    experiment_id=experiment_id,
+                    status=state.status,
+                    total_rounds=state.total_rounds,
+                )
+                ph.capture(
+                    "experiment_finished",
+                    {
+                        "experiment_id": experiment_id,
+                        "status": state.status,
+                        "total_rounds": state.total_rounds,
+                    },
+                )
+
         await self.broadcast_round(experiment_id, round_result)
         return round_result, state
 
@@ -348,6 +372,15 @@ class ExperimentRuntime:
                 intended_round = state.current_round + 1
                 if state.status == "setup":
                     state.status = "running"
+                    log.info("experiment_started", experiment_id=experiment_id)
+                    ph.capture(
+                        "experiment_started",
+                        {
+                            "experiment_id": experiment_id,
+                            "agent_count": len(state.agents),
+                            "total_rounds": state.total_rounds,
+                        },
+                    )
 
                 # Pre-approve GM plan if needed (before engine runs)
                 if not state.auto_approve:
@@ -367,11 +400,64 @@ class ExperimentRuntime:
                     experiment_id=experiment_id,
                     runtime=self,
                 )
+                t0 = time.monotonic()
                 round_result = await self.engine.run_round(state, hook=hook)
+                round_duration = time.monotonic() - t0
 
                 await self.store.save_state(state)
                 await self.store.record_round_result(experiment_id, round_result)
                 await self._log_round_result(experiment_id, round_result, state)
+
+                log.info(
+                    "round_completed",
+                    experiment_id=experiment_id,
+                    round_number=round_result.round_number,
+                    total_rounds=state.total_rounds,
+                    threat_level=round_result.threat_level,
+                    duration_seconds=round(round_duration, 2),
+                )
+                ph.capture(
+                    "round_completed",
+                    {
+                        "experiment_id": experiment_id,
+                        "round_number": round_result.round_number,
+                        "total_rounds": state.total_rounds,
+                        "threat_level": round_result.threat_level,
+                        "duration_seconds": round(round_duration, 2),
+                    },
+                )
+
+                if state.status in ("completed", "collapsed"):
+                    log.info(
+                        "experiment_finished",
+                        experiment_id=experiment_id,
+                        status=state.status,
+                        total_rounds=state.total_rounds,
+                    )
+                    ph.capture(
+                        "experiment_finished",
+                        {
+                            "experiment_id": experiment_id,
+                            "status": state.status,
+                            "total_rounds": state.total_rounds,
+                        },
+                    )
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "resource_update",
+                        round_number=round_result.round_number,
+                        data=state.world_state.resources.model_dump(mode="json"),
+                    ),
+                )
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "threat_update",
+                        round_number=round_result.round_number,
+                        data={"threat_level": state.world_state.threat_level},
+                    ),
+                )
 
             # Broadcast round_end with full state so FE can do a final sync
             await self.connection_manager.broadcast(
@@ -999,7 +1085,7 @@ class ExperimentRuntime:
             ),
         )
         state = await self.get_state(experiment_id)
-        if round_result.round_number >= state.total_rounds:
+        if state.status in ("completed", "collapsed"):
             await self.connection_manager.broadcast(
                 experiment_id,
                 self._message(
@@ -1604,6 +1690,3 @@ class _StreamingHook:
                 },
             ),
         )
-
-
-runtime = ExperimentRuntime()

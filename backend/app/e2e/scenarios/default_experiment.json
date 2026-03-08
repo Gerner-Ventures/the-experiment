@@ -1,0 +1,50 @@
+{
+  "name": "Backend Smoke Trial",
+  "total_rounds": 12,
+  "auto_approve": false,
+  "preset_arc_id": "slow_burn",
+  "agents": [
+    {
+      "name": "Mara",
+      "character_id": "undertaker_01",
+      "personality": {
+        "axes": {
+          "paranoia": 72,
+          "empathy": 40,
+          "dominance": 58,
+          "impulsiveness": 61,
+          "loyalty": 44,
+          "ambition": 70
+        },
+        "trait_tags": ["guarded", "curious", "scheming"],
+        "self_concept": "I am the only one asking the right questions."
+      },
+      "goal": {
+        "archetype": "truth_revelation",
+        "text": "Figure out who is watching and force them to answer.",
+        "progress_signals": ["observer clues"]
+      }
+    },
+    {
+      "name": "Jon",
+      "character_id": "warden_01",
+      "personality": {
+        "axes": {
+          "paranoia": 35,
+          "empathy": 62,
+          "dominance": 44,
+          "impulsiveness": 39,
+          "loyalty": 75,
+          "ambition": 48
+        },
+        "trait_tags": ["dutiful", "protective"],
+        "self_concept": "Someone has to hold things together."
+      },
+      "goal": {
+        "archetype": "communal_survival",
+        "text": "Keep the town functional until rescue arrives.",
+        "progress_signals": ["resource stability"]
+      }
+    }
+  ]
+}

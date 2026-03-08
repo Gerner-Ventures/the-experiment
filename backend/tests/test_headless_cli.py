@@ -7,6 +7,7 @@ from typing import Generator
 import pytest
 
 from app.core.config import get_settings
+from app.headless.factory import PROVIDER_ENV_VARS, _required_live_providers
 from app.headless.cli import main, run_headless_experiment
 
 
@@ -89,5 +90,5 @@ def test_live_mode_validation_fails_fast(
     assert exit_code == 1
     stderr = capsys.readouterr().err
     assert "Live mode requires configured provider credentials" in stderr
-    assert "ANTHROPIC_API_KEY" in stderr
-    assert "OPENAI_API_KEY" in stderr
+    for provider in sorted(_required_live_providers()):
+        assert PROVIDER_ENV_VARS[provider] in stderr
