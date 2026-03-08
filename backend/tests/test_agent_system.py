@@ -149,6 +149,7 @@ class _FailingDecisionLLMService(LLMService):
         response_format: dict[str, object] | type[Any],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        max_tokens: int | None = None,
     ):
         raise RuntimeError("llm unavailable")
 

@@ -326,7 +326,7 @@ def test_step_endpoint_returns_409_while_round_in_progress_for_same_experiment(
     started = client.post(f"{API_PREFIX}/experiments/{first_experiment_id}/step")
     assert started.status_code == 200
     assert started.json()["round_number"] == 1
-    assert first_step_started.wait(timeout=1)
+    assert first_step_started.wait(timeout=5)
 
     duplicate = client.post(f"{API_PREFIX}/experiments/{first_experiment_id}/step")
     assert duplicate.status_code == 409

@@ -57,6 +57,8 @@ class _FailingEngine:
         self.gm_service = gm_service
 
     async def run_round(self, state, hook=None) -> RoundResult:
+        # These mutations intentionally happen before the failure so the test can
+        # verify that failed streaming rounds do not leak partial state changes.
         state.current_round = 99
         state.world_state.threat_level = 99
         raise RuntimeError("streaming step exploded")
@@ -214,8 +216,8 @@ async def test_start_step_cleans_up_after_streaming_failure_without_persisting_p
     assert total == 1
     assert logs[0].type == "experiment_created"
 
-    runtime.connection_manager.broadcast.assert_awaited_once()
-    broadcast_call = runtime.connection_manager.broadcast.await_args
+    assert len(runtime.connection_manager.broadcast.await_args_list) == 1
+    broadcast_call = runtime.connection_manager.broadcast.await_args_list[0]
     assert broadcast_call.args[0] == state.experiment_id
     assert broadcast_call.args[1]["type"] == "step_error"
     assert broadcast_call.args[1]["round"] == 1
