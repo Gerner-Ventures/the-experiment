@@ -267,6 +267,8 @@ Each active agent receives 1 additional action turn.
 Resolution uses the same grouping and consequence system as the morning phase.
 Hostile actions (`attack`, `threaten`, `stab`, `shoot`, `poison`) may enqueue a follow-up
 consequence action for the target immediately after the aggressor resolves.
+Hostile actions (`attack`, `threaten`, `stab`, `shoot`, `poison`) may enqueue a follow-up
+consequence action for the target immediately after the aggressor resolves.
 
 ### 6. Night
 
