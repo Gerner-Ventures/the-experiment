@@ -57,14 +57,18 @@ Both `_step_streaming` and the updated `step()` need to broadcast `round_end` wi
 
 ## Acceptance Criteria
 
-- [ ] `step()` uses `run_round(state, hook=hook)` — no direct engine method calls
-- [ ] `broadcast_round()` is deleted
-- [ ] `_broadcast_round_end()` is shared between `step()` and `_step_streaming()`
-- [ ] WS message sequence is identical for both `step()` and `start_step()` paths
-- [ ] All existing tests pass
+- [x] `step()` uses `run_round(state, hook=hook)` — no direct engine method calls
+<!-- canon:realized-in:PR#125 file:backend/app/api/runtime.py -->
+- [x] `broadcast_round()` is deleted
+- [x] `_broadcast_round_end()` is shared between `step()` and `_step_streaming()`
+- [x] WS message sequence is identical for both `step()` and `start_step()` paths
+<!-- canon:realized-in:PR#125 file:backend/tests/test_runtime.py -->
+- [x] All existing tests pass
 - [x] Frontend receives same events regardless of which endpoint triggered the round
 <!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
 <!-- canon:realized-in:PR#124 file:backend/app/api/runtime.py -->
+<!-- canon:realized-in:PR#125 file:frontend/src/stores/agent.ts -->
+<!-- canon:realized-in:PR#125 file:frontend/tests/unit/stores.spec.ts -->
 
 ## Key Files
 
