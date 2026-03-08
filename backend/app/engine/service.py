@@ -46,6 +46,9 @@ from app.world.service import (
 
 logger = logging.getLogger(__name__)
 
+import structlog
+log = structlog.get_logger(__name__)
+
 
 @dataclass
 class PreparedAction:
@@ -111,6 +114,14 @@ class SimulationEngine:
         round_number = state.current_round + 1
         state.world_state.round_number = round_number
         self._refresh_factions(state)
+
+        log.info(
+            "round_started",
+            experiment_id=state.experiment_id,
+            round_number=round_number,
+            total_rounds=state.total_rounds,
+            agent_count=len(state.agents),
+        )
 
         trace = lf.trace(
             name=f"round-{round_number}",
@@ -182,6 +193,14 @@ class SimulationEngine:
             night_result.cooperation_ratio or state.world_state.threat_level
         )
         self._update_experiment_status(state)
+        log.info(
+            "round_phases_complete",
+            experiment_id=state.experiment_id,
+            round_number=round_number,
+            status=state.status,
+            threat_level=state.world_state.threat_level,
+            cooperation_ratio=round(cooperation_ratio, 3),
+        )
         if trace is not None:
             try:
                 trace.update(
