@@ -233,6 +233,36 @@ def test_elevenlabs_provider_uses_system_trust_store_for_owned_httpx_client(
     assert provider._owned_httpx_client is not None
 
 
+def test_voice_id_for_character_returns_mapped_voice_for_all_characters() -> None:
+    service = NarrationTTSService(
+        Settings(
+            elevenlabs_api_key="test-key",
+            elevenlabs_voice_id="voice-default",
+            elevenlabs_model_id="model-test",
+        ),
+        provider=_FakeNarrationProvider(),
+    )
+
+    for character_id, expected_voice_id in config_module.CHARACTER_VOICE_IDS.items():
+        assert service.voice_id_for_character(character_id) == expected_voice_id
+
+    assert len(config_module.CHARACTER_VOICE_IDS) == 22
+
+
+def test_voice_id_for_character_falls_back_to_default_for_unmapped() -> None:
+    service = NarrationTTSService(
+        Settings(
+            elevenlabs_api_key="test-key",
+            elevenlabs_voice_id="voice-default",
+            elevenlabs_model_id="model-test",
+        ),
+        provider=_FakeNarrationProvider(),
+    )
+
+    assert service.voice_id_for_character("unknown-character") == "voice-default"
+    assert service.voice_id_for_character("") == "voice-default"
+
+
 def test_voice_id_for_map_prefers_override_and_falls_back_to_default() -> None:
     original = dict(config_module.MAP_NARRATOR_VOICE_IDS)
     config_module.MAP_NARRATOR_VOICE_IDS.clear()
