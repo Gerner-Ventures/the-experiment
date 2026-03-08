@@ -114,6 +114,7 @@ function routeMessage(msg: WSMessage) {
     phase_change: (m) => experimentStore.onPhaseChange(m),
     gm_plan: (m) => gmStore.onPlan(m),
     gm_narration: (m) => gmStore.onNarration(m),
+    gm_audio_status: (m) => gmStore.onAudioStatus(m),
     agent_action: (m) => agentStore.onAction(m),
     agent_move: (m) => agentStore.onMove(m),
     agent_speak: (m) => socialStore.onSpeak(m),
