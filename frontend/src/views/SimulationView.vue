@@ -6,7 +6,6 @@ import { ArrowLeftOutlined } from '@ant-design/icons-vue'
 import { useLocale } from '@/locales'
 import { getThemeById, MAP_THEMES } from '@/config/map-themes'
 import { DEFAULT_TOWN } from '@/config/default-town'
-import type { AgentConfig } from '@/types/agent'
 import type { MapTheme } from '@/types/world'
 import PixiWorld from '@/components/world/PixiWorld.vue'
 import ControlBar from '@/components/hud/ControlBar.vue'
@@ -28,6 +27,7 @@ import { useUIStore } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
+import type { ExperimentStatus } from '@/types/experiment'
 
 const locale = useLocale()
 const route = useRoute()
@@ -41,81 +41,40 @@ const uiStore = useUIStore()
 const socialStore = useSocialStore()
 const ws = useWebSocket()
 
-// Retrieve config from sessionStorage (set by SetupView)
-// TODO: migrate to experimentStore when setup flow uses backend API directly
-interface ExperimentConfig {
-  agents: AgentConfig[]
-  themeId: string
-  arc: string
-  rounds: number
-  resources: number
-}
+// Theme and arc from sessionStorage (set by SetupView) or defaults
+const themeId = sessionStorage.getItem('experiment-theme') || 'lord-of-the-flies'
+const arcId = sessionStorage.getItem('experiment-arc') || 'lord_of_the_flies'
+const theme = computed<MapTheme>(() => getThemeById(themeId) ?? MAP_THEMES[0])
 
-let config: ExperimentConfig | null = null
-try {
-  const raw = sessionStorage.getItem('experiment-config')
-  if (raw) config = JSON.parse(raw) as ExperimentConfig
-} catch {
-  // Stale or malformed config — fall back to null
-}
-
-const theme = computed<MapTheme>(() => {
-  if (config?.themeId) {
-    return getThemeById(config.themeId) ?? MAP_THEMES[0]
-  }
-  return MAP_THEMES[0]
-})
-
-const agents = computed<AgentConfig[]>(() => config?.agents ?? [])
-
-const ready = ref(true)
+const ready = ref(false)
 const experimentCreated = ref(false)
 const isDemo = computed(() => route.params.id === 'demo')
+const loadError = ref<string | null>(null)
 
 async function initExperiment() {
-  if (!config || agents.value.length === 0) return
+  const experimentId = route.params.id as string
+
+  if (isDemo.value) {
+    ready.value = true
+    return
+  }
 
   try {
-    const arcIdMap: Record<string, string> = {
-      'lord-of-the-flies': 'lord_of_the_flies',
-      'slow-burn': 'slow_burn',
-      'chaos-from-round-1': 'chaos_from_round_1',
-      'the-long-peace': 'the_long_peace',
-    }
-    const presetArcId = arcIdMap[config.arc] || 'lord_of_the_flies'
+    // Load experiment from backend (already created by SetupView)
+    const detail = await api.getExperiment(experimentId)
 
-    const result = await api.createExperiment({
-      name: `Experiment ${Date.now()}`,
-      agents: agents.value.map(a => ({
-        name: a.name,
-        character_id: a.characterId,
-        personality: {
-          axes: a.personalityAxes,
-          trait_tags: a.personality,
-        },
-        goal: {
-          archetype: a.goalArchetype || 'communal_survival',
-          text: a.secretGoal,
-        },
-        llm_model: a.llmModel,
-      })),
-      preset_arc_id: presetArcId,
-      total_rounds: config.rounds,
-      auto_approve: false,
-    })
-
-    const ws_ = result.world_state as Record<string, unknown>
+    const ws_ = (detail.world_state ?? {}) as Record<string, unknown>
     const resources = ws_.resources as Record<string, number> | undefined
 
     experimentStore.setExperiment({
-      id: result.experiment_id,
-      name: result.experiment_name,
-      status: result.status as 'setup',
-      currentRound: result.current_round,
-      totalRounds: result.total_rounds,
+      id: detail.experiment_id,
+      name: detail.experiment_name,
+      status: detail.status as ExperimentStatus,
+      currentRound: detail.current_round,
+      totalRounds: detail.total_rounds,
     })
 
-    agentStore.setAgents(result.agents)
+    agentStore.setAgents(detail.agents)
     if (resources) {
       worldStore.setResources({
         food: resources.food ?? 0,
@@ -124,43 +83,54 @@ async function initExperiment() {
         power: resources.power ?? 0,
       })
     }
-    const threat = (ws_.threat_level as number) ?? 0
-    worldStore.threatLevel = threat
+    worldStore.setThreatLevel((ws_.threat_level as number) ?? 0)
 
-    // Update route to real experiment ID
-    router.replace({ name: 'simulation', params: { id: result.experiment_id } })
-
-    // Connect WebSocket
-    const wsUrl = api.getWebSocketUrl(result.experiment_id)
+    // Connect WebSocket for live updates
+    const wsUrl = api.getWebSocketUrl(detail.experiment_id)
     ws.connect(wsUrl)
 
     experimentCreated.value = true
+    ready.value = true
   } catch (err) {
-    console.error('Failed to create experiment:', err)
-    // Fall back to demo mode
-    experimentCreated.value = false
+    console.error('Failed to load experiment:', err)
+    loadError.value = err instanceof Error ? err.message : 'Failed to load experiment'
+    ready.value = true
   }
 }
 
 async function handleStep() {
-  if (!experimentStore.id) return
+  if (!experimentStore.id || uiStore.isStepping) return
   try {
+    console.debug('[Step] Starting step, isStepping:', uiStore.isStepping)
+    uiStore.startStepping(locale.hud.steppingRunning)
+    console.debug('[Step] Called startStepping, isStepping:', uiStore.isStepping)
     await api.stepRound(experimentStore.id)
+    console.debug('[Step] stepRound API returned')
   } catch (err) {
-    console.error('Step failed:', err)
+    console.error('[Step] Step failed:', err)
+    uiStore.clearStepping()
+    waitingForRound = false
   }
 }
 
 async function handleStart() {
   if (!experimentStore.id) return
-  await api.startExperiment(experimentStore.id)
-  uiStore.isPlaying = true
+  try {
+    await api.startExperiment(experimentStore.id)
+    uiStore.isPlaying = true
+  } catch (err) {
+    console.error('Start failed:', err)
+  }
 }
 
 async function handlePause() {
   if (!experimentStore.id) return
-  await api.pauseExperiment(experimentStore.id)
-  uiStore.isPlaying = false
+  try {
+    await api.pauseExperiment(experimentStore.id)
+    uiStore.isPlaying = false
+  } catch (err) {
+    console.error('Pause failed:', err)
+  }
 }
 
 async function handleApprovePlan() {
@@ -173,16 +143,35 @@ async function handleApprovePlan() {
   }
 }
 
-// Auto-play mode
+// Auto-play mode: watch for round completion via store updates
 let autoPlayTimer: ReturnType<typeof setTimeout> | null = null
+let waitingForRound = false
 
 watch(() => uiStore.isPlaying, (playing) => {
   if (playing) {
     autoStep()
-  } else if (autoPlayTimer) {
-    clearTimeout(autoPlayTimer)
-    autoPlayTimer = null
+  } else {
+    if (autoPlayTimer) {
+      clearTimeout(autoPlayTimer)
+      autoPlayTimer = null
+    }
+    waitingForRound = false
   }
+})
+
+// When a round completes (from WS round_end), schedule next step if auto-playing
+watch(() => experimentStore.completedRounds, () => {
+  if (!waitingForRound || !uiStore.isPlaying) return
+  waitingForRound = false
+
+  if (experimentStore.isComplete) {
+    uiStore.isPlaying = false
+    router.push({ name: 'report', params: { id: experimentStore.id! } })
+    return
+  }
+
+  const delay = 3000 / uiStore.playbackSpeed
+  autoPlayTimer = setTimeout(autoStep, delay)
 })
 
 function autoStep() {
@@ -190,10 +179,8 @@ function autoStep() {
     uiStore.isPlaying = false
     return
   }
-  handleStep().then(() => {
-    const delay = 3000 / uiStore.playbackSpeed
-    autoPlayTimer = setTimeout(autoStep, delay)
-  })
+  waitingForRound = true
+  handleStep()
 }
 
 function handleAgentClick(agentId: string) {
@@ -201,9 +188,7 @@ function handleAgentClick(agentId: string) {
 }
 
 onMounted(async () => {
-  if (!isDemo.value || config) {
-    await initExperiment()
-  }
+  await initExperiment()
 })
 
 onUnmounted(() => {
@@ -215,6 +200,35 @@ onUnmounted(() => {
   gmStore.$reset()
   uiStore.$reset()
   socialStore.$reset()
+})
+
+// When stepping clears (from step_error, disconnect, etc.), reset waitingForRound
+// so auto-play doesn't stall permanently
+watch(() => uiStore.isStepping, (stepping) => {
+  if (!stepping) {
+    waitingForRound = false
+  }
+})
+
+// Clear stepping and auto-play state if WebSocket disconnects mid-round
+watch(() => ws.state.value, (state) => {
+  if (state === 'disconnected') {
+    if (uiStore.isStepping) {
+      uiStore.clearStepping()
+      waitingForRound = false
+    }
+    if (uiStore.isPlaying) {
+      uiStore.isPlaying = false
+    }
+  }
+})
+
+// Redirect to report when experiment completes (only when not auto-playing,
+// since the currentRound watcher handles navigation during auto-play)
+watch(() => experimentStore.isComplete, (complete) => {
+  if (complete && experimentStore.id && !uiStore.isPlaying) {
+    router.push({ name: 'report', params: { id: experimentStore.id } })
+  }
 })
 
 function goBack() {
@@ -259,13 +273,19 @@ function goBack() {
     <!-- PixiJS World -->
     <div class="flex-1 relative">
       <PixiWorld
-        v-if="ready && agents.length > 0"
+        v-if="ready && (experimentCreated || isDemo)"
         :theme="theme"
         :map-data="DEFAULT_TOWN"
-        :agents="agents"
+        :agents="agentStore.agentConfigs"
         :demo-mode="!experimentCreated"
         @agent-click="handleAgentClick"
       />
+      <div v-else-if="loadError" class="h-full flex flex-col items-center justify-center gap-4">
+        <Typography.Text class="font-mono !text-sm !text-red-400">
+          {{ loadError }}
+        </Typography.Text>
+        <Button @click="goBack">Back to Setup</Button>
+      </div>
       <div v-else class="h-full flex items-center justify-center">
         <Typography.Text class="font-mono !text-sm !text-white/30">
           {{ locale.simulation.loading }}
@@ -276,6 +296,8 @@ function goBack() {
       <div class="absolute bottom-0 left-1/2 -translate-x-1/2 z-10">
         <ControlBar
           :is-playing="uiStore.isPlaying"
+          :is-stepping="uiStore.isStepping"
+          :stepping-status="uiStore.steppingStatus"
           :speed="uiStore.playbackSpeed"
           :is-complete="experimentStore.isComplete"
           :has-experiment="experimentCreated"
@@ -296,8 +318,8 @@ function goBack() {
       <!-- Right side: Arc timeline -->
       <div class="absolute top-3 right-3 z-10 pointer-events-auto">
         <ArcTimeline
-          v-if="config"
-          :arc-name="config.arc"
+          v-if="experimentCreated"
+          :arc-name="arcId"
           :current-round="experimentStore.currentRound"
           :total-rounds="experimentStore.totalRounds"
         />

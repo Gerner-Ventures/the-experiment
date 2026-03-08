@@ -2,6 +2,7 @@
 title: "Consolidate WS broadcast paths (broadcast_round → RoundHook)"
 status: todo
 priority: P2
+review_status: approved
 tags: [stream-2, backend, refactor]
 ---
 

@@ -35,7 +35,6 @@ describe('experimentStore', () => {
     expect(store.currentRound).toBe(0)
     expect(store.totalRounds).toBe(15)
     expect(store.currentPhase).toBeNull()
-    expect(store.cooperationRatio).toBe(0.5)
     expect(store.events).toEqual([])
   })
 
@@ -91,7 +90,7 @@ describe('experimentStore', () => {
   describe('onRoundStart', () => {
     it('updates currentRound, sets running, and adds event', () => {
       const store = useExperimentStore()
-      store.onRoundStart(makeMsg({ type: 'round_start', data: { round: 4, total_rounds: 15 } }))
+      store.onRoundStart(makeMsg({ type: 'round_start', round: 4, data: { total_rounds: 15 } }))
       expect(store.currentRound).toBe(4)
       expect(store.status).toBe('running')
       expect(store.events).toHaveLength(1)
@@ -100,10 +99,9 @@ describe('experimentStore', () => {
   })
 
   describe('onRoundEnd', () => {
-    it('updates cooperationRatio and adds event', () => {
+    it('updates state and adds event', () => {
       const store = useExperimentStore()
-      store.onRoundEnd(makeMsg({ type: 'round_end', data: { cooperation_ratio: 0.8, threat_level: 30 } }))
-      expect(store.cooperationRatio).toBe(0.8)
+      store.onRoundEnd(makeMsg({ type: 'round_end', data: { status: 'running', current_round: 3, total_rounds: 15, threat_level: 30, resources: { food: 20, water: 25, materials: 10, power: 8 }, agents: [] } }))
       expect(store.events).toHaveLength(1)
     })
   })
@@ -111,7 +109,7 @@ describe('experimentStore', () => {
   describe('onPhaseChange', () => {
     it('sets currentPhase', () => {
       const store = useExperimentStore()
-      store.onPhaseChange(makeMsg({ type: 'phase_change', data: { phase: 'dawn' } }))
+      store.onPhaseChange(makeMsg({ type: 'phase_change', phase: 'dawn', data: { events: [{ type: 'dawn' }] } }))
       expect(store.currentPhase).toBe('dawn')
       expect(store.events).toHaveLength(1)
     })
@@ -275,6 +273,46 @@ describe('agentStore', () => {
       store.resetStatuses()
       expect(store.getAgent('a1')!.status).toBe('idle')
       expect(store.getAgent('a2')!.status).toBe('idle')
+    })
+  })
+
+  describe('agentConfigs', () => {
+    it('maps Agent data to AgentConfig format for PixiWorld', () => {
+      const store = useAgentStore()
+      store.setAgents([
+        {
+          id: 'a1',
+          name: 'Alice',
+          character_id: 'char-1',
+          personality: { axes: { paranoia: 50, empathy: 70, dominance: 30, impulsiveness: 40, loyalty: 80, ambition: 60 }, trait_tags: ['cautious', 'empathetic'], self_concept: 'A caring leader' },
+          goal: { archetype: 'communal_survival', text: 'Keep everyone alive', progress_signals: ['food > 10'] },
+          llm_model: 'openai/gpt-4o-mini',
+        },
+      ])
+      const configs = store.agentConfigs
+      expect(configs).toHaveLength(1)
+      expect(configs[0].id).toBe('a1')
+      expect(configs[0].name).toBe('Alice')
+      expect(configs[0].characterId).toBe('char-1')
+      expect(configs[0].personality).toEqual(['cautious', 'empathetic'])
+      expect(configs[0].personalityAxes).toEqual({ paranoia: 50, empathy: 70, dominance: 30, impulsiveness: 40, loyalty: 80, ambition: 60 })
+      expect(configs[0].secretGoal).toBe('Keep everyone alive')
+      expect(configs[0].goalArchetype).toBe('communal_survival')
+      expect(configs[0].llmModel).toBe('openai/gpt-4o-mini')
+    })
+
+    it('returns empty array when no agents', () => {
+      const store = useAgentStore()
+      expect(store.agentConfigs).toEqual([])
+    })
+
+    it('updates reactively when agents change', () => {
+      const store = useAgentStore()
+      expect(store.agentConfigs).toHaveLength(0)
+      store.setAgents(sampleAgents)
+      expect(store.agentConfigs).toHaveLength(2)
+      store.$reset()
+      expect(store.agentConfigs).toHaveLength(0)
     })
   })
 
@@ -612,17 +650,79 @@ describe('socialStore', () => {
     })
   })
 
+  describe('onFactionUpdate', () => {
+    it('stores faction update events', () => {
+      const store = useSocialStore()
+      store.onFactionUpdate(makeMsg({
+        type: 'faction_update',
+        data: { faction_id: 'f1', name: 'Survivalists', members: ['a1', 'a2'] },
+      }))
+      expect(store.factionUpdates).toHaveLength(1)
+      expect(store.factionUpdates[0]).toEqual({ faction_id: 'f1', name: 'Survivalists', members: ['a1', 'a2'] })
+    })
+
+    it('accumulates multiple faction updates', () => {
+      const store = useSocialStore()
+      store.onFactionUpdate(makeMsg({ type: 'faction_update', data: { faction_id: 'f1' } }))
+      store.onFactionUpdate(makeMsg({ type: 'faction_update', data: { faction_id: 'f2' } }))
+      expect(store.factionUpdates).toHaveLength(2)
+    })
+  })
+
+  describe('onCultActivity', () => {
+    it('stores cult activity as faction event with type marker', () => {
+      const store = useSocialStore()
+      store.onCultActivity(makeMsg({
+        type: 'cult_activity',
+        data: { cult_name: 'The Watchers', ritual: 'initiation' },
+      }))
+      expect(store.factionUpdates).toHaveLength(1)
+      expect(store.factionUpdates[0].type).toBe('cult_activity')
+      expect(store.factionUpdates[0].cult_name).toBe('The Watchers')
+    })
+  })
+
+  describe('onExileVote', () => {
+    it('stores exile vote with vote phase', () => {
+      const store = useSocialStore()
+      store.onExileVote(makeMsg({
+        type: 'exile_vote',
+        data: { target_agent: 'a1', votes: { a2: 'exile', a3: 'stay' } },
+      }))
+      expect(store.exileEvents).toHaveLength(1)
+      expect(store.exileEvents[0].phase).toBe('vote')
+      expect(store.exileEvents[0].target_agent).toBe('a1')
+    })
+  })
+
+  describe('onExileResult', () => {
+    it('stores exile result with result phase', () => {
+      const store = useSocialStore()
+      store.onExileResult(makeMsg({
+        type: 'exile_result',
+        data: { target_agent: 'a1', exiled: true },
+      }))
+      expect(store.exileEvents).toHaveLength(1)
+      expect(store.exileEvents[0].phase).toBe('result')
+      expect(store.exileEvents[0].exiled).toBe(true)
+    })
+  })
+
   describe('$reset', () => {
-    it('restores defaults', () => {
+    it('restores defaults including faction and exile data', () => {
       const store = useSocialStore()
       store.onSpeak(makeMsg({
         type: 'agent_speak',
         data: { agent_id: 'a1', agent_name: 'Alice', target: 'a2', message: 'Hi' },
       }))
       store.onMeetingStart(makeMsg({ type: 'meeting_start', data: { proposal: 'test' } }))
+      store.onFactionUpdate(makeMsg({ type: 'faction_update', data: { faction_id: 'f1' } }))
+      store.onExileVote(makeMsg({ type: 'exile_vote', data: { target_agent: 'a1' } }))
       store.$reset()
       expect(store.conversations).toEqual([])
       expect(store.meeting).toBeNull()
+      expect(store.factionUpdates).toEqual([])
+      expect(store.exileEvents).toEqual([])
     })
   })
 })

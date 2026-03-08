@@ -19,6 +19,7 @@ export default {
     header: 'Experiment Configuration',
     subjectsReady: '{ready}/{total} SUBJECTS READY',
     launchExperiment: 'Launch Experiment',
+    creating: 'Creating...',
   },
 
   agents: {
@@ -196,6 +197,15 @@ export default {
     phaseMidday: 'Midday',
     phaseAfternoon: 'Afternoon',
     phaseNight: 'Night',
+    steppingGmPlan: 'Generating GM plan…',
+    steppingDawn: 'Dawn breaking…',
+    steppingMorning: 'Morning actions…',
+    steppingMidday: 'Town meeting…',
+    steppingAfternoon: 'Afternoon actions…',
+    steppingNight: 'Night falling…',
+    steppingRoundStarted: 'Round {round} started',
+    steppingRunning: 'Running round…',
+    steppingAgent: '{name}: {action}',
   },
 
   gm: {

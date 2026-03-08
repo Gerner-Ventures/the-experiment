@@ -44,6 +44,29 @@ class LLMClient:
 
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         model_config = self._resolve_model_config(request)
+        messages = list(request.messages)
+        api_response_format: dict[str, Any] | type[BaseModel] | None = request.response_format
+
+        # For Pydantic models, inject the JSON schema into the system prompt
+        # so Anthropic models know what structure to return
+        if isinstance(request.response_format, type) and issubclass(
+            request.response_format, BaseModel
+        ):
+            schema = request.response_format.model_json_schema()
+            schema_instruction = (
+                f"\n\nYou MUST respond with valid JSON matching this schema:\n"
+                f"```json\n{json.dumps(schema, indent=2)}\n```\n"
+                f"Return ONLY the JSON object, no other text."
+            )
+            if messages and messages[0].get("role") == "system":
+                messages[0] = {
+                    **messages[0],
+                    "content": messages[0]["content"] + schema_instruction,
+                }
+            else:
+                messages.insert(0, {"role": "system", "content": schema_instruction.strip()})
+            api_response_format = {"type": "json_object"}
+
         metadata = {
             **request.metadata,
             **get_trace_context(),
@@ -51,8 +74,8 @@ class LLMClient:
         }
         response = await self.router.acompletion(
             model=request.model_override or model_config.primary_model,
-            messages=cast(Any, request.messages),
-            response_format=request.response_format,
+            messages=cast(Any, messages),
+            response_format=api_response_format,
             temperature=request.temperature
             if request.temperature is not None
             else model_config.temperature,
@@ -86,7 +109,10 @@ class LLMClient:
                             "experiment_id": request.metadata.get("experiment_id"),
                         },
                     )
-                    raise ValueError("model response did not match expected structured format")
+                    raise ValueError(
+                        f"model response did not match expected structured format. "
+                        f"Raw content: {result.content[:300]}"
+                    )
             else:
                 result.parsed = parsed
 
@@ -153,8 +179,18 @@ class LLMClient:
         content: str,
         response_format: dict[str, Any] | type[BaseModel],
     ) -> dict[str, Any] | None:
+        text = content.strip()
+        # Strip markdown code fences if present
+        if text.startswith("```"):
+            lines = text.split("\n")
+            # Remove first line (```json or ```) and last line (```)
+            if lines[-1].strip() == "```":
+                lines = lines[1:-1]
+            else:
+                lines = lines[1:]
+            text = "\n".join(lines).strip()
         try:
-            payload = json.loads(content)
+            payload = json.loads(text)
         except json.JSONDecodeError:
             return None
 
@@ -182,7 +218,10 @@ class LLMClient:
                     {
                         "schema": request.response_format
                         if isinstance(request.response_format, dict)
-                        else "pydantic_model",
+                        else request.response_format.model_json_schema()
+                        if isinstance(request.response_format, type)
+                        and issubclass(request.response_format, BaseModel)
+                        else "unknown",
                         "failed_response": repair_prompt.original_text,
                         "error": repair_prompt.error,
                     }

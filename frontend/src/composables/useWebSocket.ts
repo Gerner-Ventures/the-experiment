@@ -5,6 +5,7 @@ import { useAgentStore } from '@/stores/agent'
 import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
+import { useUIStore } from '@/stores/ui'
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected'
 
@@ -42,11 +43,18 @@ export function useWebSocket(): UseWebSocket {
     }
 
     ws.onmessage = (event) => {
+      let msg: WSMessage
       try {
-        const msg = JSON.parse(event.data) as WSMessage
+        msg = JSON.parse(event.data) as WSMessage
+      } catch (err) {
+        console.warn('[WS] Failed to parse message:', err, event.data)
+        return
+      }
+      console.debug('[WS]', msg.type, msg.phase ?? '', msg.data)
+      try {
         routeMessage(msg)
-      } catch {
-        // Ignore malformed messages
+      } catch (err) {
+        console.error('[WS] Error handling message type:', msg.type, err)
       }
     }
 
@@ -100,6 +108,7 @@ function routeMessage(msg: WSMessage) {
   experimentStore.addEvent(msg)
 
   const router: Partial<Record<WSMessageType, (m: WSMessage) => void>> = {
+    connected: () => { /* connection confirmed, no action needed */ },
     round_start: (m) => experimentStore.onRoundStart(m),
     round_end: (m) => experimentStore.onRoundEnd(m),
     phase_change: (m) => experimentStore.onPhaseChange(m),
@@ -115,7 +124,14 @@ function routeMessage(msg: WSMessage) {
     meeting_speech: (m) => socialStore.onMeetingSpeech(m),
     meeting_vote: (m) => socialStore.onMeetingVote(m),
     meeting_result: (m) => socialStore.onMeetingResult(m),
+    faction_update: (m) => socialStore.onFactionUpdate(m),
+    cult_activity: (m) => socialStore.onCultActivity(m),
+    exile_vote: (m) => socialStore.onExileVote(m),
+    exile_result: (m) => socialStore.onExileResult(m),
     experiment_end: (m) => experimentStore.onEnd(m),
+    step_error: () => {
+      useUIStore().clearStepping()
+    },
   }
 
   const handler = router[msg.type as WSMessageType]

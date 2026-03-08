@@ -11,21 +11,25 @@ export const useGMStore = defineStore('gm', () => {
   const planApproved = ref(false)
 
   function onPlan(msg: WSMessage) {
-    const data = msg.data as Record<string, unknown>
+    const raw = msg.data as Record<string, unknown>
+    // Backend sends GMPlanRecord: { status, plan: { round, round_theme, ... } }
+    const plan = (raw.plan as Record<string, unknown>) ?? raw
+    const crisis = (plan.crisis_event as Record<string, unknown>) ?? {}
+    const mods = (plan.resource_modifiers as Partial<GMPlan['resourceModifiers']>) ?? {}
     currentPlan.value = {
-      round: data.round as number,
-      roundTheme: data.round_theme as string,
-      reasoning: data.reasoning as string,
+      round: (plan.round as number) ?? msg.round,
+      roundTheme: (plan.round_theme as string) ?? '',
+      reasoning: (plan.reasoning as string) ?? '',
       crisisEvent: {
-        type: data.crisis_event ? (data.crisis_event as Record<string, unknown>).type as GMPlan['crisisEvent']['type'] : 'resource',
-        description: data.crisis_event ? (data.crisis_event as Record<string, unknown>).description as string : '',
-        severity: data.crisis_event ? (data.crisis_event as Record<string, unknown>).severity as GMPlan['crisisEvent']['severity'] : 'low',
-        affects: data.crisis_event ? (data.crisis_event as Record<string, unknown>).affects as string[] : [],
+        type: (crisis.type as GMPlan['crisisEvent']['type']) ?? 'resource',
+        description: (crisis.description as string) ?? '',
+        severity: (crisis.severity as GMPlan['crisisEvent']['severity']) ?? 'low',
+        affects: (crisis.affects as string[]) ?? [],
       },
-      resourceModifiers: data.resource_modifiers as Partial<GMPlan['resourceModifiers']> || {},
-      environmental: data.environmental as string | undefined,
-      narration: data.narration as string,
-      metaHint: data.meta_hint as string | null ?? null,
+      resourceModifiers: mods,
+      environmental: plan.environmental as string | undefined,
+      narration: (plan.narration as string) ?? '',
+      metaHint: (plan.meta_hint as string | null) ?? null,
     }
     planApproved.value = false
     showPlanPanel.value = true

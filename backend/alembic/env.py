@@ -16,12 +16,15 @@ settings = get_settings()
 def _sync_url(url: str) -> str:
     """Ensure the DATABASE_URL uses the psycopg (v3) sync driver for Alembic."""
     if url.startswith("postgresql+psycopg://"):
-        return url
-    if url.startswith("postgresql+"):
-        return "postgresql+psycopg://" + url.split("://", 1)[1]
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+psycopg://", 1)
-    return url
+        result = url
+    elif url.startswith("postgresql+"):
+        result = "postgresql+psycopg://" + url.split("://", 1)[1]
+    elif url.startswith("postgresql://"):
+        result = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    else:
+        result = url
+    # psycopg uses sslmode, asyncpg uses ssl — swap if needed
+    return result.replace("?ssl=", "?sslmode=").replace("&ssl=", "&sslmode=")
 
 
 config.set_main_option("sqlalchemy.url", _sync_url(settings.database_url))

@@ -1,13 +1,30 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Agent, AgentStatus } from '@/types/agent'
+import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
 import type { WSMessage } from '@/types/websocket'
+import { useUIStore } from '@/stores/ui'
+import { useLocale } from '@/locales'
 
 export const useAgentStore = defineStore('agent', () => {
+  const locale = useLocale()
   const agents = ref<Map<string, Agent>>(new Map())
 
   const agentList = computed(() => Array.from(agents.value.values()))
   const agentCount = computed(() => agents.value.size)
+
+  /** Agent data mapped to AgentConfig format for PixiWorld rendering */
+  const agentConfigs = computed<AgentConfig[]>(() =>
+    agentList.value.map(a => ({
+      id: a.id,
+      name: a.name,
+      characterId: a.characterId,
+      personality: a.personality.traitTags as AgentConfig['personality'],
+      personalityAxes: a.personality.axes,
+      secretGoal: a.secretGoal.text,
+      goalArchetype: a.secretGoal.archetype,
+      llmModel: a.llmModel,
+    }))
+  )
 
   function setAgents(agentData: Array<Record<string, unknown>>) {
     agents.value.clear()
@@ -29,11 +46,26 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   function onAction(msg: WSMessage) {
-    const data = msg.data as { agent_id: string; action: string; summary: string }
-    const agent = agents.value.get(data.agent_id)
-    if (agent) {
-      agent.status = actionToStatus(data.action)
+    const data = msg.data as {
+      agent_id: string
+      agent_name?: string
+      action: Record<string, unknown> | string
+      inner_thought?: string
+      cooperation_intent?: string
     }
+    const agent = agents.value.get(data.agent_id)
+    const actionType = typeof data.action === 'string'
+      ? data.action
+      : (data.action?.type as string) ?? 'observe'
+    if (agent) {
+      agent.status = actionToStatus(actionType)
+    }
+    const agentName = data.agent_name ?? agent?.name ?? 'Agent'
+    useUIStore().setSteppingStatus(
+      locale.hud.steppingAgent
+        .replace('{name}', agentName)
+        .replace('{action}', actionType),
+    )
   }
 
   function onMove(msg: WSMessage) {
@@ -63,7 +95,7 @@ export const useAgentStore = defineStore('agent', () => {
   }
 
   return {
-    agents, agentList, agentCount,
+    agents, agentList, agentConfigs, agentCount,
     setAgents, getAgent, onAction, onMove, onAgentUpdate, updateAgentFromDossier, resetStatuses,
     $reset,
   }
@@ -91,7 +123,7 @@ function parseAgent(a: Record<string, unknown>): Agent {
       targetLocationId: (goal?.target_location_id ?? goal?.targetLocationId) as string | undefined,
       progressSignals: ((goal?.progress_signals ?? goal?.progressSignals) as string[]) || [],
     },
-    llmModel: ((a.llm_model ?? a.llmModel) as string) || 'openai/gpt-4o-mini',
+    llmModel: ((a.llm_model ?? a.llmModel) as string) || 'anthropic/claude-haiku-4-5-20251001',
     location: (a.location as string) || 'town_square',
     status: ((a.status as string) || 'idle') as AgentStatus,
     suspicionLevel: ((a.suspicion_level ?? a.suspicionLevel) as number) || 0,

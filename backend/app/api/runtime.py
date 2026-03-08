@@ -43,8 +43,9 @@ from app.api.models import (
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
 from app.db.models import AgentStatus
 from app.db.session import AsyncSessionLocal
+from app.agents.models import AgentTurnResult
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
-from app.engine.models import FactionKind
+from app.engine.models import FactionKind, PhaseName, PhaseResult
 from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
@@ -72,6 +73,20 @@ GOAL_FAILED_KEYWORDS = ("no progress", "failed", "stalled", "blocked", "lost", "
 GOAL_PARTIAL_KEYWORDS = ("closer", "progress", "holding", "step", "movement", "advance")
 logger = logging.getLogger(__name__)
 
+# Maps RoundEvent.data["kind"] to WSMessageType for per-event WS broadcasts.
+# Used by both _StreamingHook (live) and broadcast_round (legacy).
+_EVENT_KIND_TO_WS_TYPE: dict[str, WSMessageType] = {
+    "agent_speak": "agent_speak",
+    "meeting_start": "meeting_start",
+    "meeting_speech": "meeting_speech",
+    "meeting_vote": "meeting_vote",
+    "meeting_result": "meeting_result",
+    "faction_update": "faction_update",
+    "cult_activity": "cult_activity",
+    "exile_vote": "exile_vote",
+    "exile_enacted": "exile_result",
+}
+
 
 class CooperationMetrics(TypedDict):
     score: float
@@ -96,7 +111,6 @@ class ConnectionManager:
         )
 
     def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
-        # Use `.get()` here so disconnects for unknown experiments do not create empty buckets.
         sockets = self.connections.get(experiment_id)
         if sockets is None:
             return
@@ -120,15 +134,14 @@ class ConnectionManager:
                 if socket.client_state == WebSocketState.CONNECTED:
                     await socket.send_json(encoded_payload)
                 else:
-                    logger.warning(
-                        "Pruning websocket during broadcast: experiment=%s state=%s",
+                    logger.debug(
+                        "WS pruning disconnected socket before broadcast: experiment=%s",
                         experiment_id,
-                        socket.client_state,
                     )
                     dead_sockets.append(socket)
             except Exception:
                 logger.warning(
-                    "Pruning websocket after send failure: experiment=%s",
+                    "WS broadcast failed; pruning socket: experiment=%s",
                     experiment_id,
                     exc_info=True,
                 )
@@ -138,12 +151,22 @@ class ConnectionManager:
 
 
 class ExperimentRuntime:
-    def __init__(self, *, store: ExperimentStore | None = None) -> None:
-        self.engine = SimulationEngine()
-        self.gm_service = GMService()
-        self.connection_manager = ConnectionManager()
+    def __init__(
+        self,
+        *,
+        store: ExperimentStore | None = None,
+        engine: SimulationEngine | None = None,
+        gm_service: GMService | None = None,
+        connection_manager: ConnectionManager | None = None,
+    ) -> None:
+        self.gm_service = gm_service or (engine.gm_service if engine is not None else GMService())
+        self.engine = engine or SimulationEngine(gm_service=self.gm_service)
+        self.engine.gm_service = self.gm_service
+        self.connection_manager = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.lock = asyncio.Lock()
+        self._steps_in_progress: dict[str, bool] = {}
+        self._current_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def create_experiment(self, request: CreateExperimentRequest) -> SimulationState:
         async with self.lock:
@@ -302,6 +325,7 @@ class ExperimentRuntime:
         return applied
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
+        """Run a full round synchronously (legacy). Prefer step_async for streaming."""
         async with self.lock:
             state = await self.get_state(experiment_id)
             was_setup = state.status == "setup"
@@ -372,6 +396,99 @@ class ExperimentRuntime:
 
         await self.broadcast_round(experiment_id, round_result)
         return round_result, state
+
+    def start_step(self, experiment_id: str) -> None:
+        """Start a round as a background task. Results stream via WS."""
+        if self._steps_in_progress.get(experiment_id):
+            raise RuntimeError("A round is already in progress")
+        self._steps_in_progress[experiment_id] = True
+        task = asyncio.create_task(self._step_streaming(experiment_id))
+        self._current_tasks[experiment_id] = task
+
+        def _on_step_done(_: asyncio.Task[None]) -> None:
+            self._steps_in_progress.pop(experiment_id, None)
+            self._current_tasks.pop(experiment_id, None)
+
+        task.add_done_callback(_on_step_done)
+
+    async def _step_streaming(self, experiment_id: str) -> None:
+        """Run a round using SimulationEngine.run_round() with a streaming hook."""
+        intended_round = 0
+        try:
+            async with self.lock:
+                state = await self.get_state(experiment_id)
+                intended_round = state.current_round + 1
+                if state.status == "setup":
+                    state.status = "running"
+
+                # Pre-approve GM plan if needed (before engine runs)
+                if not state.auto_approve:
+                    record = await self.get_or_generate_gm_plan(experiment_id)
+                    approved = self.gm_service.approve_plan(record)
+                    state.gm_plan = self.gm_service.apply_plan(approved)
+                    await self.store.save_state(state)
+                    await self._log(
+                        experiment_id,
+                        event_type="gm_plan_approved",
+                        summary=state.gm_plan.plan.round_theme,
+                        round_number=state.gm_plan.plan.round,
+                    )
+
+                # Run round through the single engine code path with streaming hook
+                hook = _StreamingHook(
+                    experiment_id=experiment_id,
+                    runtime=self,
+                )
+                round_result = await self.engine.run_round(state, hook=hook)
+
+                await self.store.save_state(state)
+                await self.store.record_round_result(experiment_id, round_result)
+                await self._log_round_result(experiment_id, round_result, state)
+
+            # Broadcast round_end with full state so FE can do a final sync
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "round_end",
+                    round_number=round_result.round_number,
+                    data={
+                        "status": state.status,
+                        "current_round": state.current_round,
+                        "total_rounds": state.total_rounds,
+                        "threat_level": state.world_state.threat_level,
+                        "resources": state.world_state.resources.model_dump(mode="json"),
+                        "agents": [
+                            {
+                                "agent_id": a.agent_id,
+                                "name": a.name,
+                                "character_id": a.character_id,
+                                "status": a.status.value
+                                if hasattr(a.status, "value")
+                                else str(a.status),
+                                "location": a.location,
+                                "suspicion_level": a.suspicion_level,
+                                "faction_id": a.faction_id,
+                                "faction_role": a.faction_role,
+                                "influence": a.influence,
+                            }
+                            for a in state.agents
+                        ],
+                    },
+                ),
+            )
+        except Exception:
+            logger.exception("Background step failed for %s", experiment_id)
+            try:
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "step_error",
+                        round_number=intended_round,
+                        data={"error": "Round execution failed. Check server logs."},
+                    ),
+                )
+            except Exception:
+                logger.exception("Failed to broadcast step_error for %s", experiment_id)
 
     async def list_agents(self, experiment_id: str) -> list[EngineAgentState]:
         return (await self.get_state(experiment_id)).agents
@@ -887,92 +1004,13 @@ class ExperimentRuntime:
                 ),
             )
             for event in phase.events:
-                kind = event.data.get("kind")
-                if kind == "agent_speak":
+                kind = str(event.data.get("kind", ""))
+                msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
+                if msg_type:
                     await self.connection_manager.broadcast(
                         experiment_id,
                         self._message(
-                            "agent_speak",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "meeting_start":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "meeting_start",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "meeting_speech":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "meeting_speech",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "meeting_vote":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "meeting_vote",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "meeting_result":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "meeting_result",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "faction_update":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "faction_update",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "cult_activity":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "cult_activity",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "exile_vote":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "exile_vote",
-                            round_number=round_result.round_number,
-                            phase=phase.phase,
-                            data=event.data,
-                        ),
-                    )
-                elif kind == "exile_enacted":
-                    await self.connection_manager.broadcast(
-                        experiment_id,
-                        self._message(
-                            "exile_result",
+                            msg_type,
                             round_number=round_result.round_number,
                             phase=phase.phase,
                             data=event.data,
@@ -1239,10 +1277,10 @@ class ExperimentRuntime:
         }
         for phase in round_result.phases:
             for event in phase.events:
-                kind = str(event.data.get("kind"))
+                kind = str(event.data.get("kind", ""))
                 if kind == "agent_action":
                     continue
-                event_type = kind_to_type.get(kind, event.phase)
+                event_type = kind_to_type.get(kind, event.phase) if kind else event.phase
                 if event_type == "dawn" and isinstance(event.data.get("crisis_event"), dict):
                     event_type = "crisis_event"
                 await self._log(
@@ -1360,7 +1398,6 @@ class ExperimentRuntime:
                 "cooperative_actions": cooperative_actions,
                 "total_actions": total_actions,
             },
-            # `sabotage_count` is a focused subset of these broader betrayal signals.
             "betrayal_count": betrayal_count,
             "sabotage_count": sabotage_count,
             "threat_level": round_result.threat_level,
@@ -1533,6 +1570,112 @@ class ExperimentRuntime:
             except ValueError:
                 return 0.0
         return 0.0
+
+
+class _StreamingHook:
+    """RoundHook implementation that broadcasts WS messages via ConnectionManager."""
+
+    def __init__(self, *, experiment_id: str, runtime: ExperimentRuntime) -> None:
+        self._experiment_id = experiment_id
+        self._runtime = runtime
+
+    async def on_round_start(self, round_number: int, gm_plan: GMPlanRecord) -> None:
+        cm = self._runtime.connection_manager
+        msg = self._runtime._message
+        eid = self._experiment_id
+
+        await cm.broadcast(
+            eid,
+            msg(
+                "round_start",
+                round_number=round_number,
+                data={"theme": gm_plan.plan.round_theme},
+            ),
+        )
+        await cm.broadcast(
+            eid,
+            msg(
+                "gm_plan",
+                round_number=round_number,
+                data=gm_plan.model_dump(mode="json"),
+            ),
+        )
+        await cm.broadcast(
+            eid,
+            msg(
+                "crisis_event",
+                round_number=round_number,
+                phase="dawn",
+                data=gm_plan.plan.crisis_event.model_dump(mode="json"),
+            ),
+        )
+
+    async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:
+        await self._runtime.connection_manager.broadcast(
+            self._experiment_id,
+            self._runtime._message(
+                "phase_change",
+                round_number=round_number,
+                phase=phase,
+                data={"status": "starting"},
+            ),
+        )
+
+    async def on_phase_complete(self, round_number: int, phase_result: PhaseResult) -> None:
+        cm = self._runtime.connection_manager
+        msg = self._runtime._message
+        eid = self._experiment_id
+
+        await cm.broadcast(
+            eid,
+            msg(
+                "phase_change",
+                round_number=round_number,
+                phase=phase_result.phase,
+                data={"events": [e.model_dump(mode="json") for e in phase_result.events]},
+            ),
+        )
+        # Dual broadcast: phase_change above carries the full event list for the
+        # experiment store.  The individual typed messages below (agent_speak,
+        # meeting_start, etc.) are consumed by dedicated UI components that
+        # subscribe to specific WS message types.  Both are intentional.
+        for event in phase_result.events:
+            kind = str(event.data.get("kind", ""))
+            msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
+            if msg_type:
+                await cm.broadcast(
+                    eid,
+                    msg(
+                        msg_type,
+                        round_number=round_number,
+                        phase=phase_result.phase,
+                        data=event.data,
+                    ),
+                )
+
+    async def on_agent_action(
+        self,
+        round_number: int,
+        phase: PhaseName,
+        agent: EngineAgentState,
+        turn: AgentTurnResult,
+    ) -> None:
+        await self._runtime.connection_manager.broadcast(
+            self._experiment_id,
+            self._runtime._message(
+                "agent_action",
+                round_number=round_number,
+                phase=phase,
+                data={
+                    "agent_id": agent.agent_id,
+                    "agent_name": agent.name,
+                    "action": turn.decision.action.model_dump(mode="json"),
+                    "inner_thought": turn.decision.inner_thought,
+                    "cooperation_intent": turn.decision.cooperation_intent,
+                    "goal_progress": turn.decision.goal_progress,
+                },
+            ),
+        )
 
 
 runtime = ExperimentRuntime()

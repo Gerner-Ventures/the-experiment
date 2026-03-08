@@ -9,6 +9,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     app_name: str = "the-experiment"
@@ -22,14 +23,12 @@ class Settings(BaseSettings):
     posthog_key: str | None = None
     posthog_host: str = "https://us.posthog.com"
     anthropic_api_key: str | None = None
-    openai_api_key: str | None = None
-    google_api_key: str | None = None
-    gm_model: str = "anthropic/claude-3-5-sonnet-20241022"
-    gm_fallback_model: str = "openai/gpt-4o-mini"
-    agent_model: str = "openai/gpt-4o-mini"
-    agent_fallback_model: str = "anthropic/claude-3-5-haiku-20241022"
-    memory_model: str = "openai/gpt-4o-mini"
-    memory_fallback_model: str = "anthropic/claude-3-5-haiku-20241022"
+    gm_model: str = "anthropic/claude-sonnet-4-5-20250514"
+    gm_fallback_model: str = "anthropic/claude-haiku-4-5-20251001"
+    agent_model: str = "anthropic/claude-haiku-4-5-20251001"
+    agent_fallback_model: str = "anthropic/claude-sonnet-4-5-20250514"
+    memory_model: str = "anthropic/claude-haiku-4-5-20251001"
+    memory_fallback_model: str = "anthropic/claude-sonnet-4-5-20250514"
     llm_timeout_seconds: float = 45.0
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2
