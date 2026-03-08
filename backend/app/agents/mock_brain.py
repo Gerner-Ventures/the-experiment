@@ -6,7 +6,11 @@ import hashlib
 import random
 from typing import Any, cast
 
-from app.actions import MOCK_COOPERATIVE_ACTION_IDS, MOCK_SELFISH_ACTION_IDS, TERMINAL_ACTION_IDS
+from app.actions import (
+    MOCK_COOPERATIVE_ACTIONS,
+    MOCK_SELFISH_ACTIONS,
+    TERMINAL_ACTIONS as TERMINAL_DECISION_ACTIONS,
+)
 from app.agents.brain import AgentBrain
 from app.agents.models import (
     AgentContext,
@@ -30,9 +34,9 @@ from app.schemas.agent_decision import (
 )
 
 # Weighted by personality
-COOPERATIVE_ACTIONS = cast(tuple[DecisionActionType, ...], MOCK_COOPERATIVE_ACTION_IDS)
-SELFISH_ACTIONS = cast(tuple[DecisionActionType, ...], MOCK_SELFISH_ACTION_IDS)
-TERMINAL_ACTIONS = cast(tuple[DecisionActionType, ...], TERMINAL_ACTION_IDS)
+COOPERATIVE_ACTIONS: tuple[DecisionActionType, ...] = MOCK_COOPERATIVE_ACTIONS
+SELFISH_ACTIONS: tuple[DecisionActionType, ...] = MOCK_SELFISH_ACTIONS
+TERMINAL_ACTIONS: tuple[DecisionActionType, ...] = TERMINAL_DECISION_ACTIONS
 NON_TERMINAL_ACTIONS = tuple(
     action for action in DECISION_ACTION_TYPES if action not in TERMINAL_ACTIONS
 )

@@ -295,7 +295,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         category="cooperative",
         description="Give up your life in a ritualized sacrifice to steady the town.",
         requires_location=True,
-        tags=_tags("terminal"),
+        tags=_tags("cooperative", "terminal"),
     ),
     ActionSpec(
         id=ConsequenceActionName.BLEEDING,
@@ -362,6 +362,14 @@ def _tagged_action_ids(tag: ActionTag) -> tuple[str, ...]:
     return tuple(spec.id.value for spec in ACTION_SPECS if tag in spec.tags)
 
 
+def _tagged_decision_actions(tag: ActionTag) -> tuple[DecisionActionName, ...]:
+    return tuple(
+        spec.id
+        for spec in ACTION_SPECS
+        if spec.kind == "decision" and isinstance(spec.id, DecisionActionName) and tag in spec.tags
+    )
+
+
 COOPERATIVE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("cooperative")
 HOSTILE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("hostile")
 INTERACTION_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("interaction")
@@ -370,6 +378,11 @@ MOCK_SELFISH_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("mock_selfish")
 RANGED_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("ranged")
 SABOTAGE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("sabotage")
 TERMINAL_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("terminal")
+MOCK_COOPERATIVE_ACTIONS: tuple[DecisionActionName, ...] = _tagged_decision_actions(
+    "mock_cooperative"
+)
+MOCK_SELFISH_ACTIONS: tuple[DecisionActionName, ...] = _tagged_decision_actions("mock_selfish")
+TERMINAL_ACTIONS: tuple[DecisionActionName, ...] = _tagged_decision_actions("terminal")
 
 ACTION_IDS_BY_TAG: dict[ActionTag, frozenset[str]] = {
     tag: frozenset(_tagged_action_ids(tag)) for tag in get_args(ActionTag)

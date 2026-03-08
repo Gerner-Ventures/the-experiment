@@ -67,6 +67,7 @@ def test_catalog_preserves_backend_runtime_groupings() -> None:
         "pray",
         "rally",
         "mourn",
+        "self_sacrifice",
     }
     assert set(HOSTILE_ACTION_IDS) == {"accuse", "attack", "threaten", "stab", "shoot", "poison"}
     assert set(SABOTAGE_ACTION_IDS) == {"sabotage"}
