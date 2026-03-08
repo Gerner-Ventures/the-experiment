@@ -52,6 +52,7 @@ def create_app(
         lf.init()
         ph.capture("backend_started", {"version": settings.app_version})
         yield
+        await runtime.aclose()
         if db_engine is not None:
             await db_engine.dispose()
         shutdown_logging()

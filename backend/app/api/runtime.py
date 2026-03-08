@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 import uuid
+from collections.abc import AsyncIterator
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast, get_args
@@ -12,6 +13,8 @@ import structlog
 from app.agents.models import AgentMemoryState
 from app.api.models import (
     AnalyticsSummary,
+    AgentSuspicionHistory,
+    AgentGoalProgress,
     BetrayalTimelineItem,
     CreateExperimentRequest,
     EventLogItem,
@@ -20,9 +23,9 @@ from app.api.models import (
     FactionMembershipChange,
     FactionTimelinePoint,
     GMRoundTimelineItem,
-    AgentGoalProgress,
     GoalOutcomeSummary,
     HighlightItem,
+    NarrationAudioMetadata,
     RelationshipEdge,
     ReplayIndex,
     ReplayRound,
@@ -31,7 +34,6 @@ from app.api.models import (
     SuspicionAnalytics,
     SuspicionHistoryPoint,
     SuspicionPoint,
-    AgentSuspicionHistory,
     UsageGroup,
     UsageReport,
 )
@@ -47,6 +49,7 @@ from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningConte
 from app.llm import UsageRecord, UsageSummary
 from app.schemas.ws_message import WSMessage, WSMessageType
 from app.core import posthog as ph
+from app.tts import NarrationAudioError, NarrationAudioRequest, NarrationTTSService
 from app.world import build_default_world_state, resolve_spawn_tile
 
 log = structlog.get_logger(__name__)
@@ -101,15 +104,21 @@ class ExperimentRuntime:
         engine: SimulationEngine | None = None,
         gm_service: GMService | None = None,
         connection_manager: ConnectionManager | None = None,
+        tts_service: NarrationTTSService | None = None,
     ) -> None:
         self.gm_service = gm_service or (engine.gm_service if engine is not None else GMService())
         self.engine = engine or SimulationEngine(gm_service=self.gm_service)
         self.engine.gm_service = self.gm_service
         self.connection_manager = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
+        self.tts_service = tts_service
         self.lock = asyncio.Lock()
         self._steps_in_progress: dict[str, bool] = {}
         self._current_tasks: dict[str, asyncio.Task[None]] = {}
+
+    async def aclose(self) -> None:
+        if self.tts_service is not None:
+            await self.tts_service.aclose()
 
     async def create_experiment(self, request: CreateExperimentRequest) -> SimulationState:
         async with self.lock:
@@ -257,6 +266,8 @@ class ExperimentRuntime:
             summary=plan.plan.round_theme,
             round_number=next_round,
         )
+        if plan.status == "applied":
+            await self._prepare_narration_audio(experiment_id, plan)
         return plan
 
     async def approve_gm_plan(
@@ -274,6 +285,7 @@ class ExperimentRuntime:
             summary=applied.plan.round_theme,
             round_number=applied.plan.round,
         )
+        await self._prepare_narration_audio(experiment_id, applied)
         return applied
 
     async def step(self, experiment_id: str) -> tuple[RoundResult, SimulationState]:
@@ -303,6 +315,7 @@ class ExperimentRuntime:
                     summary=state.gm_plan.plan.round_theme,
                     round_number=state.gm_plan.plan.round,
                 )
+                await self._prepare_narration_audio(experiment_id, state.gm_plan)
             t0 = time.monotonic()
             round_result = await self.engine.run_round(state)
             round_duration = time.monotonic() - t0
@@ -394,6 +407,7 @@ class ExperimentRuntime:
                         summary=state.gm_plan.plan.round_theme,
                         round_number=state.gm_plan.plan.round,
                     )
+                    await self._prepare_narration_audio(experiment_id, state.gm_plan)
 
                 # Run round through the single engine code path with streaming hook
                 hook = _StreamingHook(
@@ -981,6 +995,49 @@ class ExperimentRuntime:
             events=[item for item in logs if item.round_number == round_number],
         )
 
+    async def get_narration_audio_metadata(
+        self, experiment_id: str, round_number: int
+    ) -> NarrationAudioMetadata:
+        state = await self.get_state(experiment_id)
+        request = await self._narration_audio_request(experiment_id, round_number, state=state)
+        status = "unavailable"
+        cache_hit = False
+        audio_url: str | None = None
+        if self.tts_service is not None:
+            status, cache_hit = await self.tts_service.get_status(request)
+            if status != "unavailable":
+                audio_url = self.tts_service.build_audio_url(experiment_id, round_number)
+        return NarrationAudioMetadata(
+            experiment_id=experiment_id,
+            round_number=round_number,
+            text=request.text,
+            voice_id=request.voice_id,
+            model_id=request.model_id,
+            output_format=request.output_format,
+            status=cast(Literal["pending", "ready", "unavailable"], status),
+            audio_url=audio_url,
+            cache_hit=cache_hit,
+        )
+
+    async def get_narration_audio_stream(
+        self, experiment_id: str, round_number: int
+    ) -> tuple[str, AsyncIterator[bytes]]:
+        request = await self._narration_audio_request(experiment_id, round_number)
+        if self.tts_service is None:
+            raise NarrationAudioError("Narration audio is not configured.", status_code=503)
+        result = await self.tts_service.stream(request)
+        log.info(
+            "narration_audio_stream_requested",
+            experiment_id=experiment_id,
+            round_number=round_number,
+            narration_hash=result.cache_key,
+            voice_id=request.voice_id,
+            model_id=request.model_id,
+            output_format=request.output_format,
+            cache_hit=result.cache_hit,
+        )
+        return result.content_type, result.stream
+
     async def broadcast_round(self, experiment_id: str, round_result: RoundResult) -> None:
         await self.connection_manager.broadcast(
             experiment_id,
@@ -1007,6 +1064,7 @@ class ExperimentRuntime:
                 data=round_result.gm_plan.plan.crisis_event.model_dump(mode="json"),
             ),
         )
+        await self._broadcast_narration_audio_status_for_plan(experiment_id, round_result.gm_plan)
         for phase in round_result.phases:
             await self.connection_manager.broadcast(
                 experiment_id,
@@ -1252,6 +1310,102 @@ class ExperimentRuntime:
             return
         loop.create_task(self.connection_manager.broadcast(experiment_id, payload))
 
+    async def _prepare_narration_audio(
+        self,
+        experiment_id: str,
+        gm_plan: GMPlanRecord | None,
+    ) -> None:
+        if gm_plan is None or gm_plan.status != "applied" or not gm_plan.plan.narration.strip():
+            return
+        request = await self._narration_audio_request(
+            experiment_id,
+            gm_plan.plan.round,
+            narration_text=gm_plan.plan.narration,
+        )
+        await self._broadcast_narration_audio_status(experiment_id, request)
+        if self.tts_service is None or not self.tts_service.configured:
+            return
+
+        async def _prewarm() -> None:
+            try:
+                await self.tts_service.prewarm(request)
+                await self._broadcast_narration_audio_status(experiment_id, request)
+            except NarrationAudioError as exc:
+                log.warning(
+                    "narration_audio_prewarm_failed",
+                    experiment_id=experiment_id,
+                    round_number=request.round_number,
+                    narration_hash=self.tts_service.cache_key(request),
+                    error=str(exc),
+                )
+                await self._broadcast_narration_audio_status(
+                    experiment_id,
+                    request,
+                    error=str(exc),
+                )
+
+        asyncio.get_running_loop().create_task(_prewarm())
+
+    async def _broadcast_narration_audio_status_for_plan(
+        self, experiment_id: str, gm_plan: GMPlanRecord
+    ) -> None:
+        if gm_plan.status != "applied" or not gm_plan.plan.narration.strip():
+            return
+        request = await self._narration_audio_request(
+            experiment_id,
+            gm_plan.plan.round,
+            narration_text=gm_plan.plan.narration,
+        )
+        await self._broadcast_narration_audio_status(experiment_id, request)
+
+    async def _broadcast_narration_audio_status(
+        self,
+        experiment_id: str,
+        request: NarrationAudioRequest,
+        *,
+        error: str | None = None,
+    ) -> None:
+        if self.tts_service is None:
+            return
+        if error is not None:
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "gm_audio_status",
+                    round_number=request.round_number,
+                    phase="gm_plan",
+                    data={"status": "error", "error": error},
+                ),
+            )
+            return
+        status, _ = await self.tts_service.get_status(request)
+        if status == "unavailable":
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "gm_audio_status",
+                    round_number=request.round_number,
+                    phase="gm_plan",
+                    data={"status": "error", "error": "Narration audio is unavailable."},
+                ),
+            )
+            return
+        data: dict[str, Any] = {"status": status}
+        if status == "ready":
+            data["audio_url"] = self.tts_service.build_audio_url(
+                experiment_id,
+                request.round_number,
+            )
+        await self.connection_manager.broadcast(
+            experiment_id,
+            self._message(
+                "gm_audio_status",
+                round_number=request.round_number,
+                phase="gm_plan",
+                data=data,
+            ),
+        )
+
     async def _log(
         self,
         experiment_id: str,
@@ -1275,6 +1429,60 @@ class ExperimentRuntime:
                 data=data or {},
                 timestamp=datetime.now(UTC),
             )
+        )
+
+    async def _narration_audio_request(
+        self,
+        experiment_id: str,
+        round_number: int,
+        *,
+        state: SimulationState | None = None,
+        narration_text: str | None = None,
+    ) -> NarrationAudioRequest:
+        if self.tts_service is None:
+            raise NarrationAudioError("Narration audio is not configured.", status_code=503)
+        resolved_state = state or await self.get_state(experiment_id)
+        text = narration_text or await self._resolve_narration_text(
+            experiment_id,
+            round_number,
+            state=resolved_state,
+        )
+        return self.tts_service.build_request(
+            experiment_id=experiment_id,
+            round_number=round_number,
+            text=text,
+            map_name=resolved_state.world_state.map_name,
+        )
+
+    async def _resolve_narration_text(
+        self,
+        experiment_id: str,
+        round_number: int,
+        *,
+        state: SimulationState | None = None,
+    ) -> str:
+        resolved_state = state or await self.get_state(experiment_id)
+        if round_number < 1 or round_number > resolved_state.total_rounds:
+            raise KeyError(round_number)
+        current_plan = resolved_state.gm_plan
+        if (
+            current_plan is not None
+            and current_plan.status == "applied"
+            and current_plan.plan.round == round_number
+            and current_plan.plan.narration.strip()
+        ):
+            return current_plan.plan.narration
+
+        round_summaries = self._round_summary_data(await self.store.list_logs(experiment_id))
+        round_summary = round_summaries.get(round_number)
+        narration = None
+        if round_summary is not None:
+            narration = self._string_value(round_summary.get("gm", {}).get("narration"))
+        if narration:
+            return narration
+        raise NarrationAudioError(
+            "Narration is not available for this round yet.",
+            status_code=409,
         )
 
     async def _log_round_result(
@@ -1623,6 +1831,7 @@ class _StreamingHook:
                 data=gm_plan.plan.crisis_event.model_dump(mode="json"),
             ),
         )
+        await self._runtime._broadcast_narration_audio_status_for_plan(eid, gm_plan)
 
     async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:
         await self._runtime.connection_manager.broadcast(

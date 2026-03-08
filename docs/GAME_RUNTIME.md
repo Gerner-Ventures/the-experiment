@@ -393,6 +393,7 @@ Core messages include:
 
 - `round_start`
 - `gm_plan`
+- `gm_audio_status`
 - `crisis_event`
 - `phase_change`
 - `agent_speak`
@@ -412,6 +413,14 @@ The frontend mirrors this in separate UI stores:
 - `experiment` store for round, phase, and event log
 - `gm` store for plan and narration
 - `world` store for resources, threat, and active crisis
+
+Narration audio is exposed separately over REST:
+
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
+
+The websocket only carries narration-audio readiness state; audio bytes are streamed over HTTP from
+the backend rather than sent through the experiment websocket.
 
 Code references:
 
