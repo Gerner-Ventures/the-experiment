@@ -35,4 +35,5 @@ class WSMessage(APIModel):
     round: int
     phase: str | None = None
     timestamp: datetime
+    is_consequence: bool = False
     data: dict[str, Any]

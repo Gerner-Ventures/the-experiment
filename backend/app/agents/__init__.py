@@ -11,6 +11,7 @@ from app.agents.models import (
     SecretGoal,
 )
 from app.agents.registry import ACTION_REGISTRY, get_action_definition
+from app.schemas.agent_decision import DECISION_ACTION_TYPES
 from app.agents.service import AgentService, build_goal_payload, build_personality_payload
 from app.agents.suspicion import apply_suspicion_trigger
 
@@ -23,6 +24,7 @@ __all__ = [
     "AgentService",
     "AgentTurnResult",
     "CURATED_TRAIT_TAGS",
+    "DECISION_ACTION_TYPES",
     "GoalArchetype",
     "PersonalityAxes",
     "PersonalityProfile",

@@ -2,6 +2,23 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Agent Decision",
   "description": "Structured output from an agent's LLM decision",
+  "$defs": {
+    "decisionActionType": {
+      "type": "string",
+      "enum": ["move", "gather", "repair", "trade", "talk", "hoard", "sabotage", "explore", "accuse", "vote", "rest", "observe", "attack", "threaten", "stab", "shoot", "poison", "dance", "pray", "rally", "mourn", "celebrate", "argue", "pee", "poop", "vomit", "sleep", "eat", "drink", "investigate", "monologue", "panic", "breakdown", "self_sacrifice"]
+    },
+    "consequenceActionType": {
+      "type": "string",
+      "description": "Engine-generated reactions. These must not be emitted by the LLM decision step.",
+      "enum": ["bleeding", "injured", "stunned", "knocked_down", "burning", "poisoned", "crying", "fleeing"]
+    },
+    "actionTypeCatalog": {
+      "anyOf": [
+        { "$ref": "#/$defs/decisionActionType" },
+        { "$ref": "#/$defs/consequenceActionType" }
+      ]
+    }
+  },
   "type": "object",
   "properties": {
     "inner_thought": {
@@ -14,10 +31,7 @@
     "action": {
       "type": "object",
       "properties": {
-        "type": {
-          "type": "string",
-          "enum": ["move", "gather", "repair", "trade", "talk", "hoard", "sabotage", "explore", "accuse", "vote", "rest", "observe", "attack", "threaten", "stab", "shoot", "poison", "dance", "pray", "rally", "mourn", "celebrate", "argue", "pee", "poop", "vomit", "sleep", "eat", "drink", "investigate", "monologue", "panic", "breakdown", "self_sacrifice"]
-        },
+        "type": { "$ref": "#/$defs/decisionActionType" },
         "target": { "type": "string" },
         "location": { "type": "string" }
       },

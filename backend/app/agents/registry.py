@@ -183,6 +183,46 @@ ACTION_REGISTRY: dict[str, ActionDefinition] = {
         description="Give up your life in a ritualized sacrifice to steady the town.",
         requires_location=True,
     ),
+    "bleeding": ActionDefinition(
+        type="bleeding",
+        category="consequence",
+        description="A visible wound leaves blood in the aftermath of violence.",
+    ),
+    "injured": ActionDefinition(
+        type="injured",
+        category="consequence",
+        description="A painful injury slows or destabilizes the target.",
+    ),
+    "stunned": ActionDefinition(
+        type="stunned",
+        category="consequence",
+        description="Shock leaves the target briefly reeling.",
+    ),
+    "knocked_down": ActionDefinition(
+        type="knocked_down",
+        category="consequence",
+        description="The target is thrown to the ground by force.",
+    ),
+    "burning": ActionDefinition(
+        type="burning",
+        category="consequence",
+        description="Flame or heat leaves the target in immediate distress.",
+    ),
+    "poisoned": ActionDefinition(
+        type="poisoned",
+        category="consequence",
+        description="The target suffers from contamination or toxin exposure.",
+    ),
+    "crying": ActionDefinition(
+        type="crying",
+        category="consequence",
+        description="Fear or grief breaks through in a visible emotional reaction.",
+    ),
+    "fleeing": ActionDefinition(
+        type="fleeing",
+        category="consequence",
+        description="The target tries to escape immediate danger.",
+    ),
 }
 
 
