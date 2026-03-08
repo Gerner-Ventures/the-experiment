@@ -9,7 +9,6 @@ import {
 } from '@/config/sprites/animations'
 import { POSES } from '@/config/sprites/poses'
 import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
-import type { PoseName } from '@/config/sprites/types'
 
 describe('animation-registry', () => {
   it('every ANIMATION_REGISTRY entry has non-empty frames array', () => {
@@ -27,7 +26,7 @@ describe('animation-registry', () => {
 
   it('every frame in every animation references a valid PoseName that exists in POSES', () => {
     const validPoses = new Set(Object.keys(POSES))
-    for (const [name, anim] of Object.entries(ANIMATION_REGISTRY)) {
+    for (const [, anim] of Object.entries(ANIMATION_REGISTRY)) {
       for (const frame of anim.frames) {
         expect(validPoses.has(frame)).toBe(true)
       }
@@ -35,7 +34,7 @@ describe('animation-registry', () => {
   })
 
   it('every ACTION_TO_ANIMATION value maps to an existing ANIMATION_REGISTRY key', () => {
-    for (const [action, animName] of Object.entries(ACTION_TO_ANIMATION)) {
+    for (const [, animName] of Object.entries(ACTION_TO_ANIMATION)) {
       expect(ANIMATION_REGISTRY[animName]).toBeDefined()
     }
   })

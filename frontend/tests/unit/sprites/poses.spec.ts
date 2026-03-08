@@ -6,15 +6,15 @@ describe('poses', () => {
   const poseEntries = Object.entries(POSES) as [PoseName, typeof POSES[PoseName]][]
 
   it('every pose bodyOverride row string is exactly GRID_W (14) chars', () => {
-    for (const [name, pose] of poseEntries) {
-      for (const [rowIdx, rowData] of pose.bodyOverrides) {
+    for (const [, pose] of poseEntries) {
+      for (const [, rowData] of pose.bodyOverrides) {
         expect(rowData).toHaveLength(GRID_W)
       }
     }
   })
 
   it('every pose bodyOverride row index is within [0, GRID_H)', () => {
-    for (const [name, pose] of poseEntries) {
+    for (const [, pose] of poseEntries) {
       for (const [rowIdx] of pose.bodyOverrides) {
         expect(rowIdx).toBeGreaterThanOrEqual(0)
         expect(rowIdx).toBeLessThan(GRID_H)
@@ -23,7 +23,7 @@ describe('poses', () => {
   })
 
   it('every pixelOverride coordinate is within bounds', () => {
-    for (const [name, pose] of poseEntries) {
+    for (const [, pose] of poseEntries) {
       if (!pose.pixelOverrides) continue
       for (const [x, y, colorKey] of pose.pixelOverrides) {
         expect(x).toBeGreaterThanOrEqual(0)

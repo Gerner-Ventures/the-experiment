@@ -6,10 +6,6 @@ function makeTile(x: number, y: number, tileType: TileDef['tileType'] = 'grass',
   return { x, y, tileType, walkable, locationId }
 }
 
-function makeLoc(id: string, x: number, y: number): LocationDef {
-  return { id, name: id, type: 'generic', x, y, width: 1, height: 1, capacity: 10, description: '' }
-}
-
 function makeMapData(tiles: TileDef[], locations: LocationDef[] = []): MapData {
   return { name: 'test-map', width: 10, height: 10, tiles, locations }
 }
