@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
-from app.api.models import NarrationAudioMetadata
+from app.api.models import AgentSpeechAudioMetadata, NarrationAudioMetadata
 from app.api.runtime import ExperimentRuntime
 from app.tts import NarrationAudioError
 
@@ -47,6 +47,54 @@ async def get_round_narration_audio(
         content_type, stream = await runtime.get_narration_audio_stream(experiment_id, round_number)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Round not found") from exc
+    except NarrationAudioError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return StreamingResponse(stream, media_type=content_type)
+
+
+@router.get(
+    "/{experiment_id}/agents/{agent_id}/speech",
+    response_model=AgentSpeechAudioMetadata,
+    summary="Get agent speech metadata",
+    description="Return agent speech text plus backend audio metadata for an utterance.",
+)
+async def get_agent_speech(
+    experiment_id: str,
+    agent_id: str,
+    request: Request,
+    round: int = Query(..., description="Round number"),
+    index: int = Query(0, description="Utterance index within the round"),
+) -> AgentSpeechAudioMetadata:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
+    try:
+        return await runtime.get_agent_speech_metadata(experiment_id, agent_id, round, index)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Agent speech not found") from exc
+    except NarrationAudioError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{experiment_id}/agents/{agent_id}/speech/audio",
+    summary="Stream agent speech audio",
+    description="Stream ElevenLabs-generated speech audio for an agent utterance.",
+)
+async def get_agent_speech_audio(
+    experiment_id: str,
+    agent_id: str,
+    request: Request,
+    round: int = Query(..., description="Round number"),
+    index: int = Query(0, description="Utterance index within the round"),
+) -> StreamingResponse:
+    runtime = _runtime_from_request(request)
+    await _get_state(runtime, experiment_id)
+    try:
+        content_type, stream = await runtime.get_agent_speech_audio_stream(
+            experiment_id, agent_id, round, index
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Agent speech not found") from exc
     except NarrationAudioError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return StreamingResponse(stream, media_type=content_type)

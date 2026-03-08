@@ -33,6 +33,7 @@ function routeMessage(msg: WSMessage) {
     gm_narration: (m) => gmStore.onNarration(m),
     agent_action: (m) => agentStore.onAction(m),
     agent_speak: (m) => socialStore.onSpeak(m),
+    agent_speech_audio: (m) => socialStore.onSpeechAudio(m),
     crisis_event: (m) => worldStore.onCrisis(m),
     threat_update: (m) => worldStore.onThreatUpdate(m),
     resource_update: (m) => worldStore.onResourceUpdate(m),
@@ -221,6 +222,19 @@ describe('WebSocket message routing', () => {
     expect(socialStore.exileEvents).toHaveLength(1)
     expect(socialStore.exileEvents[0].phase).toBe('result')
     expect(socialStore.exileEvents[0].exiled).toBe(true)
+  })
+
+  it('routes agent_speech_audio to socialStore', () => {
+    const socialStore = useSocialStore()
+    // First create a conversation entry so the audio message has something to match
+    routeMessage(makeMsg('agent_speak', { agent_id: 'a1', agent_name: 'Alice', target: 'a2', message: 'Hello' }))
+    expect(socialStore.conversations).toHaveLength(1)
+    expect(socialStore.conversations[0].audioStatus).toBe('idle')
+
+    // Now route the audio status message
+    routeMessage(makeMsg('agent_speech_audio', { agent_id: 'a1', round: 1, index: 0, status: 'ready', audio_url: 'https://example.com/audio.mp3' }))
+    expect(socialStore.conversations[0].audioStatus).toBe('ready')
+    expect(socialStore.conversations[0].audioUrl).toBe('https://example.com/audio.mp3')
   })
 
   it('routes experiment_end to experimentStore', () => {

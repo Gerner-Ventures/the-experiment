@@ -9,7 +9,7 @@ from typing import Protocol
 
 import structlog
 
-from app.core.config import MAP_NARRATOR_VOICE_IDS, Settings
+from app.core.config import CHARACTER_VOICE_IDS, MAP_NARRATOR_VOICE_IDS, Settings
 from app.tts.elevenlabs import ElevenLabsNarrationProvider, NarrationAudioError
 from app.tts.models import (
     CachedNarrationAudio,
@@ -92,6 +92,38 @@ class NarrationTTSService:
 
     def build_audio_url(self, experiment_id: str, round_number: int) -> str:
         return f"/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio"
+
+    def build_speech_request(
+        self,
+        *,
+        experiment_id: str,
+        round_number: int,
+        text: str,
+        character_id: str,
+    ) -> NarrationAudioRequest:
+        return NarrationAudioRequest(
+            experiment_id=experiment_id,
+            round_number=round_number,
+            text=text,
+            voice_id=self.voice_id_for_character(character_id),
+            model_id=self.model_id,
+            output_format=self.output_format,
+            voice_settings=self._voice_settings(),
+        )
+
+    def build_speech_audio_url(
+        self, experiment_id: str, agent_id: str, round_number: int, index: int
+    ) -> str:
+        return (
+            f"/api/experiments/{experiment_id}/agents/{agent_id}"
+            f"/speech/audio?round={round_number}&index={index}"
+        )
+
+    def voice_id_for_character(self, character_id: str) -> str:
+        voice_id = CHARACTER_VOICE_IDS.get(character_id)
+        if isinstance(voice_id, str) and voice_id.strip():
+            return voice_id
+        return self.voice_id
 
     def voice_id_for_map(self, map_name: str | None) -> str:
         if map_name:

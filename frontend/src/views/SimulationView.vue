@@ -28,6 +28,7 @@ import { useUIStore, PANELS } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
 import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
+import { MUTE_STORAGE_KEY } from '@/config/audio'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
@@ -59,6 +60,24 @@ const ready = ref(false)
 const experimentCreated = ref(false)
 const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
+
+// Mute state for agent voice narration
+const isMuted = ref(window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
+
+// TODO: toggling mute while audio is mid-playback does not stop the current bubble's audio
+function toggleMute() {
+  isMuted.value = !isMuted.value
+  window.localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))
+}
+
+// Find the socialStore conversation entry matching the active turn bubble (for audio data)
+const activeBubbleAudio = computed(() => {
+  const turn = turnStore.activeTurn
+  if (!turn?.thought) return null
+  return socialStore.conversations.find(
+    (c) => c.agentId === turn.agentId && c.message === turn.thought,
+  ) ?? null
+})
 
 async function initExperiment() {
   const experimentId = route.params.id as string
@@ -393,11 +412,13 @@ function goBack() {
             :stepping-status="uiStore.steppingStatus"
             :is-complete="experimentStore.isComplete"
             :has-experiment="experimentCreated"
+            :is-muted="isMuted"
             @step="handleStep"
             @play="handleStart"
             @pause="handlePause"
             @toggle-log="uiStore.togglePanel(PANELS.LOG)"
             @toggle-relationship-web="uiStore.togglePanel(PANELS.RELATIONSHIP_WEB)"
+            @toggle-mute="toggleMute"
           />
         </div>
 
@@ -428,7 +449,10 @@ function goBack() {
           :message="turnStore.activeTurn.thought"
           :agent-id="turnStore.activeTurn.agentId"
           :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
+          :audio-status="activeBubbleAudio?.audioStatus ?? 'idle'"
+          :audio-url="activeBubbleAudio?.audioUrl ?? null"
           @dismiss="turnStore.onBubbleDismissed()"
+          @audio-end="turnStore.notifyAudioComplete()"
         />
       </div>
     </div>

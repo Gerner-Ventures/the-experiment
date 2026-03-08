@@ -34,6 +34,9 @@ const MIN_ACTION_DURATION_MS = 1500
  *  before advancing to the next agent in the queue. */
 const HUD_ONLY_DURATION_MS = 1500
 
+/** Maximum time to wait for audio playback before force-advancing */
+const AUDIO_MAX_TIMEOUT_MS = 15000
+
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
   const queue = ref<Turn[]>([])
@@ -47,6 +50,7 @@ export const useTurnStore = defineStore('turn', () => {
   let turnCounter = 0
   let hudTimer: ReturnType<typeof setTimeout> | null = null
   let actionFloorTimer: ReturnType<typeof setTimeout> | null = null
+  let speechAudioTimer: ReturnType<typeof setTimeout> | null = null
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
   let handlers: TurnHandlers | null = null
@@ -168,6 +172,12 @@ export const useTurnStore = defineStore('turn', () => {
       console.debug(`[Turn] Showing bubble: ${turn.agentName}`)
       // ConversationBubble will render because activeTurn has a thought.
       // It emits 'dismiss' → SimulationView calls onBubbleDismissed()
+      // It emits 'audioEnd' → SimulationView calls notifyAudioComplete()
+      // Safety: max timeout prevents indefinite blocking if audio never completes
+      speechAudioTimer = setTimeout(() => {
+        speechAudioTimer = null
+        onBubbleDismissed()
+      }, AUDIO_MAX_TIMEOUT_MS)
     } else {
       // HUD-only: show status briefly then advance
       phase.value = 'hud-only'
@@ -176,11 +186,31 @@ export const useTurnStore = defineStore('turn', () => {
     }
   }
 
+  /**
+   * Called by SimulationView when ConversationBubble emits 'audioEnd'.
+   * Clears audio timers and triggers bubble dismissal.
+   */
+  function notifyAudioComplete() {
+    if (speechAudioTimer) {
+      clearTimeout(speechAudioTimer)
+      speechAudioTimer = null
+    }
+    onBubbleDismissed()
+  }
+
+  /**
+   * Called by SimulationView when ConversationBubble emits 'dismiss' (text-only fade).
+   * Also called internally by notifyAudioComplete for audio-gated flow.
+   */
   function onBubbleDismissed() {
     console.debug(`[Turn] Bubble dismissed, advancing`)
     // Reset agent to idle
     if (activeTurn.value) {
       handlers?.updateAgent(activeTurn.value.agentId, 'idle')
+    }
+    if (speechAudioTimer) {
+      clearTimeout(speechAudioTimer)
+      speechAudioTimer = null
     }
     processNext()
   }
@@ -193,6 +223,10 @@ export const useTurnStore = defineStore('turn', () => {
     if (actionFloorTimer) {
       clearTimeout(actionFloorTimer)
       actionFloorTimer = null
+    }
+    if (speechAudioTimer) {
+      clearTimeout(speechAudioTimer)
+      speechAudioTimer = null
     }
   }
 
@@ -209,7 +243,7 @@ export const useTurnStore = defineStore('turn', () => {
   return {
     queue, activeTurn, phase, isProcessing, hasPendingTurns,
     setHandlers, onDrained,
-    enqueue, processNext, onBubbleDismissed,
+    enqueue, processNext, onBubbleDismissed, notifyAudioComplete,
     $reset,
   }
 })

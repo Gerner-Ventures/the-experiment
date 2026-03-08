@@ -27,6 +27,7 @@ WSMessageType = Literal[
     "observer_event",
     "experiment_end",
     "step_error",
+    "agent_speech_audio",
 ]
 
 
