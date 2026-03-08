@@ -25,6 +25,8 @@ let positionTimer: ReturnType<typeof setInterval> | null = null
 const TYPEWRITER_MS = 35
 const HOLD_AFTER_TYPING_MS = 2000
 const MIN_LIFETIME_MS = 4000
+/** Vertical offset above the agent sprite anchor so the bubble clears the sprite head */
+const BUBBLE_OFFSET_PX = 44
 const TOTAL_LIFETIME_MS = Math.max(MIN_LIFETIME_MS, props.message.length * TYPEWRITER_MS + HOLD_AFTER_TYPING_MS)
 
 const displayedMessage = computed(() => props.message.slice(0, revealedChars.value))
@@ -60,7 +62,7 @@ onMounted(() => {
   updatePosition()
   positionTimer = setInterval(updatePosition, 33)
 
-  requestAnimationFrame(() => { visible.value = true })
+  nextTick(() => { visible.value = true })
 
   typewriterTimer = setInterval(() => {
     revealedChars.value++
@@ -97,7 +99,7 @@ onUnmounted(() => {
       class="absolute z-30 w-[240px] pointer-events-none"
       :style="{
         left: `${posX}px`,
-        bottom: `calc(100% - ${posY}px + 44px)`,
+        bottom: `calc(100% - ${posY}px + ${BUBBLE_OFFSET_PX}px)`,
         transform: 'translateX(-50%)',
       }"
     >

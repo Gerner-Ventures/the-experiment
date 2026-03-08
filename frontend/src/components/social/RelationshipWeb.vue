@@ -7,7 +7,7 @@ import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
 import { getSpriteById, renderSpriteToCanvas } from '@/config/character-sprites'
 
-defineProps<{
+const props = defineProps<{
   visible: boolean
 }>()
 
@@ -20,7 +20,7 @@ const uiStore = useUIStore()
 
 const svgContainer = ref<HTMLElement | null>(null)
 const { width, height } = useElementSize(svgContainer)
-const { nodes, links, buildGraph, onDragStart, onDragMove, onDragEnd } = useForceGraph(width, height)
+const { nodes, links, buildGraph, pause, resume, onDragStart, onDragMove, onDragEnd } = useForceGraph(width, height)
 
 const hoveredNode = ref<string | null>(null)
 let draggingNode: ForceGraphNode | null = null
@@ -97,6 +97,15 @@ function linkTarget(link: ForceGraphLink): ForceGraphNode {
 watch(() => width.value, (w) => {
   if (w > 0) buildGraph()
 }, { immediate: true, once: true })
+
+// Pause simulation when drawer is closed, resume when opened
+watch(() => props.visible, (isVisible) => {
+  if (isVisible) {
+    resume()
+  } else {
+    pause()
+  }
+})
 </script>
 
 <template>

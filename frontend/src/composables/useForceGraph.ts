@@ -180,6 +180,20 @@ export function useForceGraph(containerWidth: Ref<number>, containerHeight: Ref<
     }
   })
 
+  /** Pause the simulation (stop ticking) without destroying it */
+  function pause() {
+    if (simulation) {
+      simulation.stop()
+    }
+  }
+
+  /** Resume the simulation with a gentle nudge */
+  function resume() {
+    if (simulation) {
+      simulation.alpha(FORCE_CONFIG.alphaNudge).restart()
+    }
+  }
+
   function destroy() {
     if (simulation) {
       simulation.stop()
@@ -198,6 +212,8 @@ export function useForceGraph(containerWidth: Ref<number>, containerHeight: Ref<
     links,
     buildGraph,
     restart: restartSimulation,
+    pause,
+    resume,
     onDragStart,
     onDragMove,
     onDragEnd,

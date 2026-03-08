@@ -37,7 +37,7 @@ export const useTurnStore = defineStore('turn', () => {
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
   let handlers: TurnHandlers | null = null
-  let drainedHandler: (() => void) | null = null
+  let drainedHandlers: (() => void)[] = []
 
   const HUD_ONLY_DURATION_MS = 1500
 
@@ -45,9 +45,9 @@ export const useTurnStore = defineStore('turn', () => {
     handlers = h
   }
 
-  /** Set a one-shot callback fired when the queue fully drains */
+  /** Add a one-shot callback fired when the queue fully drains */
   function onDrained(cb: () => void) {
-    drainedHandler = cb
+    drainedHandlers.push(cb)
   }
 
   function enqueue(turn: Omit<Turn, 'id'>) {
@@ -68,9 +68,9 @@ export const useTurnStore = defineStore('turn', () => {
       activeTurn.value = null
       phase.value = 'idle'
       console.debug('[Turn] Queue drained')
-      const cb = drainedHandler
-      drainedHandler = null
-      cb?.()
+      const cbs = drainedHandlers
+      drainedHandlers = []
+      cbs.forEach(cb => cb())
       return
     }
 
@@ -149,7 +149,8 @@ export const useTurnStore = defineStore('turn', () => {
     activeTurn.value = null
     phase.value = 'idle'
     turnCounter = 0
-    drainedHandler = null
+    handlers = null
+    drainedHandlers = []
   }
 
   return {

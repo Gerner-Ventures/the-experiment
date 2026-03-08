@@ -256,7 +256,9 @@ export class AgentSpriteObject {
     this.stopAnimation()
     this.stopWalkCycle()
     this.pathQueue = []
+    const cb = this.pathCallback
     this.pathCallback = null
+    cb?.()
     if (this.actionTimer) {
       clearTimeout(this.actionTimer)
       this.actionTimer = null

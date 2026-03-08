@@ -6,6 +6,7 @@ import { findPath } from '@/components/world/pixi/pathfinding'
  * Composable that manages pathfinding, location indexing, and agent movement.
  * Extracts business logic from PixiWorld.vue so the component stays thin.
  */
+
 /**
  * Backend location IDs that don't match map tile locationId values.
  * Kept at module scope to avoid re-creation per composable call.
