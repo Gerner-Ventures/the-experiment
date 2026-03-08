@@ -1464,10 +1464,13 @@ class SimulationEngine:
                     summary=turn.content,
                     data={
                         "kind": "agent_speak",
+                        # Canonical fields used by frontend/streaming:
                         "agent_id": turn.speaker_id,
                         "agent_name": turn.speaker_name,
                         "message": turn.content,
                         "target": turn.listener_name or "all",
+                        # TODO: remove legacy speaker_*/listener_* fields once
+                        # no downstream consumers reference them
                         "speaker_id": turn.speaker_id,
                         "speaker_name": turn.speaker_name,
                         "listener_id": turn.listener_id,

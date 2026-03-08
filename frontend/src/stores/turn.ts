@@ -15,7 +15,7 @@ export interface Turn {
   targetLocation?: string
   thought?: string
   /** When true, the conversation row was already added by agent_speak — skip addConversation */
-  spokenViaSpeakEvent?: boolean
+  fromSpeakEvent?: boolean
 }
 
 export type TurnPhase = 'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'
@@ -170,7 +170,7 @@ export const useTurnStore = defineStore('turn', () => {
     if (turn.thought) {
       phase.value = 'talking'
       // Add to conversation log — skip if already added via agent_speak WS event
-      if (!turn.spokenViaSpeakEvent) {
+      if (!turn.fromSpeakEvent) {
         handlers?.addConversation(turn.agentId, turn.agentName, turn.thought)
       }
       console.debug(`[Turn] Showing bubble: ${turn.agentName}`)

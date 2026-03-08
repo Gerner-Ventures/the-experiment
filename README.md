@@ -34,7 +34,7 @@ the-experiment/
 | Layer | Stack |
 |-------|-------|
 | Frontend | Vue 3, Vite, TypeScript, PixiJS v8, Pinia |
-| Backend | Python 3.12, FastAPI, SQLAlchemy, LiteLLM |
+| Backend | Python 3.13, FastAPI, SQLAlchemy, LiteLLM |
 | Data | PostgreSQL 16, Redis 7 |
 | Infra | Docker Compose (local), Helm on Kubernetes (prod) |
 
@@ -53,22 +53,30 @@ the-experiment/
 git clone https://github.com/Gerner-Ventures/the-experiment.git
 cd the-experiment
 
-# Copy env file
-make env
-# Edit backend/.env with your database URL and any LLM API keys you plan to use
+# Install dependencies and git hooks
+make setup
 
-# Start services
+# Option A: With Doppler (recommended — manages secrets centrally)
+# Install Doppler: https://docs.doppler.com/docs/install-cli
+# Then authenticate: doppler login
+make dev-detached
+
+# Option B: Without Doppler (local .env file)
+make env
+# Edit backend/.env with your DATABASE_URL, REDIS_URL, and any LLM API keys
 make dev-detached
 
 # Apply database migrations before creating experiments
 make migrate
 ```
 
-To enable local hooks, run `pre-commit install`.
+**Git hooks** are installed automatically by `make setup`. They live in `.githooks/` and include:
 
-- the `pre-commit` hook runs local Ruff autofixes/checks on staged backend Python files
-- the `pre-push` hook runs backend-wide `ruff format --check`, `mypy`, and `pytest`
-- `pre-commit install` will install both hook types by default from the checked-in config
+- **pre-commit**: ESLint + vue-tsc (frontend), ruff check + format (backend)
+- **pre-push**: Jest (frontend), pytest (backend)
+- **commit-msg**: enforces [Conventional Commits](https://www.conventionalcommits.org/) format
+
+To reinstall hooks manually: `make install-hooks`
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api

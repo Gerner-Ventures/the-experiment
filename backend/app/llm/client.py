@@ -216,7 +216,13 @@ class LLMClient:
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             try:
                 return response_format.model_validate(payload).model_dump(mode="json")
-            except ValidationError:
+            except ValidationError as exc:
+                log.warning(
+                    "llm_pydantic_validation_failed",
+                    schema=response_format.__name__,
+                    errors=exc.error_count(),
+                    detail=str(exc),
+                )
                 return None
 
         return payload if isinstance(payload, dict) else None

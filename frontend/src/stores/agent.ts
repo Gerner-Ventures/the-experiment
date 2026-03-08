@@ -86,9 +86,9 @@ export const useAgentStore = defineStore('agent', () => {
       agentName,
       actionType,
       targetLocation,
-      thought: hasDialogue ? data.dialogue! : data.inner_thought,
+      thought: hasDialogue ? data.dialogue ?? undefined : data.inner_thought,
       // Dialogue was already added to conversation log via agent_speak WS event
-      spokenViaSpeakEvent: hasDialogue,
+      fromSpeakEvent: hasDialogue,
     })
   }
 

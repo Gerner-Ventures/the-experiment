@@ -10,7 +10,11 @@ npx vue-tsc --noEmit
 
 echo "── pre-commit: backend lint + format check ──"
 cd "$ROOT/backend"
-.venv/bin/ruff check .
-.venv/bin/ruff format --check .
+if [ -x .venv/bin/ruff ]; then
+  .venv/bin/ruff check .
+  .venv/bin/ruff format --check .
+else
+  echo "⚠ backend .venv not found — skipping backend checks (run 'make setup')"
+fi
 
 echo "✓ pre-commit passed"

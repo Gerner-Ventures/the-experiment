@@ -59,6 +59,7 @@ function stopCountdown() {
 }
 
 function handleClick() {
+  if (cancelled.value) return
   stopCountdown()
   cancelled.value = true
   emit('fire')

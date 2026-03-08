@@ -1,5 +1,5 @@
 # ── Stage 1: Install dependencies ──────────────────────
-FROM python:3.13-slim-bookworm AS build
+FROM python:3.13.2-slim-bookworm AS build
 
 WORKDIR /app
 
@@ -11,7 +11,7 @@ RUN poetry install --only main --no-interaction --no-ansi
 COPY . .
 
 # ── Stage 2: Production runtime ────────────────────────
-FROM python:3.13-slim-bookworm
+FROM python:3.13.2-slim-bookworm
 
 RUN groupadd -r app -g 1001 && \
     useradd -r -g app -u 1001 -d /app app
