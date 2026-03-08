@@ -31,10 +31,10 @@ function makeMockHandlers(overrides: Partial<TurnHandlers> = {}): TurnHandlers {
   }
 }
 
-/** Advance past the MIN_ACTION_DURATION_MS (800ms) floor timer so
+/** Advance past the MIN_ACTION_DURATION_MS (1500ms) floor timer so
  *  the acting phase dual gate completes and advances to speech. */
 function advancePastActionFloor() {
-  jest.advanceTimersByTime(800)
+  jest.advanceTimersByTime(1500)
 }
 
 describe('turn store', () => {

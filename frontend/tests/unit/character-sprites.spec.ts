@@ -38,8 +38,8 @@ describe('character-sprites', () => {
       expect(SPRITE_H).toBe(18)
     })
 
-    it('PIXEL_SCALE is 2', () => {
-      expect(PIXEL_SCALE).toBe(2)
+    it('PIXEL_SCALE is 3', () => {
+      expect(PIXEL_SCALE).toBe(3)
     })
   })
 

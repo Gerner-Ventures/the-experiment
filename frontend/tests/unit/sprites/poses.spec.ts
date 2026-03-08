@@ -36,8 +36,8 @@ describe('poses', () => {
     }
   })
 
-  it('new poses (talk1, rally1, gather1, argue1, think) exist and are distinct from idle', () => {
-    const newPoses: PoseName[] = ['talk1', 'rally1', 'gather1', 'argue1', 'think']
+  it('new poses (talk1, rally1, gather1, argue1, think, investigate1, observe) exist and are distinct from idle', () => {
+    const newPoses: PoseName[] = ['talk1', 'rally1', 'gather1', 'argue1', 'think', 'investigate1', 'observe']
     const idleOverrides = JSON.stringify(POSES.idle.bodyOverrides)
 
     for (const poseName of newPoses) {
@@ -65,6 +65,8 @@ describe('poses', () => {
       'gather1', 'gather2',
       'argue1', 'argue2',
       'think',
+      'investigate1', 'investigate2',
+      'observe',
     ]
 
     for (const poseName of allPoseNames) {

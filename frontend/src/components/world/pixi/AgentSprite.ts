@@ -8,6 +8,9 @@ import { tileToScreen } from './isometric-utils'
 /** Tile-to-tile movement speed: higher = faster. 4 = ~0.25s per tile (Pokemon-style). */
 const MOVE_SPEED = 4
 
+/** Scale boost applied to the sprite container during action animations */
+const ACTION_SCALE_BOOST = 1.3
+
 export class AgentSpriteObject {
   container: Container
   private pixiSprite: Sprite
@@ -206,6 +209,8 @@ export class AgentSpriteObject {
     this.currentAnimation = anim
     this.currentFrame = 0
     this.animCompleteCallback = onComplete ?? null
+    // Scale up during action for visibility
+    this.container.scale.set(ACTION_SCALE_BOOST)
     this.advanceFrame()
   }
 
@@ -215,6 +220,7 @@ export class AgentSpriteObject {
       const cb = this.animCompleteCallback
       this.currentAnimation = null
       this.animCompleteCallback = null
+      this.container.scale.set(1) // Reset scale after animation completes
       this.setPose('idle')
       cb?.()
       return
@@ -268,6 +274,8 @@ export class AgentSpriteObject {
     this.currentAnimation = null
     this.currentFrame = 0
     this.animCompleteCallback = null
+    // Reset scale back to normal
+    this.container.scale.set(1)
   }
 
   stopAllBehavior() {

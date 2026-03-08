@@ -15,7 +15,6 @@ import RoundCounter from '@/components/hud/RoundCounter.vue'
 import ArcTimeline from '@/components/hud/ArcTimeline.vue'
 import GMPlanPanel from '@/components/hud/GMPlanPanel.vue'
 import NarrationOverlay from '@/components/hud/NarrationOverlay.vue'
-import ActionLabel from '@/components/hud/ActionLabel.vue'
 import AgentDossier from '@/components/dossier/AgentDossier.vue'
 import ExperimentLog from '@/components/log/ExperimentLog.vue'
 import ConversationBubble from '@/components/social/ConversationBubble.vue'
@@ -49,9 +48,6 @@ const ws = useWebSocket()
 
 const pixiWorldRef = ref<InstanceType<typeof PixiWorld> | null>(null)
 
-// Reactive state for the action label overlay
-const actionLabelPosition = ref<{ x: number; y: number } | null>(null)
-const actionLabelType = ref('')
 const highlightedTargetId = ref<string | null>(null)
 
 // Theme and arc from sessionStorage (set by SetupView) or defaults
@@ -259,13 +255,7 @@ watch(() => turnStore.phase, (newPhase, oldPhase) => {
 
   if (newPhase === 'acting' && turnStore.activeTurn) {
     const turn = turnStore.activeTurn
-    // Show action label
-    const pos = pw.getAgentScreenPosition(turn.agentId)
-    if (pos) {
-      actionLabelPosition.value = pos
-      actionLabelType.value = turn.actionType
-    }
-    // Highlight target
+    // Highlight target agent during action
     if (turn.targetAgentId) {
       const color = AGGRESSIVE_ACTIONS.has(turn.actionType) ? '#ff4444' : '#ffffff'
       pw.highlightAgent(turn.targetAgentId, color)
@@ -274,10 +264,6 @@ watch(() => turnStore.phase, (newPhase, oldPhase) => {
   }
 
   if (oldPhase === 'acting') {
-    // Clear action label
-    actionLabelPosition.value = null
-    actionLabelType.value = ''
-    // Clear target highlight
     if (highlightedTargetId.value) {
       pw.clearHighlight(highlightedTargetId.value)
       highlightedTargetId.value = null

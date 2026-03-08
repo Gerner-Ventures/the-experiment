@@ -27,8 +27,8 @@ export interface TurnHandlers {
 }
 
 /** Minimum time the acting phase is visible so players can register the action,
- *  even if the sprite animation completes sooner. Tuned for ~1s readability. */
-const MIN_ACTION_DURATION_MS = 800
+ *  even if the sprite animation completes sooner. */
+const MIN_ACTION_DURATION_MS = 1500
 
 /** How long the HUD status is shown for actions with no speech bubble,
  *  before advancing to the next agent in the queue. */

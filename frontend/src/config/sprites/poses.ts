@@ -268,6 +268,64 @@ export const POSES: Record<PoseName, PoseDef> = {
     ],
   },
 
+  // Investigate: holding giant magnifying glass up
+  investigate1: {
+    bodyOverrides: [
+      [10, '00016666661000'],
+      [11, '00016666612000'], // arm extended holding glass
+      [12, '00001666100200'],
+    ],
+    pixelOverrides: [
+      // Magnifying glass lens (circle shape, white/light)
+      [0, 10, '8'], [0, 11, '8'], [0, 12, '8'],
+      [1, 9, '8'], [1, 13, '8'],
+      [2, 9, '8'], [2, 13, '8'],
+      [3, 10, '8'], [3, 11, '8'], [3, 12, '8'],
+      // Lens interior (slight tint)
+      [1, 10, 'A'], [1, 11, 'A'], [1, 12, 'A'],
+      [2, 10, 'A'], [2, 11, 'A'], [2, 12, 'A'],
+      // Handle (gray, diagonal down-right)
+      [4, 13, '7'], [5, 14, '7'], [6, 15, '7'],
+    ],
+  },
+  investigate2: {
+    bodyOverrides: [
+      [10, '00016666661000'],
+      [11, '00016666610200'], // arm slightly shifted
+      [12, '00001666100200'],
+    ],
+    pixelOverrides: [
+      // Magnifying glass lens shifted slightly
+      [1, 10, '8'], [1, 11, '8'], [1, 12, '8'],
+      [2, 9, '8'], [2, 13, '8'],
+      [3, 9, '8'], [3, 13, '8'],
+      [4, 10, '8'], [4, 11, '8'], [4, 12, '8'],
+      // Lens interior
+      [2, 10, 'A'], [2, 11, 'A'], [2, 12, 'A'],
+      [3, 10, 'A'], [3, 11, 'A'], [3, 12, 'A'],
+      // Handle
+      [5, 13, '7'], [6, 14, '7'], [7, 15, '7'],
+    ],
+  },
+
+  // Observe: wearing big glasses on face
+  observe: {
+    bodyOverrides: [
+      [3, '00012222221000'], // forehead
+      [4, '00018288281000'], // big glasses frames around eyes (8=white frames)
+      [5, '00018222281000'], // glasses lower rim
+      [10, '00016666661000'],
+      [11, '00016666610200'], // hand shielding / peering
+      [12, '00001666100200'],
+    ],
+    pixelOverrides: [
+      // Glasses bridge between lenses
+      [4, 7, '7'],
+      // Glasses arms extending to sides
+      [4, 3, '7'], [4, 11, '7'],
+    ],
+  },
+
   // Think: hand on chin, thought bubble
   think: {
     bodyOverrides: [

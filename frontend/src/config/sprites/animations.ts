@@ -10,23 +10,25 @@ export const ANIMATION_REGISTRY: Record<string, AnimationDef> = {
   walk: { name: 'walk', frames: ['walk1', 'walk2'], frameMs: 200, loop: true },
 
   // Silly / one-shot animations
-  dance: { name: 'dance', frames: ['dance1', 'dance2', 'dance1', 'dance2', 'dance1', 'dance2', 'idle'], frameMs: 250 },
-  panic: { name: 'panic', frames: ['panic1', 'panic2', 'panic1', 'panic2', 'panic1', 'panic2', 'idle'], frameMs: 200 },
-  wave: { name: 'wave', frames: ['wave1', 'wave2', 'wave1', 'wave2', 'idle'], frameMs: 300 },
-  pee: { name: 'pee', frames: ['idle', 'pee', 'pee', 'pee', 'pee', 'idle'], frameMs: 400 },
-  poop: { name: 'poop', frames: ['idle', 'poop', 'poop', 'poop', 'poop', 'idle'], frameMs: 500 },
-  vomit: { name: 'vomit', frames: ['idle', 'vomit', 'vomit', 'vomit', 'idle'], frameMs: 350 },
-  stab: { name: 'stab', frames: ['idle', 'stab', 'idle', 'stab', 'idle'], frameMs: 200 },
-  shoot: { name: 'shoot', frames: ['idle', 'shoot', 'idle', 'shoot', 'idle'], frameMs: 250 },
-  sleep: { name: 'sleep', frames: ['sleep', 'sleep', 'sleep', 'sleep', 'idle'], frameMs: 600 },
-  dead: { name: 'dead', frames: ['idle', 'dead', 'dead', 'dead', 'dead', 'idle'], frameMs: 500 },
+  dance: { name: 'dance', frames: ['dance1', 'dance2', 'dance1', 'dance2', 'dance1', 'dance2', 'idle'], frameMs: 400 },
+  panic: { name: 'panic', frames: ['panic1', 'panic2', 'panic1', 'panic2', 'panic1', 'panic2', 'idle'], frameMs: 350 },
+  wave: { name: 'wave', frames: ['wave1', 'wave2', 'wave1', 'wave2', 'idle'], frameMs: 450 },
+  pee: { name: 'pee', frames: ['idle', 'pee', 'pee', 'pee', 'pee', 'idle'], frameMs: 500 },
+  poop: { name: 'poop', frames: ['idle', 'poop', 'poop', 'poop', 'poop', 'idle'], frameMs: 600 },
+  vomit: { name: 'vomit', frames: ['idle', 'vomit', 'vomit', 'vomit', 'idle'], frameMs: 450 },
+  stab: { name: 'stab', frames: ['idle', 'stab', 'idle', 'stab', 'idle'], frameMs: 350 },
+  shoot: { name: 'shoot', frames: ['idle', 'shoot', 'idle', 'shoot', 'idle'], frameMs: 400 },
+  sleep: { name: 'sleep', frames: ['sleep', 'sleep', 'sleep', 'sleep', 'idle'], frameMs: 700 },
+  dead: { name: 'dead', frames: ['idle', 'dead', 'dead', 'dead', 'dead', 'idle'], frameMs: 600 },
 
-  // New Phase 1 action animations
-  talk: { name: 'talk', frames: ['talk1', 'talk2', 'talk1', 'talk2', 'idle'], frameMs: 300 },
-  rally: { name: 'rally', frames: ['rally1', 'rally2', 'rally1', 'rally2', 'rally1', 'rally2', 'idle'], frameMs: 250 },
-  gather: { name: 'gather', frames: ['idle', 'gather1', 'gather2', 'gather1', 'gather2', 'idle'], frameMs: 350 },
-  argue: { name: 'argue', frames: ['argue1', 'argue2', 'argue1', 'argue2', 'idle'], frameMs: 250 },
-  think: { name: 'think', frames: ['idle', 'think', 'think', 'think', 'idle'], frameMs: 500 },
+  // Phase 1 action animations
+  talk: { name: 'talk', frames: ['talk1', 'talk2', 'talk1', 'talk2', 'idle'], frameMs: 450 },
+  rally: { name: 'rally', frames: ['rally1', 'rally2', 'rally1', 'rally2', 'rally1', 'rally2', 'idle'], frameMs: 400 },
+  gather: { name: 'gather', frames: ['idle', 'gather1', 'gather2', 'gather1', 'gather2', 'idle'], frameMs: 450 },
+  argue: { name: 'argue', frames: ['argue1', 'argue2', 'argue1', 'argue2', 'idle'], frameMs: 400 },
+  think: { name: 'think', frames: ['idle', 'think', 'think', 'think', 'idle'], frameMs: 600 },
+  investigate: { name: 'investigate', frames: ['idle', 'investigate1', 'investigate2', 'investigate1', 'investigate2', 'idle'], frameMs: 500 },
+  observe: { name: 'observe', frames: ['idle', 'observe', 'observe', 'observe', 'observe', 'idle'], frameMs: 600 },
 }
 
 /** Default fallback animation when a requested animation is not found */
@@ -49,7 +51,7 @@ export const ACTION_TO_ANIMATION: Record<string, string> = {
   talk: 'talk',
   vote: 'talk',
   rest: 'wave',
-  observe: 'think',
+  observe: 'observe',
   heal: 'gather',
 
   // Selfish
@@ -84,7 +86,7 @@ export const ACTION_TO_ANIMATION: Record<string, string> = {
   drink: 'gather',
 
   // Meta
-  investigate: 'think',
+  investigate: 'investigate',
   monologue: 'talk',
   panic: 'panic',
   breakdown: 'panic',

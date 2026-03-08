@@ -38,6 +38,8 @@ export type PoseName =
   | 'gather1' | 'gather2'
   | 'argue1' | 'argue2'
   | 'think'
+  | 'investigate1' | 'investigate2'
+  | 'observe'
 
 export interface PoseDef {
   bodyOverrides: [number, string][]      // [rowIndex, rowData]
