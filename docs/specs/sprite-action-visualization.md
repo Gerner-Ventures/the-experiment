@@ -48,13 +48,14 @@ Insert an `'acting'` phase between `'moving'` and `'talking'` in the turn sequen
 **Acceptance criteria:**
 - [x] `TurnPhase` type includes `'acting'`: `'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'`
 <!-- canon:realized-in:PR#134 file:frontend/src/stores/turn.ts -->
+<!-- canon:realized-in:PR#116 file:frontend/src/stores/turn.ts -->
 - [x] `startActionPhase()` added to turn store, called after movement completes
 - [x] Action phase looks up `ACTION_TO_ANIMATION[turn.actionType]` to resolve the animation
 - [x] Calls `playAction` handler with agent ID, animation name, and `onComplete` callback
 - [x] `onComplete` transitions to `startSpeechPhase()`
-- [ ] Actions without a meaningful animation (e.g., `move`, `rest`, `observe` — where the
+- [ ] Actions without a meaningful animation (e.g., `move`, `rest`, `explore` — where the
   mapped animation is `'idle'` or `'walk'`) skip directly to speech
-- [ ] Minimum acting duration of 800ms — if animation completes sooner, hold the last
+- [ ] Minimum acting duration of 1500ms — if animation completes sooner, hold the last
   meaningful pose until the floor expires
 
 ### 2. playAction Turn Handler
@@ -67,6 +68,7 @@ PixiJS animations without importing PixiJS code.
 - [x] `TurnHandlers` gains `playAction: (agentId: string, animationName: string, onComplete: () => void) => void`
 - [x] `SimulationView` wires the handler to `usePixiWorld`, which calls `AgentSpriteObject.playAnimation()`
 <!-- canon:realized-in:PR#134 file:frontend/src/views/SimulationView.vue -->
+<!-- canon:realized-in:PR#116 file:frontend/src/views/SimulationView.vue -->
 - [x] Handler calls `onComplete` immediately if agent ID is not found (defensive)
 <!-- canon:realized-in:PR#134 file:frontend/src/composables/usePixiWorld.ts -->
 - [x] Turn data model (`Turn` interface) supports optional `targetAgentId` field
@@ -79,6 +81,7 @@ Increase agent sprite render scale so action poses are clearly readable at defau
 **Acceptance criteria:**
 - [x] `PIXEL_SCALE` increased (2 → 3 or 4, to be tuned visually)
 <!-- canon:realized-in:PR#134 file:frontend/src/components/world/pixi/AgentSprite.ts -->
+<!-- canon:realized-in:PR#116 file:frontend/src/config/sprites/constants.ts -->
 - [x] Name labels scale proportionally
 - [x] Selection ring scales proportionally
 - [x] Camera default zoom adjusted if needed to accommodate larger sprites
@@ -106,6 +109,7 @@ When an action has a target agent, visually highlight the target during the acti
 
 **Acceptance criteria:**
 - [x] `AgentSpriteObject` supports a `setHighlight(color)` / `clearHighlight()` method
+<!-- canon:realized-in:PR#116 file:frontend/src/components/world/pixi/AgentSprite.ts -->
   (draws a colored ring, similar to the existing selection ring)
 - [ ] Target agent gets a highlight ring during the acting phase — red for aggressive actions,
   neutral/white for social actions
