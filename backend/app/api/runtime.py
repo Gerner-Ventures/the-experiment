@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 import time
+import uuid
 from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast, get_args
+
+import structlog
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
@@ -47,10 +49,8 @@ from app.gm import GMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.llm import UsageRecord, UsageSummary
 from app.schemas.ws_message import WSMessage, WSMessageType
-from app.world import build_default_world_state, resolve_spawn_tile
-
-import structlog
 from app.core import posthog as ph
+from app.world import build_default_world_state, resolve_spawn_tile
 
 log = structlog.get_logger(__name__)
 
@@ -353,7 +353,7 @@ class ExperimentRuntime:
                 },
             )
 
-            is_final = round_result.round_number >= state.total_rounds
+            is_final = state.status in ("completed", "collapsed")
             if is_final:
                 log.info(
                     "experiment_finished",
@@ -1033,7 +1033,7 @@ class ExperimentRuntime:
             ),
         )
         state = await self.get_state(experiment_id)
-        if round_result.round_number >= state.total_rounds:
+        if state.status in ("completed", "collapsed"):
             await self.connection_manager.broadcast(
                 experiment_id,
                 self._message(

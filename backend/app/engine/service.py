@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass
 
 import structlog
@@ -46,7 +45,6 @@ from app.world.service import (
     tile_distance,
 )
 
-logger = logging.getLogger(__name__)
 log = structlog.get_logger(__name__)
 
 
@@ -211,7 +209,7 @@ class SimulationEngine:
                     }
                 )
             except Exception:
-                logger.warning("langfuse trace.update failed", exc_info=True)
+                log.warning("langfuse trace.update failed", exc_info=True)
         state.recent_events.extend(
             event.summary
             for phase in [
