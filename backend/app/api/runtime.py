@@ -1782,16 +1782,3 @@ class _StreamingHook:
                 },
             ),
         )
-        if turn.decision.action.location:
-            await self._runtime.connection_manager.broadcast(
-                self._experiment_id,
-                self._runtime._message(
-                    "agent_move",
-                    round_number=round_number,
-                    phase=phase,
-                    data={
-                        "agent_id": agent.agent_id,
-                        "location": turn.decision.action.location,
-                    },
-                ),
-            )

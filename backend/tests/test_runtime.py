@@ -267,7 +267,6 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
         "meeting_start",
         "agent_speak",
         "agent_action",
-        "agent_move",
     ]
 
     round_start = payloads[0]
@@ -293,13 +292,6 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert agent_action["data"]["inner_thought"] == turn.decision.inner_thought
     assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
     assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
-
-    agent_move = payloads[8]
-    assert agent_move["phase"] == "morning"
-    assert agent_move["data"] == {
-        "agent_id": state.agents[0].agent_id,
-        "location": "forest",
-    }
 
     runtime_instance._broadcast_narration_audio_status_for_plan.assert_awaited_once_with(
         state.experiment_id,
