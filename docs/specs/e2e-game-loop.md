@@ -12,7 +12,7 @@ Backend API is fully implemented (20 endpoints + WebSocket). Frontend has stores
 
 ## Backend Status
 
-All endpoints exist: create, get, start, pause, step, agents, dossier, log, gm/plan, gm/approve, arc, inject, analytics/*, replay, rounds/snapshot, usage. WebSocket broadcasts 29 message types. Completion logic works (`experiment_end` on `current_round >= total_rounds`).
+All endpoints exist: create, get, start, pause, step, agents, dossier, log, gm/plan, gm/approve, arc, inject, analytics/, runtime/llm-mode (GET/PUT)*, replay, rounds/snapshot, usage. WebSocket broadcasts 29 message types. Completion logic works (`experiment_end` on `current_round >= total_rounds`).
 
 ## Remaining Work
 
