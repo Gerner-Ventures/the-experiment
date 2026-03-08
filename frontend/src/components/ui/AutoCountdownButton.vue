@@ -30,6 +30,8 @@ const progress = ref(0)
 const cancelled = ref(false)
 const dashOffset = computed(() => C * (1 - progress.value))
 
+// Note: uses requestAnimationFrame for SVG (DOM) animation, not canvas.
+// The CLAUDE.md rule "never use raw rAF alongside PixiJS" targets canvas contention — this is safe.
 let startTime = 0
 let rafId = 0
 
@@ -37,6 +39,7 @@ function tick() {
   const elapsed = Date.now() - startTime
   progress.value = Math.min(elapsed / props.delay, 1)
   if (progress.value >= 1) {
+    cancelled.value = true
     emit('fire')
     return
   }
@@ -61,8 +64,8 @@ function handleClick() {
   emit('fire')
 }
 
-watch(() => props.active, (active) => {
-  if (active && !props.disabled) {
+watch(() => [props.active, props.disabled] as const, ([active, disabled]) => {
+  if (active && !disabled) {
     startCountdown()
   } else {
     stopCountdown()
@@ -113,13 +116,14 @@ onUnmounted(() => {
     <Button
       :type="type"
       :size="size"
-      shape="circle"
+      :shape="$slots.default ? undefined : 'circle'"
       :disabled="disabled"
       @click="handleClick"
     >
       <template #icon>
         <slot name="icon" />
       </template>
+      <slot />
     </Button>
   </div>
 </template>
@@ -140,6 +144,7 @@ onUnmounted(() => {
   pointer-events: none;
   /* Start from 12-o'clock */
   transform: rotate(-90deg);
+  border-radius: inherit;
 }
 
 .ring-track {

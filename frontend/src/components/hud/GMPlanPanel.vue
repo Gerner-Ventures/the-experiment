@@ -146,6 +146,7 @@ function resourceColor(key: string): string {
           @fire="emit('approve')"
         >
           <template #icon><CheckOutlined /></template>
+          {{ locale.gm.approve }}
         </AutoCountdownButton>
       </Space>
     </template>
