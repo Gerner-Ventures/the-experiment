@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,6 +17,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     env: str = "development"
     log_level: str = "debug"
+    backend_runtime_mode: Literal["default", "smoke_mock", "smoke_live"] = "default"
+    smoke_seed: int = 11
     database_url: str = "postgresql+asyncpg://experiment:experiment@localhost:5432/experiment"
     redis_url: str = "redis://localhost:6379/0"
     platform_url: str | None = None

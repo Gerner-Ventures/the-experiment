@@ -141,6 +141,22 @@ Code references:
 - `backend/app/api/store.py`
 - `backend/app/db/models.py`
 
+## App Wiring
+
+The FastAPI entry point now builds the backend through `create_app(...)` in
+`backend/app/main.py`.
+
+Current wiring behavior:
+
+- the selected `ExperimentRuntime` is attached to `app.state.runtime`
+- route handlers and the websocket endpoint resolve runtime access from app state
+- default app startup uses `SqlAlchemyExperimentStore`
+- `BACKEND_RUNTIME_MODE=smoke_mock` swaps in the deterministic smoke GM/agent services while still
+  using Postgres persistence
+
+That split is what allows the local backend E2E smoke path to validate the real HTTP/websocket
+stack without requiring live provider credentials.
+
 ## Round Execution
 
 The implemented loop lives in `SimulationEngine.run_round()` in `backend/app/engine/service.py`.
@@ -425,7 +441,9 @@ There are five execution entry points in the repo:
 `backend/app/main.py` only wires the FastAPI application and middleware; it does not construct a separate runner stack.
 The API runtime plus store boundary is the main current path. The headless runner intentionally
 reuses `ExperimentRuntime` with the in-memory store so it exercises the same orchestration and log
-assembly logic without requiring backend infrastructure. If these paths diverge, this document
-should track the API runtime behavior.
+assembly logic without requiring backend infrastructure. The new backend E2E smoke path instead
+uses the real FastAPI app plus Postgres to catch wiring, persistence, and websocket regressions
+that the headless path cannot see. If these paths diverge, this document should track the API
+runtime behavior.
 
 This document describes the current implementation, not a guaranteed long-term contract.

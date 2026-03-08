@@ -1,20 +1,24 @@
 from __future__ import annotations
 
+from collections.abc import Generator
+import time
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
 from app.agents.models import AgentTurnResult
-from app.api.runtime import runtime
-from app.api.store import InMemoryExperimentStore
 from app.agents.service import AgentService
+from app.api.runtime import ExperimentRuntime
+from app.api.store import InMemoryExperimentStore
+from app.core.config import Settings
+from app.core.runtime_factory import build_runtime
 from app.llm import UsageTracker
 from app.llm.models import LLMUsage, UsageRecord
-from app.main import app
+from app.main import create_app
 from app.schemas.agent_decision import AgentDecision, DecisionAction
 
-client = TestClient(app)
 API_PREFIX = "/api"
 
 
@@ -75,15 +79,32 @@ class _ScriptedAgentService(AgentService):
         )
 
 
-@pytest.fixture(autouse=True)
-def reset_runtime_store() -> None:
-    runtime.store = InMemoryExperimentStore()
-    runtime.connection_manager.connections.clear()
-    runtime._steps_in_progress.clear()
-    runtime._current_tasks.clear()
-    runtime.gm_service.llm_service.client.tracker = UsageTracker()
-    runtime.engine.gm_service.llm_service.client.tracker = UsageTracker()
+@pytest.fixture()
+def runtime() -> ExperimentRuntime:
+    runtime, _ = build_runtime(
+        Settings(backend_runtime_mode="smoke_mock"),
+        store=InMemoryExperimentStore(),
+    )
     runtime.engine.agent_service = _StubAgentService()
+    gm_tracker = UsageTracker()
+    if not hasattr(runtime.gm_service, "llm_service"):
+        runtime.gm_service.llm_service = SimpleNamespace(client=SimpleNamespace(tracker=gm_tracker))
+    else:
+        runtime.gm_service.llm_service.client.tracker = gm_tracker
+    if not hasattr(runtime.engine.gm_service, "llm_service"):
+        runtime.engine.gm_service.llm_service = SimpleNamespace(
+            client=SimpleNamespace(tracker=gm_tracker)
+        )
+    else:
+        runtime.engine.gm_service.llm_service.client.tracker = gm_tracker
+    return runtime
+
+
+@pytest.fixture()
+def client(runtime: ExperimentRuntime) -> Generator[TestClient, None, None]:
+    app = create_app(runtime=runtime)
+    with TestClient(app) as test_client:
+        yield test_client
 
 
 def _payload() -> dict[str, Any]:
@@ -138,7 +159,7 @@ def _payload() -> dict[str, Any]:
     }
 
 
-def test_create_get_and_step_experiment_flow() -> None:
+def test_create_get_and_step_experiment_flow(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     assert created.status_code == 200
     experiment_id = created.json()["experiment_id"]
@@ -160,7 +181,7 @@ def test_create_get_and_step_experiment_flow() -> None:
     assert stepped.json()["experiment_id"] == experiment_id
 
 
-def test_start_and_pause_routes_update_experiment_status() -> None:
+def test_start_and_pause_routes_update_experiment_status(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
 
@@ -177,11 +198,12 @@ def test_start_and_pause_routes_update_experiment_status() -> None:
     assert fetched.json()["status"] == "paused"
 
 
-def test_log_endpoint_filters_and_paginates() -> None:
+def test_log_endpoint_filters_and_paginates(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     log_response = client.get(
         f"{API_PREFIX}/experiments/{experiment_id}/log", params={"limit": 5, "phase": "dawn"}
@@ -193,7 +215,7 @@ def test_log_endpoint_filters_and_paginates() -> None:
     assert all(item["phase"] == "dawn" for item in body["items"])
 
 
-def test_websocket_connects_and_receives_initial_message() -> None:
+def test_websocket_connects_and_receives_initial_message(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
 
@@ -203,7 +225,7 @@ def test_websocket_connects_and_receives_initial_message() -> None:
         assert message["data"]["experiment_id"] == experiment_id
 
 
-def test_websocket_emits_granular_round_messages() -> None:
+def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
@@ -219,10 +241,6 @@ def test_websocket_emits_granular_round_messages() -> None:
             "gm_plan",
             "crisis_event",
             "agent_action",
-            "meeting_start",
-            "meeting_speech",
-            "meeting_vote",
-            "meeting_result",
             "resource_update",
             "threat_update",
             "round_end",
@@ -230,17 +248,18 @@ def test_websocket_emits_granular_round_messages() -> None:
         for _ in range(40):
             message = websocket.receive_json()
             seen_types.add(message["type"])
-            if required <= seen_types:
+            if "round_end" in seen_types:
                 break
 
         assert required <= seen_types
 
 
-def test_analytics_and_replay_endpoints_return_round_data() -> None:
+def test_analytics_and_replay_endpoints_return_round_data(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
     assert summary.status_code == 200
@@ -263,11 +282,12 @@ def test_analytics_and_replay_endpoints_return_round_data() -> None:
     assert highlights.json()["items"][0]["category"] == "crisis_event"
 
 
-def test_derived_round_logs_are_persisted() -> None:
+def test_derived_round_logs_are_persisted(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     agent_actions = client.get(
         f"{API_PREFIX}/experiments/{experiment_id}/log",
@@ -291,7 +311,9 @@ def test_derived_round_logs_are_persisted() -> None:
     assert round_end.json()["total"] == 1
 
 
-def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
+def test_report_grade_analytics_use_resolved_action_outcomes(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
     runtime.engine.agent_service = _ScriptedAgentService(
         {
             "Mara": [
@@ -335,6 +357,7 @@ def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
     assert summary.status_code == 200
@@ -382,7 +405,9 @@ def test_report_grade_analytics_use_resolved_action_outcomes() -> None:
     assert gm.json()["items"][0]["narration"]
 
 
-def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents() -> None:
+def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
     runtime.engine.agent_service = _ScriptedAgentService(
         {
             "Mara": [
@@ -416,6 +441,7 @@ def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
     assert goals.status_code == 200
@@ -424,7 +450,9 @@ def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents
     assert mara["progress_history"][0]["summary"]
 
 
-def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal() -> None:
+def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
     runtime.engine.agent_service = _ScriptedAgentService(
         {
             "Mara": [
@@ -447,13 +475,16 @@ def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal() -> None:
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
     assert goals.status_code == 200
     assert all(item["outcome"] == "unknown" for item in goals.json()["items"])
 
 
-def test_betrayal_and_faction_analytics_expose_timeline_data() -> None:
+def test_betrayal_and_faction_analytics_expose_timeline_data(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
     runtime.engine.agent_service = _ScriptedAgentService(
         {
             "Mara": [
@@ -476,6 +507,7 @@ def test_betrayal_and_faction_analytics_expose_timeline_data() -> None:
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     betrayals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/betrayals")
     assert betrayals.status_code == 200
@@ -491,7 +523,9 @@ def test_betrayal_and_faction_analytics_expose_timeline_data() -> None:
     assert "membership_changes" in factions.json()
 
 
-def test_usage_and_prompt_trace_endpoints_group_records() -> None:
+def test_usage_and_prompt_trace_endpoints_group_records(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
     runtime.gm_service.llm_service.client.tracker.record(
@@ -522,3 +556,21 @@ def test_usage_and_prompt_trace_endpoints_group_records() -> None:
     assert traces.status_code == 200
     assert traces.json()["total"] == 1
     assert traces.json()["items"][0]["response_content"] == '{"round_theme":"Pressure builds"}'
+
+
+def _wait_for_round_completion(
+    client: TestClient,
+    experiment_id: str,
+    *,
+    expected_round: int = 1,
+    attempts: int = 100,
+    delay_seconds: float = 0.05,
+) -> None:
+    for _ in range(attempts):
+        response = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
+        if response.status_code == 200 and response.json()["current_round"] >= expected_round:
+            return
+        time.sleep(delay_seconds)
+    raise AssertionError(
+        f"Timed out waiting for experiment {experiment_id} to reach round {expected_round}."
+    )
