@@ -147,7 +147,7 @@ BACKEND_PORT ?= 8000
 BACKEND_BASE_URL ?= http://$(BACKEND_HOST):$(BACKEND_PORT)
 BACKEND_RUNTIME_MODE ?= default
 
-.PHONY: headless headless-live backend-run backend-e2e backend-e2e-live
+.PHONY: headless headless-live backend-run backend-e2e
 
 headless: ## Run the mock headless backend simulation
 	cd backend && poetry run python -m app.headless.cli --mode mock $(HEADLESS_ARGS)
@@ -159,9 +159,6 @@ backend-run: ## Run the FastAPI backend locally (set BACKEND_RUNTIME_MODE=smoke_
 	cd backend && BACKEND_RUNTIME_MODE=$(BACKEND_RUNTIME_MODE) poetry run uvicorn app.main:app --host $(BACKEND_HOST) --port $(BACKEND_PORT) --reload
 
 backend-e2e: ## Run the backend HTTP + websocket smoke client against the running server
-	cd backend && poetry run python -m app.e2e.smoke --base-url $(BACKEND_BASE_URL)
-
-backend-e2e-live: ## Run the smoke client against a live-mode backend server
 	cd backend && poetry run python -m app.e2e.smoke --base-url $(BACKEND_BASE_URL)
 
 # ============================================================================

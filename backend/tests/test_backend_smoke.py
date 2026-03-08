@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import socket
 from pathlib import Path
 from typing import Any
 
@@ -115,8 +116,6 @@ def _sync_database_url(database_url: str) -> str:
 
 
 def _free_port() -> int:
-    import socket
-
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])

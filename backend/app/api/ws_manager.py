@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,11 +16,11 @@ logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     def __init__(self) -> None:
-        self.connections: dict[str, list[WebSocket]] = {}
+        self.connections: defaultdict[str, set[WebSocket]] = defaultdict(set)
 
     async def connect(self, experiment_id: str, ws: WebSocket) -> None:
         await ws.accept()
-        self.connections.setdefault(experiment_id, []).append(ws)
+        self.connections[experiment_id].add(ws)
         logger.info(
             "WS connected: experiment=%s (total=%d)",
             experiment_id,
@@ -27,9 +28,10 @@ class ConnectionManager:
         )
 
     def disconnect(self, experiment_id: str, ws: WebSocket) -> None:
-        conns = self.connections.get(experiment_id, [])
-        if ws in conns:
-            conns.remove(ws)
+        conns = self.connections.get(experiment_id)
+        if conns is None:
+            return
+        conns.discard(ws)
         if not conns:
             self.connections.pop(experiment_id, None)
         logger.info(

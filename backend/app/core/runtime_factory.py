@@ -64,19 +64,22 @@ def build_runtime(
             db_engine,
         )
 
-    sync_provider_credentials_to_env()
-    validate_live_mode_configuration()
-    gm_service = GMService()
-    engine = SimulationEngine(
-        gm_service=gm_service,
-        random_seed=settings.smoke_seed,
-    )
-    return (
-        ExperimentRuntime(
-            store=store,
-            engine=engine,
+    if runtime_mode == "smoke_live":
+        sync_provider_credentials_to_env()
+        validate_live_mode_configuration()
+        gm_service = GMService()
+        engine = SimulationEngine(
             gm_service=gm_service,
-            connection_manager=connection_manager,
-        ),
-        db_engine,
-    )
+            random_seed=settings.smoke_seed,
+        )
+        return (
+            ExperimentRuntime(
+                store=store,
+                engine=engine,
+                gm_service=gm_service,
+                connection_manager=connection_manager,
+            ),
+            db_engine,
+        )
+
+    raise ValueError(f"Unsupported backend runtime mode: {runtime_mode}")
