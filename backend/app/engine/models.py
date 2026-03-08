@@ -5,6 +5,7 @@ from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.actions import DecisionActionName
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
@@ -70,7 +71,7 @@ MeetingStance = Literal["support", "oppose", "hesitant"]
 MeetingVoteChoice = Literal["support", "oppose", "abstain"]
 ExileVoteChoice = Literal["banish", "protect", "abstain"]
 FactionKind = Literal["alliance", "cult"]
-TerminalActionType = Literal["self_sacrifice"]
+TerminalActionType = Literal[DecisionActionName.SELF_SACRIFICE]
 ActionResolutionOutcome = Literal[
     "resolved",
     "blocked",

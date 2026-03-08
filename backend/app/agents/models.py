@@ -4,9 +4,16 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.actions import (
+    ACTION_IDS,
+    CONSEQUENCE_ACTION_IDS,
+    ActionCategory,
+    ActionName,
+    ConsequenceActionName,
+)
 from app.db.models import AgentStatus
 from app.llm.models import MemorySalienceType
-from app.schemas.agent_decision import AgentDecision, DECISION_ACTION_TYPES, DecisionActionType
+from app.schemas.agent_decision import AgentDecision
 from app.world.models import WorldState
 
 PersonalityAxis = Literal[
@@ -24,17 +31,8 @@ GoalArchetype = Literal[
     "personal_redemption",
     "obsession_desire",
 ]
-ConsequenceActionType = Literal[
-    "bleeding",
-    "injured",
-    "stunned",
-    "knocked_down",
-    "burning",
-    "poisoned",
-    "crying",
-    "fleeing",
-]
-ActionType = DecisionActionType | ConsequenceActionType
+ConsequenceActionType = ConsequenceActionName
+ActionType = ActionName
 SuspicionTrigger = Literal[
     "edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"
 ]
@@ -65,19 +63,10 @@ CURATED_TRAIT_TAGS: tuple[str, ...] = (
     "ruthless",
     "lonely",
 )
-CONSEQUENCE_ACTION_TYPES: tuple[ConsequenceActionType, ...] = (
-    "bleeding",
-    "injured",
-    "stunned",
-    "knocked_down",
-    "burning",
-    "poisoned",
-    "crying",
-    "fleeing",
+CONSEQUENCE_ACTION_TYPES: tuple[ConsequenceActionType, ...] = cast(
+    tuple[ConsequenceActionType, ...], CONSEQUENCE_ACTION_IDS
 )
-ACTION_TYPES: tuple[ActionType, ...] = cast(
-    tuple[ActionType, ...], (*DECISION_ACTION_TYPES, *CONSEQUENCE_ACTION_TYPES)
-)
+ACTION_TYPES: tuple[ActionType, ...] = cast(tuple[ActionType, ...], ACTION_IDS)
 
 
 class AgentModel(BaseModel):
@@ -138,7 +127,7 @@ class AgentMemoryState(AgentModel):
 
 class ActionDefinition(AgentModel):
     type: ActionType
-    category: Literal["cooperative", "selfish", "neutral", "social", "consequence"]
+    category: ActionCategory
     description: str
     requires_target: bool = False
     requires_location: bool = False

@@ -8,6 +8,15 @@ from datetime import UTC, datetime
 from random import Random
 from typing import Literal, cast
 
+from app.actions import (
+    ACTION_ALLOWED_LOCATION_TYPES,
+    ACTION_CONSEQUENCE_POOLS,
+    CONSEQUENCE_SUSPICION_DELTAS as ACTION_CONSEQUENCE_SUSPICION_DELTAS,
+    ConsequenceActionName,
+    DecisionActionName,
+    INTERACTION_ACTION_IDS,
+    RANGED_ACTION_IDS,
+)
 from app.agents.memory import append_recent_event
 from app.agents.models import (
     AgentMemoryState,
@@ -71,42 +80,15 @@ class SimulationEngine:
     SELF_SACRIFICE_THREAT_DELTA = -8.0
     SELF_SACRIFICE_RESOURCE_EFFECTS = {"food": 1.0, "materials": 0.8}
     SELF_SACRIFICE_SUSPICION_DELTA = 9.0
-    AGENT_INTERACTION_ACTIONS = {
-        "talk",
-        "trade",
-        "accuse",
-        "attack",
-        "threaten",
-        "stab",
-        "shoot",
-        "poison",
-        "argue",
-        "investigate",
-    }
-    RANGED_ACTIONS = {"shoot"}
-    ACTION_LOCATION_RULES: dict[str, set[str]] = {
-        "gather": {"farm", "water_source", "store"},
-        "repair": {"workshop", "meeting_hall", "boundary", "mystery"},
-        "hoard": {"farm", "water_source", "store", "residence", "bar", "brothel"},
-        "vote": {"meeting_hall"},
-    }
-    ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = {
-        "shoot": ("bleeding", "injured"),
-        "stab": ("bleeding", "injured"),
-        "attack": ("injured", "knocked_down", "stunned", "burning"),
-        "poison": ("poisoned",),
-        "threaten": ("crying", "fleeing", "stunned"),
-    }
-    CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionType, float] = {
-        "bleeding": 8.0,
-        "injured": 7.0,
-        "stunned": 6.0,
-        "knocked_down": 7.0,
-        "burning": 9.0,
-        "poisoned": 8.0,
-        "crying": 4.0,
-        "fleeing": 5.0,
-    }
+    AGENT_INTERACTION_ACTIONS = frozenset(INTERACTION_ACTION_IDS)
+    RANGED_ACTIONS = frozenset(RANGED_ACTION_IDS)
+    ACTION_LOCATION_RULES: dict[str, frozenset[str]] = ACTION_ALLOWED_LOCATION_TYPES
+    ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = (
+        ACTION_CONSEQUENCE_POOLS
+    )
+    CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionType, float] = (
+        ACTION_CONSEQUENCE_SUSPICION_DELTAS
+    )
 
     def __init__(
         self,
@@ -966,28 +948,30 @@ class SimulationEngine:
             "threaten": "threatens",
         }.get(source_action_type, f"uses {source_action_type} on")
         consequence_text: dict[ConsequenceActionType, str] = {
-            "bleeding": (
+            ConsequenceActionName.BLEEDING: (
                 f"{target.name} is left bleeding after {source.name} {action_phrase} them at {location}."
             ),
-            "injured": (
+            ConsequenceActionName.INJURED: (
                 f"{target.name} is injured after {source.name} {action_phrase} them at {location}."
             ),
-            "stunned": (
+            ConsequenceActionName.STUNNED: (
                 f"{target.name} is stunned after {source.name} {action_phrase} them at {location}."
             ),
-            "knocked_down": (
+            ConsequenceActionName.KNOCKED_DOWN: (
                 f"{target.name} is knocked down after {source.name} {action_phrase} them at {location}."
             ),
-            "burning": (
+            ConsequenceActionName.BURNING: (
                 f"{target.name} is burning after {source.name} {action_phrase} them at {location}."
             ),
-            "poisoned": (
+            ConsequenceActionName.POISONED: (
                 f"{target.name} is poisoned after {source.name} {action_phrase} them at {location}."
             ),
-            "crying": (
+            ConsequenceActionName.CRYING: (
                 f"{target.name} breaks down crying after {source.name} {action_phrase} them at {location}."
             ),
-            "fleeing": f"{target.name} flees after {source.name} {action_phrase} them at {location}.",
+            ConsequenceActionName.FLEEING: (
+                f"{target.name} flees after {source.name} {action_phrase} them at {location}."
+            ),
         }
         return consequence_text[consequence_type]
 
@@ -1123,7 +1107,7 @@ class SimulationEngine:
             agent_id=agent.agent_id,
             agent_name=agent.name,
             location=location,
-            action_type="self_sacrifice",
+            action_type=DecisionActionName.SELF_SACRIFICE,
             reason=(
                 f"{agent.name} performs a ritual self-sacrifice at {location}, "
                 "shocking the town into temporary order."

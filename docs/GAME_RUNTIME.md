@@ -181,6 +181,24 @@ stack without requiring live provider credentials.
 
 The implemented loop lives in `SimulationEngine.run_round()` in `backend/app/engine/service.py`.
 
+## Action Catalog
+
+Backend action metadata now has a single source of truth in `backend/app/actions/`.
+
+That catalog defines:
+
+- decision vs consequence action ids
+- action descriptions and categories
+- target/location requirements
+- location constraints for actions like `gather`, `repair`, `hoard`, and `vote`
+- interaction/ranged membership
+- hostile-action consequence pools
+- static reporting buckets such as cooperative, hostile, sabotage, and terminal
+
+Engine resolution, movement, resource effects, and conflict handling still live in
+`backend/app/engine/service.py`, but they now read their static action rules from that catalog
+rather than maintaining separate local tables.
+
 Each round currently executes these phases in order:
 
 1. `gm_plan`

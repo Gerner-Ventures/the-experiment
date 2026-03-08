@@ -10,13 +10,11 @@ from app.agents.models import (
     PersonalityProfile,
     SecretGoal,
 )
-from app.agents.registry import ACTION_REGISTRY, get_action_definition
 from app.schemas.agent_decision import DECISION_ACTION_TYPES
 from app.agents.service import AgentService, build_goal_payload, build_personality_payload
 from app.agents.suspicion import apply_suspicion_trigger
 
 __all__ = [
-    "ACTION_REGISTRY",
     "ACTION_TYPES",
     "AgentBrain",
     "AgentContext",
@@ -33,5 +31,4 @@ __all__ = [
     "build_agent_prompt",
     "build_goal_payload",
     "build_personality_payload",
-    "get_action_definition",
 ]

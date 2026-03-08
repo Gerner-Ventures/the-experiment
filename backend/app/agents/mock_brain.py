@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import hashlib
 import random
-from typing import Any, cast, get_args
+from typing import Any, cast
 
+from app.actions import (
+    MOCK_COOPERATIVE_ACTIONS,
+    MOCK_SELFISH_ACTIONS,
+    TERMINAL_ACTIONS as TERMINAL_DECISION_ACTIONS,
+)
 from app.agents.brain import AgentBrain
 from app.agents.models import (
     AgentContext,
@@ -15,7 +20,6 @@ from app.agents.models import (
 )
 from app.agents.memory import add_key_memory, append_recent_event
 from app.agents.suspicion import apply_suspicion_trigger
-from app.engine.models import TerminalActionType
 from app.llm.models import (
     MemoryConsolidationDecision,
     MemoryPromotionDecision,
@@ -30,9 +34,9 @@ from app.schemas.agent_decision import (
 )
 
 # Weighted by personality
-COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
-SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
-TERMINAL_ACTIONS = get_args(TerminalActionType)
+COOPERATIVE_ACTIONS: tuple[DecisionActionType, ...] = MOCK_COOPERATIVE_ACTIONS
+SELFISH_ACTIONS: tuple[DecisionActionType, ...] = MOCK_SELFISH_ACTIONS
+TERMINAL_ACTIONS: tuple[DecisionActionType, ...] = TERMINAL_DECISION_ACTIONS
 NON_TERMINAL_ACTIONS = tuple(
     action for action in DECISION_ACTION_TYPES if action not in TERMINAL_ACTIONS
 )
@@ -76,9 +80,9 @@ class MockAgentBrain(AgentBrain):
         selfish_weight = (axes.dominance + axes.ambition + axes.impulsiveness) / 300
 
         if rng.random() < coop_weight * 0.7:
-            action_type = cast(DecisionActionType, rng.choice(COOPERATIVE_ACTIONS))
+            action_type = rng.choice(COOPERATIVE_ACTIONS)
         elif rng.random() < selfish_weight * 0.5:
-            action_type = cast(DecisionActionType, rng.choice(SELFISH_ACTIONS))
+            action_type = rng.choice(SELFISH_ACTIONS)
         else:
             action_type = rng.choice(NON_TERMINAL_ACTIONS)
 
