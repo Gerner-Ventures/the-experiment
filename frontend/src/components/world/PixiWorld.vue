@@ -73,5 +73,15 @@ defineExpose({ moveAgentToLocation, getAgentScreenPosition })
 </script>
 
 <template>
-  <div ref="canvasContainer" class="w-full h-full" />
+  <div ref="canvasContainer" class="w-full h-full pixi-canvas-container" />
 </template>
+
+<style scoped>
+/* Pin the WebGL canvas to z-index 0 so it stays below the HUD overlay
+   layer. Using a CSS rule instead of imperative style keeps layout
+   concerns visible in the template/style rather than hidden in a composable. */
+.pixi-canvas-container :deep(canvas) {
+  position: relative;
+  z-index: 0;
+}
+</style>
