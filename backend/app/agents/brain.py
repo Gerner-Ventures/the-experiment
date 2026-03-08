@@ -69,13 +69,13 @@ class AgentBrain:
                     "agent_id": context.agent_id,
                     "agent_name": context.name,
                     "round_number": context.world_state.round_number,
-                    "generation_name": f"agent:{context.name}",
                     "tags": [
                         "role:agent",
                         f"archetype:{context.goal.archetype}",
                     ],
                 },
                 model_override=None,
+                generation_name=f"agent:{context.name}",
             )
             parsed = result.parsed or {}
             decision = AgentDecision.model_validate(parsed)

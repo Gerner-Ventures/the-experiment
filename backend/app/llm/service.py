@@ -30,6 +30,7 @@ class LLMService:
         response_format: dict[str, object] | type[BaseModel],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        generation_name: str | None = None,
     ) -> LLMResult:
         return await self.client.generate_structured(
             LLMRequest(
@@ -38,9 +39,7 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
-                generation_name=str(gn)
-                if (gn := (metadata or {}).get("generation_name"))
-                else None,
+                generation_name=generation_name,
             )
         )
 
@@ -51,6 +50,7 @@ class LLMService:
         response_format: dict[str, object] | type[BaseModel],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        generation_name: str | None = None,
     ) -> LLMResult:
         return await self.client.generate_structured(
             LLMRequest(
@@ -59,9 +59,7 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
-                generation_name=str(gn)
-                if (gn := (metadata or {}).get("generation_name"))
-                else None,
+                generation_name=generation_name,
             )
         )
 

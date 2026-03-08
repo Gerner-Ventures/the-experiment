@@ -136,14 +136,14 @@ class SimulationEngine:
                 "threat_level": state.world_state.threat_level,
                 "agent_count": len(state.agents),
             },
+            tags=[
+                f"arc:{state.arc.name}",
+            ],
             metadata={
                 "experiment_id": state.experiment_id,
                 "round_number": round_number,
                 "total_rounds": state.total_rounds,
                 "status": state.status,
-                "tags": [
-                    f"arc:{state.arc.name}",
-                ],
             },
         )
 
@@ -270,13 +270,15 @@ class SimulationEngine:
             except Exception:
                 log.warning("langfuse trace.update failed", exc_info=True)
 
-            lf.record_scores(
-                trace_id=self._obj_id(trace),
-                scores={
-                    "cooperation_ratio": round(cooperation_ratio, 3),
-                    "threat_level": round(state.world_state.threat_level, 2),
-                },
-            )
+            trace_id = self._obj_id(trace)
+            if trace_id:
+                lf.record_scores(
+                    trace_id=trace_id,
+                    scores={
+                        "cooperation_ratio": round(cooperation_ratio, 3),
+                        "threat_level": round(state.world_state.threat_level, 2),
+                    },
+                )
         state.recent_events.extend(
             event.summary
             for phase_result in [

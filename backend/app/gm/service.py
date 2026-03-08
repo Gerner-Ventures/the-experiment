@@ -23,10 +23,10 @@ class GMService:
                 metadata={
                     "experiment_id": context.experiment_id,
                     "round_number": context.round_number,
-                    "generation_name": "gm-plan",
                     "tags": ["role:gm"],
                 },
                 model_override=None,
+                generation_name="gm-plan",
             )
             plan = GMPlanData.model_validate(result.parsed or {})
         except Exception:

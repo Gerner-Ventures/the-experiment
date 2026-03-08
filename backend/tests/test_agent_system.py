@@ -46,6 +46,7 @@ class _StubLLMService(LLMService):
         response_format: dict[str, object] | type[Any],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        generation_name: str | None = None,
     ) -> LLMResult:
         return LLMResult(
             model="openai/gpt-4o-mini",
