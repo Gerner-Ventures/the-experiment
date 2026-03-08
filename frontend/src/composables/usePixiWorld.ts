@@ -30,6 +30,8 @@ export function usePixiWorld(): UsePixiWorld {
   let canvasEl: HTMLCanvasElement | null = null
   let agentClickCallback: ((agentId: string) => void) | null = null
   let resizeObserver: ResizeObserver | null = null
+  /** Map center in tile coordinates, stored so we can re-center on resize. */
+  let mapCenterTile: { x: number; y: number } | null = null
 
   async function mount(container: HTMLElement): Promise<void> {
     app = new Application()
@@ -43,6 +45,9 @@ export function usePixiWorld(): UsePixiWorld {
 
     container.appendChild(app.canvas as HTMLCanvasElement)
     canvasEl = app.canvas as HTMLCanvasElement
+    // Pin canvas to z-index 0 so the WebGL compositing layer stays below the HUD
+    canvasEl.style.position = 'relative'
+    canvasEl.style.zIndex = '0'
 
     // Resize handling
     resizeObserver = new ResizeObserver(() => {
@@ -101,6 +106,11 @@ export function usePixiWorld(): UsePixiWorld {
     // Camera
     camera = new CameraController(worldContainer, canvasEl, w, h)
     camera.setZoom(1.2)
+
+    // Center on map middle immediately after load
+    mapCenterTile = { x: mapData.width / 2, y: mapData.height / 2 }
+    const center = tileToScreen(mapCenterTile.x, mapCenterTile.y)
+    camera.centerOn(center.x, center.y)
   }
 
   function spawnAgent(id: string, name: string, sprite: CharacterSprite, tile: { x: number; y: number }) {
