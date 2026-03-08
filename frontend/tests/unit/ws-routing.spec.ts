@@ -117,11 +117,15 @@ describe('WebSocket message routing', () => {
     expect(gmStore.showNarration).toBe(true)
   })
 
-  it('routes agent_action to agentStore', () => {
+  it('routes agent_action to agentStore (enqueues in turn store)', () => {
+    const { useTurnStore } = require('@/stores/turn')
     const agentStore = useAgentStore()
+    const turnStore = useTurnStore()
     agentStore.setAgents([{ id: 'a1', name: 'Alice', personality: { axes: {}, traitTags: [] }, goal: { archetype: 'communal_survival', text: '', progressSignals: [] }, llmModel: 'openai/gpt-4o-mini' }])
     routeMessage(makeMsg('agent_action', { agent_id: 'a1', action: 'gather', summary: 'collecting wood' }))
-    expect(agentStore.getAgent('a1')!.status).toBe('working')
+    // Action is now enqueued as a turn, not applied immediately
+    expect(turnStore.activeTurn).not.toBeNull()
+    expect(turnStore.activeTurn.actionType).toBe('gather')
   })
 
   it('routes agent_move to agentStore', () => {
@@ -254,10 +258,12 @@ describe('WebSocket message routing', () => {
     routeMessage(makeMsg('phase_change', {}, 'dawn'))
     expect(experimentStore.currentPhase).toBe('dawn')
 
-    // Agent actions
+    // Agent actions (now enqueued in turn store, not applied immediately)
     routeMessage(makeMsg('agent_action', { agent_id: 'a1', action: 'gather', summary: 'collecting' }))
     routeMessage(makeMsg('agent_speak', { agent_id: 'a2', agent_name: 'Bob', target: 'a1', message: 'Need help?' }))
-    expect(agentStore.getAgent('a1')!.status).toBe('working')
+    const { useTurnStore } = require('@/stores/turn')
+    const turnStore = useTurnStore()
+    expect(turnStore.activeTurn).not.toBeNull()
     expect(socialStore.conversations).toHaveLength(1)
 
     // Resource update

@@ -3,6 +3,7 @@ import {
   getSpriteById,
   CHARACTER_SPRITES,
   SILLY_ANIMATIONS,
+  WALK_ANIMATION,
   type PoseName,
 } from '@/config/character-sprites'
 
@@ -83,7 +84,7 @@ describe('character-sprites', () => {
 
   describe('poses', () => {
     const allPoses: PoseName[] = [
-      'idle', 'dance1', 'dance2', 'pee', 'poop', 'vomit',
+      'idle', 'walk1', 'walk2', 'dance1', 'dance2', 'pee', 'poop', 'vomit',
       'stab', 'shoot', 'panic1', 'panic2', 'sleep',
       'wave1', 'wave2', 'dead',
     ]
@@ -138,6 +139,51 @@ describe('character-sprites', () => {
       expect(pee).not.toEqual(idle)
     })
 
+    it('walk1 and walk2 differ from idle (leg alternation)', () => {
+      const sprite = CHARACTER_SPRITES[0]
+      const idle = renderCharacter(sprite, 'idle')
+      const walk1 = renderCharacter(sprite, 'walk1')
+      const walk2 = renderCharacter(sprite, 'walk2')
+
+      expect(walk1).not.toEqual(idle)
+      expect(walk2).not.toEqual(idle)
+    })
+
+    it('walk1 and walk2 differ from each other', () => {
+      const sprite = CHARACTER_SPRITES[0]
+      const walk1 = renderCharacter(sprite, 'walk1')
+      const walk2 = renderCharacter(sprite, 'walk2')
+
+      expect(walk1).not.toEqual(walk2)
+    })
+
+    it('walk poses only modify leg rows (15-17)', () => {
+      const sprite = CHARACTER_SPRITES[0]
+      const idle = renderCharacter(sprite, 'idle')
+      const walk1 = renderCharacter(sprite, 'walk1')
+
+      // Rows 0-14 should be identical
+      for (let y = 0; y < 15; y++) {
+        expect(walk1[y]).toEqual(idle[y])
+      }
+      // At least one leg row should differ
+      const legRowsDiffer = [15, 16, 17].some(y =>
+        JSON.stringify(walk1[y]) !== JSON.stringify(idle[y])
+      )
+      expect(legRowsDiffer).toBe(true)
+    })
+
+    it('walk poses render for all character sprites', () => {
+      for (const sprite of CHARACTER_SPRITES) {
+        const w1 = renderCharacter(sprite, 'walk1')
+        const w2 = renderCharacter(sprite, 'walk2')
+        expect(w1).toHaveLength(H)
+        expect(w2).toHaveLength(H)
+        expect(w1[0]).toHaveLength(W)
+        expect(w2[0]).toHaveLength(W)
+      }
+    })
+
     it('sleep pose includes Z pixel overrides', () => {
       const sprite = CHARACTER_SPRITES[0]
       const sleep = renderCharacter(sprite, 'sleep')
@@ -164,7 +210,7 @@ describe('character-sprites', () => {
 
     it('all animation frames reference valid pose names', () => {
       const validPoses: PoseName[] = [
-        'idle', 'dance1', 'dance2', 'pee', 'poop', 'vomit',
+        'idle', 'walk1', 'walk2', 'dance1', 'dance2', 'pee', 'poop', 'vomit',
         'stab', 'shoot', 'panic1', 'panic2', 'sleep',
         'wave1', 'wave2', 'dead',
       ]
@@ -186,6 +232,25 @@ describe('character-sprites', () => {
             expect(grid[0]).toHaveLength(W)
           }
         }
+      }
+    })
+  })
+
+  describe('WALK_ANIMATION', () => {
+    it('has exactly 2 frames (walk1 and walk2)', () => {
+      expect(WALK_ANIMATION.frames).toEqual(['walk1', 'walk2'])
+    })
+
+    it('has a frame duration of 200ms', () => {
+      expect(WALK_ANIMATION.frameMs).toBe(200)
+    })
+
+    it('all frames are valid PoseNames that render correctly', () => {
+      const sprite = CHARACTER_SPRITES[0]
+      for (const frame of WALK_ANIMATION.frames) {
+        const grid = renderCharacter(sprite, frame)
+        expect(grid).toHaveLength(H)
+        expect(grid[0]).toHaveLength(W)
       }
     })
   })

@@ -7,6 +7,7 @@ import {
   DashboardOutlined,
   UnorderedListOutlined,
   LoadingOutlined,
+  ShareAltOutlined,
 } from '@ant-design/icons-vue'
 import { useLocale } from '@/locales'
 
@@ -27,6 +28,7 @@ const emit = defineEmits<{
   pause: []
   speedChange: [speed: number]
   toggleLog: []
+  toggleRelationshipWeb: []
 }>()
 </script>
 
@@ -50,6 +52,18 @@ const emit = defineEmits<{
         @click="emit('toggleLog')"
       >
         <template #icon><UnorderedListOutlined class="!text-white/40" /></template>
+      </Button>
+    </Tooltip>
+
+    <!-- Relationship Web toggle -->
+    <Tooltip :title="locale.relationshipWeb.title">
+      <Button
+        size="small"
+        shape="circle"
+        class="!border-white/10 !inline-flex !items-center !justify-center"
+        @click="emit('toggleRelationshipWeb')"
+      >
+        <template #icon><ShareAltOutlined class="!text-white/40" /></template>
       </Button>
     </Tooltip>
 

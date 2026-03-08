@@ -5,6 +5,7 @@ import type { RoundPhase, WSMessage } from '@/types/websocket'
 import { useWorldStore } from '@/stores/world'
 import { useAgentStore } from '@/stores/agent'
 import { useUIStore } from '@/stores/ui'
+import { useTurnStore } from '@/stores/turn'
 import { useLocale } from '@/locales'
 
 export interface ExperimentEvent {
@@ -61,7 +62,6 @@ export const useExperimentStore = defineStore('experiment', () => {
       summary,
       data: msg.data as Record<string, unknown>,
     })
-    // Keep last 500 events
     if (events.value.length > 500) {
       events.value = events.value.slice(-500)
     }
@@ -90,11 +90,9 @@ export const useExperimentStore = defineStore('experiment', () => {
     if (data.total_rounds != null) totalRounds.value = data.total_rounds
     if (data.status) status.value = data.status as ExperimentStatus
     currentPhase.value = null
-    completedRounds.value++
 
-    // Sync world and agent stores from round_end payload
+    // Sync world store immediately
     const worldStore = useWorldStore()
-    const agentStore = useAgentStore()
     if (data.threat_level != null) worldStore.setThreatLevel(data.threat_level)
     if (data.resources) {
       worldStore.setResources({
@@ -104,9 +102,26 @@ export const useExperimentStore = defineStore('experiment', () => {
         power: data.resources.power ?? worldStore.resources.power,
       })
     }
-    if (data.agents?.length) agentStore.setAgents(data.agents)
-    useUIStore().clearStepping()
     addEvent(msg)
+
+    // Defer round finalization until the turn store finishes processing all queued turns.
+    // The turn store's onDrained callback fires when every agent's turn has been
+    // displayed (movement + bubble). Only then do we sync agent data and advance.
+    const turnStore = useTurnStore()
+    const finalize = () => {
+      if (data.agents?.length) useAgentStore().setAgents(data.agents)
+      completedRounds.value++
+      useUIStore().clearStepping()
+      console.debug(`[Experiment] Round ${currentRound.value} finalized`)
+    }
+
+    if (turnStore.isProcessing) {
+      console.debug(`[Experiment] Round ${currentRound.value} ended, waiting for turn queue to drain`)
+      useUIStore().setSteppingStatus(locale.hud.steppingWaiting)
+      turnStore.onDrained(finalize)
+    } else {
+      finalize()
+    }
   }
 
   function onPhaseChange(msg: WSMessage) {
@@ -119,8 +134,6 @@ export const useExperimentStore = defineStore('experiment', () => {
       worldStore.onPhaseChange(phase)
     }
 
-    // phase_change with {status: "starting"} = phase is about to begin (set stepping label)
-    // phase_change with {events: [...]} = phase completed (log the event)
     if (data.status === 'starting' && phase) {
       const labels: Record<string, string> = {
         gm_plan: locale.hud.steppingGmPlan,

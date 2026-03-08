@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 
-export type ActivePanel = 'none' | 'dossier' | 'log' | 'gm-plan' | 'meeting'
+export type ActivePanel = 'none' | 'dossier' | 'log' | 'gm-plan' | 'meeting' | 'relationship-web'
 
 export const useUIStore = defineStore('ui', () => {
   const selectedAgentId = ref<string | null>(null)

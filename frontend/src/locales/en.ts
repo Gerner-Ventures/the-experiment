@@ -206,6 +206,7 @@ export default {
     steppingRoundStarted: 'Round {round} started',
     steppingRunning: 'Running round…',
     steppingAgent: '{name}: {action}',
+    steppingWaiting: 'Waiting for turns…',
   },
 
   gm: {
@@ -238,6 +239,17 @@ export default {
     support: 'Support',
     oppose: 'Oppose',
     continue: 'Continue',
+  },
+
+  relationshipWeb: {
+    title: 'Relationship Web',
+    empty: 'No relationships formed yet',
+    trustPositive: 'Allied',
+    trustNeutral: 'Neutral',
+    trustNegative: 'Hostile',
+    linkCount: '{count} link',
+    linkCountPlural: '{count} links',
+    legendSize: 'Larger sprite = more relationships',
   },
 
   log: {

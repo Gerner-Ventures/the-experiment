@@ -313,6 +313,7 @@ const ACCESSORIES: (readonly [number, number, string])[][] = [
 
 export type PoseName =
   | 'idle'
+  | 'walk1' | 'walk2'
   | 'dance1' | 'dance2'
   | 'pee'
   | 'poop'
@@ -331,6 +332,22 @@ interface PoseDef {
 
 const POSES: Record<PoseName, PoseDef> = {
   idle: { bodyOverrides: [] },
+
+  // Walk: leg alternation for movement
+  walk1: {
+    bodyOverrides: [
+      [15, '00001611610000'], // legs: left forward, right back
+      [16, '0001C1001C0000'],
+      [17, '000CC000CC0000'],
+    ],
+  },
+  walk2: {
+    bodyOverrides: [
+      [15, '00001611610000'], // legs: right forward, left back
+      [16, '0000C1001C1000'],
+      [17, '0000CC000CC000'],
+    ],
+  },
 
   // Dance: arms up, legs apart
   dance1: {
@@ -495,6 +512,9 @@ export const SILLY_ANIMATIONS: { name: string; frames: PoseName[]; frameMs: numb
   { name: 'sleep', frames: ['sleep', 'sleep', 'sleep', 'sleep', 'idle'], frameMs: 600 },
   { name: 'dead', frames: ['idle', 'dead', 'dead', 'dead', 'dead', 'idle'], frameMs: 500 },
 ]
+
+/** Walk cycle config — loop walk1/walk2 during movement */
+export const WALK_ANIMATION = { frames: ['walk1', 'walk2'] as PoseName[], frameMs: 200 }
 
 export function renderCharacter(sprite: CharacterSprite, pose: PoseName = 'idle'): (string | null)[][] {
   const pm = paletteMap(sprite.palette)
@@ -708,4 +728,34 @@ const SPRITE_MAP = new Map(CHARACTER_SPRITES.map(s => [s.id, s]))
 
 export function getSpriteById(id: string): CharacterSprite | undefined {
   return SPRITE_MAP.get(id)
+}
+
+// ─── SHARED SPRITE RENDERING CONSTANTS ───
+export const SPRITE_W = 14
+export const SPRITE_H = 18
+export const PIXEL_SCALE = 2
+
+/**
+ * Render a character sprite to an offscreen canvas.
+ * Reusable across PixiJS textures, SVG data URLs, and Vue canvas components.
+ */
+export function renderSpriteToCanvas(sprite: CharacterSprite, pose: PoseName = 'idle', scale = PIXEL_SCALE): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  canvas.width = SPRITE_W * scale
+  canvas.height = SPRITE_H * scale
+  const ctx = canvas.getContext('2d')!
+  ctx.imageSmoothingEnabled = false
+
+  const grid = renderCharacter(sprite, pose)
+  for (let y = 0; y < SPRITE_H; y++) {
+    for (let x = 0; x < SPRITE_W; x++) {
+      const color = grid[y][x]
+      if (color) {
+        ctx.fillStyle = color
+        ctx.fillRect(x * scale, y * scale, scale, scale)
+      }
+    }
+  }
+
+  return canvas
 }

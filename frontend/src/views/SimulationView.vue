@@ -48,6 +48,7 @@ const theme = computed<MapTheme>(() => getThemeById(themeId) ?? MAP_THEMES[0])
 
 const ready = ref(false)
 const experimentCreated = ref(false)
+const pixiWorldRef = ref<InstanceType<typeof PixiWorld> | null>(null)
 const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
 
@@ -273,6 +274,7 @@ function goBack() {
     <!-- PixiJS World -->
     <div class="flex-1 relative">
       <PixiWorld
+        ref="pixiWorldRef"
         v-if="ready && (experimentCreated || isDemo)"
         :theme="theme"
         :map-data="DEFAULT_TOWN"
@@ -327,11 +329,12 @@ function goBack() {
 
       <!-- Conversation bubbles -->
       <ConversationBubble
-        v-for="(conv, i) in socialStore.recentConversations.slice(-3)"
+        v-for="conv in socialStore.recentConversations.slice(-3)"
         :key="conv.id"
         :agent-name="conv.agentName"
         :message="conv.message"
-        :index="i"
+        :agent-id="conv.agentId"
+        :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
       />
     </div>
 
