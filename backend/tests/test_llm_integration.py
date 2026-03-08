@@ -180,6 +180,10 @@ async def test_structured_generation_retries_on_parse_failure(
     assert len(fake_router.calls) == 2
     assert len(captured_events) == 0  # No PostHog event on successful retry
     assert len(client.tracker.all_records()) == 2  # Both attempts tracked
+    records = client.tracker.all_records()
+    assert records[0].parsed_response is None  # Failed attempt has no parsed payload
+    assert records[1].parsed_response is not None  # Successful attempt has parsed payload
+    assert records[1].parsed_response["inner_thought"] == "I should keep quiet."
 
 
 @pytest.mark.asyncio

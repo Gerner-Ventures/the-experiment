@@ -84,7 +84,6 @@ class LLMClient:
                 metadata=metadata,
             )
             result = self._build_result(response)
-            self._track_usage(request, result)
             finish_reason = (
                 getattr(response.choices[0], "finish_reason", None) if response.choices else None
             )
@@ -105,6 +104,7 @@ class LLMClient:
                         attempt=attempt + 1,
                         max_attempts=max_attempts,
                     )
+                    self._track_usage(request, result)
                     if not is_final_attempt:
                         continue
                     ph.capture(
@@ -124,9 +124,9 @@ class LLMClient:
                     )
                 else:
                     result.parsed = parsed
-                    break
-            else:
-                break
+
+            self._track_usage(request, result)
+            break
 
         # unreachable: loop always returns via break or raises
         assert result is not None
