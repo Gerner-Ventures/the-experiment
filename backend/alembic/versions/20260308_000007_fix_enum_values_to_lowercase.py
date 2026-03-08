@@ -21,6 +21,8 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 # Enum name -> (uppercase_label, lowercase_label)
+# Note: f-string SQL is used because ALTER TYPE ... RENAME VALUE does not support
+# bind parameters. All values are compile-time constants from ENUM_FIXES below.
 ENUM_FIXES: dict[str, list[tuple[str, str]]] = {
     "experiment_status": [
         ("SETUP", "setup"),

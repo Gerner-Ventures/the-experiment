@@ -19,21 +19,22 @@ const emit = defineEmits<{
 
 const reasoningOpen = ref<string[]>([])
 
-const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical']
+const VALID_SEVERITIES: readonly string[] = ['low', 'medium', 'high', 'critical']
 
 function severityColor(severity: string): string {
   const key = VALID_SEVERITIES.includes(severity) ? severity : 'low'
   return `var(--color-threat-${key})`
 }
 
+const RESOURCE_COLORS: Record<string, string> = {
+  food: 'var(--color-food)',
+  water: 'var(--color-water)',
+  materials: 'var(--color-materials)',
+  power: 'var(--color-power)',
+}
+
 function resourceColor(key: string): string {
-  const colors: Record<string, string> = {
-    food: 'var(--color-food)',
-    water: 'var(--color-water)',
-    materials: 'var(--color-materials)',
-    power: 'var(--color-power)',
-  }
-  return colors[key] ?? 'var(--ant-color-text)'
+  return RESOURCE_COLORS[key] ?? 'var(--ant-color-text)'
 }
 </script>
 
@@ -96,7 +97,9 @@ function resourceColor(key: string): string {
                 :style="{
                   color: (val as number) < 0
                     ? 'var(--ant-color-error)'
-                    : 'var(--ant-color-success)',
+                    : (val as number) > 0
+                      ? 'var(--ant-color-success)'
+                      : 'var(--ant-color-text-secondary)',
                 }"
               >
                 {{ (val as number) > 0 ? '+' : '' }}{{ val }}
