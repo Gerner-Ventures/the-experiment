@@ -64,11 +64,11 @@ const loadError = ref<string | null>(null)
 
 // Mute state for agent voice narration
 import { MUTE_STORAGE_KEY } from '@/config/audio'
-const isMuted = ref(localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
+const isMuted = ref(window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
 
 function toggleMute() {
   isMuted.value = !isMuted.value
-  localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))
+  window.localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))
 }
 
 async function initExperiment() {

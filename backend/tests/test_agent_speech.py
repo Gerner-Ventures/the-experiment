@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 
-from app.api.models import AgentSpeechAudioMetadata, CreateExperimentRequest
+from app.api.models import CreateExperimentRequest
 from app.api.runtime import AgentSpeechEntry, ExperimentRuntime, _StreamingHook
 from app.api.store import InMemoryExperimentStore
 from app.core.config import Settings

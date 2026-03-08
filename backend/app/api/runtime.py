@@ -1151,8 +1151,6 @@ class ExperimentRuntime:
                     )
             return
 
-        # Build agent lookup
-        agents_by_id = {a.agent_id: a for a in agents}
         tts_service = self.tts_service
 
         # Collect speech entries to prewarm
@@ -2023,7 +2021,8 @@ class _StreamingHook:
                     ),
                 )
             # Record agent speech entries for TTS pregeneration
-            if kind == "agent_speak":
+            event_kind = str(event.data.get("kind", ""))
+            if event_kind == "agent_speak":
                 has_speech = True
                 agent_id = str(event.data.get("agent_id", ""))
                 message_text = str(event.data.get("message", ""))

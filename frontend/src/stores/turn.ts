@@ -34,9 +34,6 @@ const MIN_ACTION_DURATION_MS = 800
  *  before advancing to the next agent in the queue. */
 const HUD_ONLY_DURATION_MS = 1500
 
-/** How long to wait for pending audio before falling back to text-only timing */
-const AUDIO_PENDING_TIMEOUT_MS = 3000
-
 /** Maximum time to wait for audio playback before force-advancing */
 const AUDIO_MAX_TIMEOUT_MS = 15000
 

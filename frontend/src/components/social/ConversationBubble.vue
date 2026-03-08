@@ -32,7 +32,7 @@ let pendingTimer: ReturnType<typeof setTimeout> | null = null
 let audio: HTMLAudioElement | null = null
 
 function isMuted(): boolean {
-  return localStorage.getItem(MUTE_STORAGE_KEY) === 'true'
+  return window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true'
 }
 
 function tryPlay() {
