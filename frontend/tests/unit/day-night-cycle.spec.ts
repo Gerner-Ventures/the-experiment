@@ -63,7 +63,6 @@ jest.mock('pixi.js', () => ({
 }))
 
 // Track all gsap.to calls for lifecycle verification
-const mockTweenKill = jest.fn()
 const mockTweenProgress = jest.fn().mockReturnValue(0.5)
 const createdTweens: Array<{ target: unknown; vars: Record<string, unknown>; killed: boolean }> = []
 
