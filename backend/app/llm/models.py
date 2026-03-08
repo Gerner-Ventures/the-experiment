@@ -48,7 +48,6 @@ class LLMResult(LLMModel):
     parsed: dict[str, Any] | None = None
     usage: LLMUsage = Field(default_factory=LLMUsage)
     raw_response: dict[str, Any] = Field(default_factory=dict)
-    repaired: bool = False
 
 
 class UsageRecord(LLMModel):
@@ -61,7 +60,6 @@ class UsageRecord(LLMModel):
     prompt_messages: list[dict[str, Any]] = Field(default_factory=list)
     response_content: str = ""
     parsed_response: dict[str, Any] | None = None
-    repaired: bool = False
     raw_response: dict[str, Any] = Field(default_factory=dict)
     usage: LLMUsage
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))

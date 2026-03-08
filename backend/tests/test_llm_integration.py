@@ -13,7 +13,6 @@ from app.llm.models import LLMUsage, LLMResult, UsageRecord
 from app.llm.service import LLMService
 from app.schemas.agent_decision import (
     AGENT_DECISION_MAX_TOKENS,
-    AGENT_INNER_THOUGHT_MAX_LENGTH,
     AgentDecision,
 )
 from app.schemas.gm_plan import GMPlanRead
@@ -32,8 +31,9 @@ class _FakeMessage:
 
 
 class _FakeChoice:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str, finish_reason: str = "stop") -> None:
         self.message = _FakeMessage(content)
+        self.finish_reason = finish_reason
 
 
 class _FakeResponse:
@@ -122,9 +122,10 @@ async def test_structured_generation_parses_schema_output() -> None:
 
 @pytest.mark.asyncio
 async def test_invalid_json_raises_value_error() -> None:
-    broken = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    broken1 = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    broken2 = _FakeResponse("openai/gpt-4o-mini", "not-json")
     client = LLMClient()
-    fake_router = _FakeRouter([broken])
+    fake_router = _FakeRouter([broken1, broken2])
     client.router = fake_router
 
     with pytest.raises(ValueError, match="did not match expected structured format"):
@@ -135,6 +136,152 @@ async def test_invalid_json_raises_value_error() -> None:
                 {"experiment_id": "exp-2", "round_number": 2, "agent_id": "a-1"},
             )
         )
+
+    assert len(client.tracker.all_records()) == 2
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_retries_on_parse_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the first response fails to parse, retry once before raising."""
+    captured_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "app.llm.client.ph.capture",
+        lambda event, properties: captured_events.append((event, properties)),
+    )
+
+    broken = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    valid_content = json.dumps(
+        {
+            "inner_thought": "I should keep quiet.",
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "No progress yet.",
+            "cooperation_intent": "medium",
+        }
+    )
+    valid = _FakeResponse("openai/gpt-4o-mini", valid_content)
+    client = LLMClient()
+    fake_router = _FakeRouter([broken, valid])
+    client.router = fake_router
+
+    result = await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-retry", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    assert result.parsed is not None
+    assert result.parsed["inner_thought"] == "I should keep quiet."
+    assert len(fake_router.calls) == 2
+    assert len(captured_events) == 0  # No PostHog event on successful retry
+    assert len(client.tracker.all_records()) == 2  # Both attempts tracked
+    records = client.tracker.all_records()
+    assert records[0].parsed_response is None  # Failed attempt has no parsed payload
+    assert records[1].parsed_response is not None  # Successful attempt has parsed payload
+    assert records[1].parsed_response["inner_thought"] == "I should keep quiet."
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_raises_after_retry_exhausted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When both attempts fail to parse, raise ValueError and capture PostHog event."""
+    captured_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "app.llm.client.ph.capture",
+        lambda event, properties: captured_events.append((event, properties)),
+    )
+
+    broken1 = _FakeResponse("openai/gpt-4o-mini", "not-json-1")
+    broken2 = _FakeResponse("openai/gpt-4o-mini", "not-json-2")
+    client = LLMClient()
+    fake_router = _FakeRouter([broken1, broken2])
+    client.router = fake_router
+
+    with pytest.raises(ValueError, match="did not match expected structured format"):
+        await client.generate_structured(
+            request=client_request(
+                "agent",
+                AgentDecision,
+                {"experiment_id": "exp-retry2", "round_number": 1, "agent_id": "a-1"},
+            )
+        )
+
+    assert len(fake_router.calls) == 2
+    assert len(client.tracker.all_records()) == 2  # Both failed attempts tracked
+
+    assert len(captured_events) == 1
+    event_name, props = captured_events[0]
+    assert event_name == "llm_parse_failure"
+    assert "finish_reason" in props
+    assert "completion_tokens" in props
+    assert "max_tokens_requested" in props
+
+
+def test_agent_decision_accepts_long_inner_thought() -> None:
+    """Regression: max_length was removed to prevent LLM from producing malformed JSON."""
+    decision = AgentDecision.model_validate(
+        {
+            "inner_thought": "x" * 500,
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "No progress.",
+            "cooperation_intent": "medium",
+        }
+    )
+    assert len(decision.inner_thought) == 500
+
+
+def test_agent_decision_rejects_empty_inner_thought() -> None:
+    """min_length=1 still enforced — inner_thought cannot be empty."""
+    with pytest.raises(Exception):
+        AgentDecision.model_validate(
+            {
+                "inner_thought": "",
+                "suspicion": None,
+                "action": {"type": "observe"},
+                "dialogue": None,
+                "goal_progress": "No progress.",
+                "cooperation_intent": "medium",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_structured_generation_succeeds_with_verbose_inner_thought() -> None:
+    """End-to-end: LLM returning a long inner_thought parses successfully."""
+    content = json.dumps(
+        {
+            "inner_thought": "The journal crisis has exposed vulnerability and distrust — "
+            "perfect leverage to position myself as the rational authority who can "
+            "restore order. I'll rally the group around a shared narrative of "
+            "accountability while secretly advancing my own agenda.",
+            "suspicion": "The Volunteer seems too calm.",
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "Building trust through apparent leadership.",
+            "cooperation_intent": "high",
+        }
+    )
+    client = LLMClient()
+    client.router = _FakeRouter([_FakeResponse("openai/gpt-4o-mini", content)])
+
+    result = await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-long", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    assert result.parsed is not None
+    assert "secretly advancing my own agenda" in result.parsed["inner_thought"]
 
 
 def test_agent_decision_rejects_invalid_cooperation_intent() -> None:
@@ -147,20 +294,6 @@ def test_agent_decision_rejects_invalid_cooperation_intent() -> None:
                 "dialogue": None,
                 "goal_progress": "None.",
                 "cooperation_intent": "maybe",
-            }
-        )
-
-
-def test_agent_decision_rejects_overlong_inner_thought() -> None:
-    with pytest.raises(Exception):
-        AgentDecision.model_validate(
-            {
-                "inner_thought": "x" * (AGENT_INNER_THOUGHT_MAX_LENGTH + 1),
-                "suspicion": None,
-                "action": {"type": "observe"},
-                "dialogue": None,
-                "goal_progress": "No progress.",
-                "cooperation_intent": "medium",
             }
         )
 

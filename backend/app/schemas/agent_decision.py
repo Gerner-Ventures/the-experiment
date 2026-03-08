@@ -11,7 +11,6 @@ DECISION_ACTION_TYPES: tuple[DecisionActionType, ...] = cast(
 )
 CooperationIntent = Literal["high", "medium", "low", "none"]
 
-AGENT_INNER_THOUGHT_MAX_LENGTH = 300
 AGENT_DECISION_MAX_TOKENS = 2048
 
 
@@ -29,7 +28,6 @@ class Dialogue(APIModel):
 class AgentDecision(APIModel):
     inner_thought: str = Field(
         min_length=1,
-        max_length=AGENT_INNER_THOUGHT_MAX_LENGTH,
         description=(
             "A brief window into the agent's immediate reasoning. Keep it to 1-2 short "
             "sentences and avoid monologues."

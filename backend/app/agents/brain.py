@@ -14,7 +14,6 @@ from app.agents.suspicion import apply_suspicion_trigger
 from app.llm import LLMService
 from app.schemas.agent_decision import (
     AGENT_DECISION_MAX_TOKENS,
-    AGENT_INNER_THOUGHT_MAX_LENGTH,
     AgentDecision,
     DECISION_ACTION_TYPES,
     DecisionAction,
@@ -54,7 +53,7 @@ def build_agent_prompt(context: AgentContext) -> str:
         "Decide what you do next. Balance short-term social reality, your subjective memories, and your secret goal. "
         "You may misread motives, but you should remain basically competent.\n"
         "Response style:\n"
-        f"- Keep `inner_thought` to 1-2 short sentences under {AGENT_INNER_THOUGHT_MAX_LENGTH} characters.\n"
+        "- Keep `inner_thought` to 1-2 short sentences.\n"
         "- Focus `inner_thought` on your immediate next-step reasoning, not backstory or monologue.\n"
         "- Keep `suspicion`, `goal_progress`, and any dialogue concise.\n"
         "- Good `inner_thought`: \"Jon is testing me; I should probe without showing fear.\"\n"
@@ -75,8 +74,7 @@ class AgentBrain:
                         "role": "system",
                         "content": (
                             "Return a structured agent decision as JSON. Keep every prose field concise. "
-                            f"`inner_thought` must be 1-2 short sentences under {AGENT_INNER_THOUGHT_MAX_LENGTH} "
-                            "characters, with no monologue."
+                            "`inner_thought` must be 1-2 short sentences, no monologue."
                         ),
                     },
                     {"role": "user", "content": prompt},
