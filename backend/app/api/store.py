@@ -105,6 +105,8 @@ class SqlAlchemyExperimentStore:
                 experiment = Experiment(
                     id=uuid.UUID(state.experiment_id), name=state.experiment_name
                 )
+                # Populate JSON/relationship fields before the row is added so the initial
+                # INSERT persists the complete state in one flush.
                 self._apply_state(experiment, state)
                 session.add(experiment)
                 await session.flush()

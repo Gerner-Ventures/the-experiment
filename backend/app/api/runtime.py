@@ -113,8 +113,17 @@ class ConnectionManager:
                 if socket.client_state == WebSocketState.CONNECTED:
                     await socket.send_json(encoded_payload)
                 else:
+                    logger.debug(
+                        "WS pruning disconnected socket before broadcast: experiment=%s",
+                        experiment_id,
+                    )
                     dead_sockets.append(socket)
             except Exception:
+                logger.warning(
+                    "WS broadcast failed; pruning socket: experiment=%s",
+                    experiment_id,
+                    exc_info=True,
+                )
                 dead_sockets.append(socket)
         for socket in dead_sockets:
             self.disconnect(experiment_id, socket)

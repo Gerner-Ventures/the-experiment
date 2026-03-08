@@ -414,7 +414,7 @@ The API runtime now persists report-grade derived analytics at round end:
 
 ## Runtime Ownership
 
-There are three execution entry points in the repo:
+There are five execution entry points in the repo:
 
 - FastAPI route handlers in `backend/app/api/routes/experiments.py`
 - `ExperimentRuntime` plus its websocket connection manager in `backend/app/api/runtime.py`
