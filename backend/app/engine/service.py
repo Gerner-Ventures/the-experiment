@@ -252,8 +252,12 @@ class SimulationEngine:
                         "event_count": sum(
                             len(pr.events)
                             for pr in [
-                                gm_result, dawn_result, morning_result,
-                                midday_result, afternoon_result, night_result,
+                                gm_result,
+                                dawn_result,
+                                morning_result,
+                                midday_result,
+                                afternoon_result,
+                                night_result,
                             ]
                         ),
                     },

@@ -120,7 +120,9 @@ class LLMService:
                     "agent_id": agent_id or "",
                     "agent_name": agent_name or "",
                 },
-                generation_name=f"memory:classify:{agent_name}" if agent_name else "memory:classify",
+                generation_name=f"memory:classify:{agent_name}"
+                if agent_name
+                else "memory:classify",
             )
         )
         return MemoryPromotionDecision.model_validate(
@@ -173,7 +175,9 @@ class LLMService:
                     "agent_id": agent_id or "",
                     "agent_name": agent_name or "",
                 },
-                generation_name=f"memory:consolidate:{agent_name}" if agent_name else "memory:consolidate",
+                generation_name=f"memory:consolidate:{agent_name}"
+                if agent_name
+                else "memory:consolidate",
             )
         )
         return MemoryConsolidationDecision.model_validate(
@@ -224,7 +228,9 @@ class LLMService:
                     "agent_id": agent_id or "",
                     "agent_name": agent_name or "",
                 },
-                generation_name=f"memory:relationship:{agent_name}" if agent_name else "memory:relationship",
+                generation_name=f"memory:relationship:{agent_name}"
+                if agent_name
+                else "memory:relationship",
             )
         )
         return RelationshipConsolidationDecision.model_validate(

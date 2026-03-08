@@ -149,11 +149,13 @@ class TestLangfuseLifecycle:
 class TestLLMRequestGenerationName:
     def test_generation_name_field_defaults_to_none(self) -> None:
         from app.llm.models import LLMRequest
+
         req = LLMRequest(role="agent", messages=[{"role": "system", "content": "test"}])
         assert req.generation_name is None
 
     def test_generation_name_field_accepts_string(self) -> None:
         from app.llm.models import LLMRequest
+
         req = LLMRequest(
             role="agent",
             messages=[{"role": "system", "content": "test"}],
@@ -647,19 +649,44 @@ class TestGenerationNameInMetadata:
             def __init__(self) -> None:
                 self.model = "openai/gpt-4o-mini"
                 self.choices = [
-                    type("C", (), {"message": type("M", (), {"content": json.dumps({
-                        "inner_thought": "ok", "suspicion": None,
-                        "action": {"type": "observe", "target": "well", "location": "well"},
-                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
-                    })})()})()
+                    type(
+                        "C",
+                        (),
+                        {
+                            "message": type(
+                                "M",
+                                (),
+                                {
+                                    "content": json.dumps(
+                                        {
+                                            "inner_thought": "ok",
+                                            "suspicion": None,
+                                            "action": {
+                                                "type": "observe",
+                                                "target": "well",
+                                                "location": "well",
+                                            },
+                                            "dialogue": None,
+                                            "goal_progress": "none",
+                                            "cooperation_intent": "medium",
+                                        }
+                                    )
+                                },
+                            )()
+                        },
+                    )()
                 ]
-                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+                self.usage = type(
+                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                )()
+
             def model_dump(self) -> dict[str, Any]:
                 return {}
 
         class FakeRouter:
             def __init__(self) -> None:
                 self.last_metadata: dict[str, Any] = {}
+
             async def acompletion(self, **kwargs: Any) -> FakeResponse:
                 self.last_metadata = kwargs.get("metadata", {})
                 return FakeResponse()
@@ -692,19 +719,44 @@ class TestGenerationNameInMetadata:
             def __init__(self) -> None:
                 self.model = "openai/gpt-4o-mini"
                 self.choices = [
-                    type("C", (), {"message": type("M", (), {"content": json.dumps({
-                        "inner_thought": "ok", "suspicion": None,
-                        "action": {"type": "observe", "target": "well", "location": "well"},
-                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
-                    })})()})()
+                    type(
+                        "C",
+                        (),
+                        {
+                            "message": type(
+                                "M",
+                                (),
+                                {
+                                    "content": json.dumps(
+                                        {
+                                            "inner_thought": "ok",
+                                            "suspicion": None,
+                                            "action": {
+                                                "type": "observe",
+                                                "target": "well",
+                                                "location": "well",
+                                            },
+                                            "dialogue": None,
+                                            "goal_progress": "none",
+                                            "cooperation_intent": "medium",
+                                        }
+                                    )
+                                },
+                            )()
+                        },
+                    )()
                 ]
-                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+                self.usage = type(
+                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                )()
+
             def model_dump(self) -> dict[str, Any]:
                 return {}
 
         class FakeRouter:
             def __init__(self) -> None:
                 self.last_metadata: dict[str, Any] = {}
+
             async def acompletion(self, **kwargs: Any) -> FakeResponse:
                 self.last_metadata = kwargs.get("metadata", {})
                 return FakeResponse()
@@ -737,19 +789,44 @@ class TestSessionAndUserMetadata:
             def __init__(self) -> None:
                 self.model = "openai/gpt-4o-mini"
                 self.choices = [
-                    type("C", (), {"message": type("M", (), {"content": json.dumps({
-                        "inner_thought": "ok", "suspicion": None,
-                        "action": {"type": "observe", "target": "well", "location": "well"},
-                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
-                    })})()})()
+                    type(
+                        "C",
+                        (),
+                        {
+                            "message": type(
+                                "M",
+                                (),
+                                {
+                                    "content": json.dumps(
+                                        {
+                                            "inner_thought": "ok",
+                                            "suspicion": None,
+                                            "action": {
+                                                "type": "observe",
+                                                "target": "well",
+                                                "location": "well",
+                                            },
+                                            "dialogue": None,
+                                            "goal_progress": "none",
+                                            "cooperation_intent": "medium",
+                                        }
+                                    )
+                                },
+                            )()
+                        },
+                    )()
                 ]
-                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+                self.usage = type(
+                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                )()
+
             def model_dump(self) -> dict[str, Any]:
                 return {}
 
         class FakeRouter:
             def __init__(self) -> None:
                 self.last_metadata: dict[str, Any] = {}
+
             async def acompletion(self, **kwargs: Any) -> FakeResponse:
                 self.last_metadata = kwargs.get("metadata", {})
                 return FakeResponse()
@@ -781,19 +858,44 @@ class TestSessionAndUserMetadata:
             def __init__(self) -> None:
                 self.model = "openai/gpt-4o-mini"
                 self.choices = [
-                    type("C", (), {"message": type("M", (), {"content": json.dumps({
-                        "inner_thought": "ok", "suspicion": None,
-                        "action": {"type": "observe", "target": "well", "location": "well"},
-                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
-                    })})()})()
+                    type(
+                        "C",
+                        (),
+                        {
+                            "message": type(
+                                "M",
+                                (),
+                                {
+                                    "content": json.dumps(
+                                        {
+                                            "inner_thought": "ok",
+                                            "suspicion": None,
+                                            "action": {
+                                                "type": "observe",
+                                                "target": "well",
+                                                "location": "well",
+                                            },
+                                            "dialogue": None,
+                                            "goal_progress": "none",
+                                            "cooperation_intent": "medium",
+                                        }
+                                    )
+                                },
+                            )()
+                        },
+                    )()
                 ]
-                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+                self.usage = type(
+                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+                )()
+
             def model_dump(self) -> dict[str, Any]:
                 return {}
 
         class FakeRouter:
             def __init__(self) -> None:
                 self.last_metadata: dict[str, Any] = {}
+
             async def acompletion(self, **kwargs: Any) -> FakeResponse:
                 self.last_metadata = kwargs.get("metadata", {})
                 return FakeResponse()
@@ -817,12 +919,14 @@ class TestSessionAndUserMetadata:
 class TestRecordScores:
     def test_record_scores_noop_when_no_client(self) -> None:
         from app.core import langfuse
+
         langfuse._client = None
         # Should not raise
         langfuse.record_scores(trace_id="t-1", scores={"cooperation": 0.5})
 
     def test_record_scores_calls_score_api(self) -> None:
         from app.core import langfuse
+
         mock_client = MagicMock()
         langfuse._client = mock_client
         try:
@@ -841,6 +945,7 @@ class TestRecordScores:
 
     def test_record_scores_swallows_exceptions(self) -> None:
         from app.core import langfuse
+
         mock_client = MagicMock()
         mock_client.score.side_effect = RuntimeError("boom")
         langfuse._client = mock_client
