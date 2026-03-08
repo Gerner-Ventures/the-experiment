@@ -89,22 +89,23 @@ async function initExperiment() {
     const wsUrl = api.getWebSocketUrl(detail.experiment_id)
     ws.connect(wsUrl)
 
-    // Hydrate narration state if a GM plan already exists (reconnect / refresh)
+    // Hydrate narration state if an applied GM plan exists (reconnect / refresh)
     if (detail.gm_plan) {
-      const planData = detail.gm_plan as { plan?: Record<string, unknown>; applied?: boolean }
+      const planData = detail.gm_plan as { plan?: Record<string, unknown>; status?: string }
+      const planRound = (planData.plan?.round as number) ?? detail.current_round
       const planNarration = (planData.plan?.narration as string) ?? ''
-      if (planNarration) {
+      if (planData.status === 'applied' && planNarration) {
         try {
-          const meta = await api.getRoundNarration(detail.experiment_id, detail.current_round)
+          const meta = await api.getRoundNarration(detail.experiment_id, planRound)
           gmStore.hydrateNarration(
             planNarration,
-            detail.current_round,
+            planRound,
             meta.status === 'ready' ? 'ready' : meta.status === 'pending' ? 'pending' : 'unavailable',
             meta.status === 'ready' ? meta.audio_url ?? null : null,
           )
         } catch {
           // Backend narration endpoint unavailable — show text only
-          gmStore.hydrateNarration(planNarration, detail.current_round, 'unavailable', null)
+          gmStore.hydrateNarration(planNarration, planRound, 'unavailable', null)
         }
       }
     }

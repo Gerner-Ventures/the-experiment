@@ -52,7 +52,7 @@ watch(() => props.visible, (show) => {
     stopTypewriter()
     stopAudio()
   }
-})
+}, { immediate: true })
 
 // When audio becomes ready while overlay is visible, try autoplay.
 // immediate: true handles the reconnect case where props are already set on mount.

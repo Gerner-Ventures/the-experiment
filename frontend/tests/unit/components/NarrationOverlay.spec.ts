@@ -58,13 +58,8 @@ function createWrapper(props = {}) {
 }
 
 describe('NarrationOverlay', () => {
-  it('shows text overlay when visible', async () => {
+  it('starts typewriter on mount when visible (reconnect path)', async () => {
     const wrapper = createWrapper()
-    // The typewriter watch fires on visible change; since we mount with visible=true
-    // we need to trigger the watch by toggling visibility
-    await wrapper.setProps({ visible: false })
-    await wrapper.setProps({ visible: true })
-    // Advance timers to let typewriter type at least the first char
     jest.advanceTimersByTime(50)
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('D')
@@ -72,8 +67,6 @@ describe('NarrationOverlay', () => {
 
   it('shows loading text when audio is pending', async () => {
     const wrapper = createWrapper({ audioStatus: 'pending' })
-    await wrapper.setProps({ visible: false })
-    await wrapper.setProps({ visible: true })
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('Loading narration audio')
   })
@@ -99,7 +92,6 @@ describe('NarrationOverlay', () => {
       audioStatus: 'idle',
       audioUrl: '/api/experiments/e1/rounds/1/narration/audio',
     })
-    // Trigger audioStatus watch by changing from idle to ready
     await wrapper.setProps({ audioStatus: 'ready' })
     await wrapper.vm.$nextTick()
     expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio')
@@ -108,10 +100,6 @@ describe('NarrationOverlay', () => {
 
   it('emits dismiss on click when typewriter is complete', async () => {
     const wrapper = createWrapper({ text: 'Hi' })
-    // Trigger typewriter via watch
-    await wrapper.setProps({ visible: false })
-    await wrapper.setProps({ visible: true })
-    // Advance enough for 2-char typewriter to complete (2 * 30ms + buffer)
     jest.advanceTimersByTime(200)
     await wrapper.vm.$nextTick()
 
@@ -131,7 +119,6 @@ describe('NarrationOverlay', () => {
       audioUrl: '/audio',
     })
     await wrapper.setProps({ audioStatus: 'ready' })
-    // Let the rejected promise flush
     await wrapper.vm.$nextTick()
     await jest.runAllTimersAsync()
     await wrapper.vm.$nextTick()
@@ -139,14 +126,28 @@ describe('NarrationOverlay', () => {
     expect(wrapper.emitted('update:autoplayBlocked')![0]).toEqual([true])
   })
 
-  it('attempts autoplay on mount when audio is already ready (reconnect)', async () => {
-    // Simulates the reconnect/refresh case where props are already set on mount
+  it('autoplays audio on mount when already ready (reconnect)', async () => {
     const wrapper = createWrapper({
       audioStatus: 'ready',
       audioUrl: '/api/experiments/e1/rounds/1/narration/audio',
     })
     await wrapper.vm.$nextTick()
     expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio')
+    expect(mockPlay).toHaveBeenCalled()
+  })
+
+  it('starts typewriter and autoplays on mount with hydrated props (full reconnect)', async () => {
+    const wrapper = createWrapper({
+      text: 'Reconnected narration.',
+      audioStatus: 'ready',
+      audioUrl: '/audio/reconnect',
+    })
+    // Typewriter should start immediately
+    jest.advanceTimersByTime(50)
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).toContain('R')
+    // Audio should autoplay
+    expect(global.Audio).toHaveBeenCalledWith('/audio/reconnect')
     expect(mockPlay).toHaveBeenCalled()
   })
 })
