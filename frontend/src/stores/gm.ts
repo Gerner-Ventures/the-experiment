@@ -1,18 +1,26 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { GMPlan } from '@/types/gm'
-import type { WSMessage } from '@/types/websocket'
+import type { WSMessage, GMAudioStatusData, NarrationAudioStatus } from '@/types/websocket'
 
 export const useGMStore = defineStore('gm', () => {
+  // --- GM plan state ---
   const currentPlan = ref<GMPlan | null>(null)
-  const narrationText = ref('')
   const showPlanPanel = ref(false)
-  const showNarration = ref(false)
   const planApproved = ref(false)
+
+  // --- Narration state ---
+  const narrationText = ref('')
+  const showNarration = ref(false)
+  const narrationRound = ref<number | null>(null)
+  const narrationAudioStatus = ref<NarrationAudioStatus | 'idle'>('idle')
+  const narrationAudioUrl = ref<string | null>(null)
+  const narrationAudioError = ref<string | null>(null)
+  const audioAutoplayBlocked = ref(false)
+  const isNarrationPlaying = ref(false)
 
   function onPlan(msg: WSMessage) {
     const raw = msg.data as Record<string, unknown>
-    // Backend sends GMPlanRecord: { status, plan: { round, round_theme, ... } }
     const plan = (raw.plan as Record<string, unknown>) ?? raw
     const crisis = (plan.crisis_event as Record<string, unknown>) ?? {}
     const mods = (plan.resource_modifiers as Partial<GMPlan['resourceModifiers']>) ?? {}
@@ -33,12 +41,47 @@ export const useGMStore = defineStore('gm', () => {
     }
     planApproved.value = false
     showPlanPanel.value = true
+
+    // Extract narration text from plan and show overlay
+    narrationText.value = currentPlan.value.narration
+    narrationRound.value = currentPlan.value.round
+    showNarration.value = !!narrationText.value
+
+    // Reset audio state for new plan
+    narrationAudioStatus.value = 'idle'
+    narrationAudioUrl.value = null
+    narrationAudioError.value = null
+    audioAutoplayBlocked.value = false
+    isNarrationPlaying.value = false
   }
 
   function onNarration(msg: WSMessage) {
+    // Legacy handler — kept for backward compatibility
     const data = msg.data as { text: string }
     narrationText.value = data.text
     showNarration.value = true
+  }
+
+  function onAudioStatus(msg: WSMessage) {
+    const data = msg.data as GMAudioStatusData
+    narrationRound.value = msg.round
+    narrationAudioStatus.value = data.status
+    if (data.status === 'ready' && data.audio_url) {
+      narrationAudioUrl.value = data.audio_url
+      narrationAudioError.value = null
+    } else if (data.status === 'error') {
+      narrationAudioError.value = data.error ?? 'Unknown error'
+      narrationAudioUrl.value = null
+    }
+  }
+
+  function hydrateNarration(text: string, round: number, status: NarrationAudioStatus | 'idle', audioUrl: string | null) {
+    narrationText.value = text
+    narrationRound.value = round
+    narrationAudioStatus.value = status
+    narrationAudioUrl.value = audioUrl
+    narrationAudioError.value = null
+    showNarration.value = !!text
   }
 
   function approvePlan() {
@@ -48,6 +91,7 @@ export const useGMStore = defineStore('gm', () => {
 
   function dismissNarration() {
     showNarration.value = false
+    isNarrationPlaying.value = false
   }
 
   function $reset() {
@@ -56,11 +100,21 @@ export const useGMStore = defineStore('gm', () => {
     showPlanPanel.value = false
     showNarration.value = false
     planApproved.value = false
+    narrationRound.value = null
+    narrationAudioStatus.value = 'idle'
+    narrationAudioUrl.value = null
+    narrationAudioError.value = null
+    audioAutoplayBlocked.value = false
+    isNarrationPlaying.value = false
   }
 
   return {
-    currentPlan, narrationText, showPlanPanel, showNarration, planApproved,
-    onPlan, onNarration, approvePlan, dismissNarration,
+    currentPlan, showPlanPanel, planApproved,
+    narrationText, showNarration, narrationRound,
+    narrationAudioStatus, narrationAudioUrl, narrationAudioError,
+    audioAutoplayBlocked, isNarrationPlaying,
+    onPlan, onNarration, onAudioStatus, hydrateNarration,
+    approvePlan, dismissNarration,
     $reset,
   }
 })
