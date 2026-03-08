@@ -80,7 +80,7 @@ class MockAgentBrain(AgentBrain):
         elif rng.random() < selfish_weight * 0.5:
             action_type = cast(DecisionActionType, rng.choice(SELFISH_ACTIONS))
         else:
-            action_type = cast(DecisionActionType, rng.choice(NON_TERMINAL_ACTIONS))
+            action_type = rng.choice(NON_TERMINAL_ACTIONS)
 
         location = rng.choice(LOCATIONS)
 

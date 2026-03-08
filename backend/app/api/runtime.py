@@ -94,6 +94,8 @@ def _phase_event_ws_type(event: Any) -> WSMessageType | None:
     if not isinstance(data, dict):
         return None
     kind = str(data.get("kind", ""))
+    # Regular agent_action events already stream through RoundHook.on_agent_action.
+    # Only engine-generated consequence actions need a second broadcast from phase completion.
     if kind == "agent_action" and bool(data.get("is_consequence")):
         return "agent_action"
     return _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None

@@ -1012,6 +1012,8 @@ class SimulationEngine:
         if not nearby_agents:
             return None
         requested_target = prepared.turn.decision.action.target
+        if prepared.action_type in self.ACTION_CONSEQUENCE_TYPES and not requested_target:
+            return None
         if isinstance(requested_target, str) and requested_target:
             requested_target_normalized = requested_target.casefold()
             for other in nearby_agents:

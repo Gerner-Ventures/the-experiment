@@ -173,6 +173,26 @@ async def test_hostile_actions_generate_target_consequence_events() -> None:
 
 
 @pytest.mark.asyncio
+async def test_hostile_actions_without_explicit_target_do_not_hit_nearest_agent() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [("shoot", "well", None), ("observe", "well"), ("observe", "well")],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    engine = SimulationEngine(agent_service=service, random_seed=2)
+
+    result = await engine.run_round(_state())
+
+    consequence_resolutions = [
+        action for action in result.action_resolutions if action.is_consequence
+    ]
+
+    assert consequence_resolutions == []
+
+
+@pytest.mark.asyncio
 async def test_engine_runs_all_six_phases() -> None:
     service = _StubAgentService(
         {
