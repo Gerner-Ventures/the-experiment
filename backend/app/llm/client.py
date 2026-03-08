@@ -84,6 +84,7 @@ class LLMClient:
                 metadata=metadata,
             )
             result = self._build_result(response)
+            self._track_usage(request, result)
             finish_reason = (
                 getattr(response.choices[0], "finish_reason", None) if response.choices else None
             )
@@ -127,8 +128,8 @@ class LLMClient:
             else:
                 break
 
+        # unreachable: loop always returns via break or raises
         assert result is not None
-        self._track_usage(request, result)
         return result
 
     def _build_metadata(
@@ -259,7 +260,6 @@ class LLMClient:
                 prompt_messages=[dict(message) for message in request.messages],
                 response_content=result.content,
                 parsed_response=result.parsed,
-                repaired=result.repaired,
                 raw_response=result.raw_response,
                 usage=result.usage,
             )

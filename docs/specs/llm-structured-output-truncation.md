@@ -46,7 +46,7 @@ LLM response (truncated JSON, finish_reason=stop)
 
 ### Acceptance Criteria
 
-- [x] `finish_reason` is checked before attempting JSON parse; truncated responses (`finish_reason=length`) trigger a retry with increased `max_tokens` instead of going straight to repair
+- [ ] `finish_reason=length` triggers a retry with increased `max_tokens` (deferred — root cause was `maxLength` schema constraint, not token budget)
 <!-- canon:realized-in:file:backend/app/llm/client.py -->
 - [x] `finish_reason` is included in all structured parse error logs and Langfuse traces for easier debugging
 <!-- canon:realized-in:file:backend/app/llm/client.py -->
@@ -54,7 +54,7 @@ LLM response (truncated JSON, finish_reason=stop)
 <!-- canon:realized-in:file:backend/app/llm/client.py -->
 - [x] The `llm_structured_parse_failed` log event includes the full `finish_reason`, `completion_tokens`, and `max_tokens` in its metadata
 <!-- canon:realized-in:file:backend/app/llm/client.py -->
-- [x] Agent decision fallback to OBSERVE is logged at `warning` level with the original error context (not silently swallowed)
+- [x] Agent decision fallback to OBSERVE is logged at `warning` level with the original error context (not silently swallowed) (pre-existing)
 <!-- canon:realized-in:file:backend/app/agents/brain.py -->
 - [ ] Structured output prompt injection is improved to reinforce the flat JSON structure (fields at top level, not nested)
 

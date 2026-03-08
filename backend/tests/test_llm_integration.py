@@ -137,10 +137,20 @@ async def test_invalid_json_raises_value_error() -> None:
             )
         )
 
+    assert len(client.tracker.all_records()) == 2
+
 
 @pytest.mark.asyncio
-async def test_structured_generation_retries_on_parse_failure() -> None:
+async def test_structured_generation_retries_on_parse_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """When the first response fails to parse, retry once before raising."""
+    captured_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "app.llm.client.ph.capture",
+        lambda event, properties: captured_events.append((event, properties)),
+    )
+
     broken = _FakeResponse("openai/gpt-4o-mini", "not-json")
     valid_content = json.dumps(
         {
@@ -168,6 +178,8 @@ async def test_structured_generation_retries_on_parse_failure() -> None:
     assert result.parsed is not None
     assert result.parsed["inner_thought"] == "I should keep quiet."
     assert len(fake_router.calls) == 2
+    assert len(captured_events) == 0  # No PostHog event on successful retry
+    assert len(client.tracker.all_records()) == 2  # Both attempts tracked
 
 
 @pytest.mark.asyncio
@@ -197,6 +209,7 @@ async def test_structured_generation_raises_after_retry_exhausted(
         )
 
     assert len(fake_router.calls) == 2
+    assert len(client.tracker.all_records()) == 2  # Both failed attempts tracked
 
     assert len(captured_events) == 1
     event_name, props = captured_events[0]
