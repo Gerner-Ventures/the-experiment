@@ -100,10 +100,13 @@ async function initExperiment() {
 async function handleStep() {
   if (!experimentStore.id) return
   try {
+    console.debug('[Step] Starting step, isStepping:', uiStore.isStepping)
     uiStore.startStepping(locale.hud.steppingRunning)
+    console.debug('[Step] Called startStepping, isStepping:', uiStore.isStepping)
     await api.stepRound(experimentStore.id)
+    console.debug('[Step] stepRound API returned')
   } catch (err) {
-    console.error('Step failed:', err)
+    console.error('[Step] Step failed:', err)
     uiStore.clearStepping()
     waitingForRound = false
   }

@@ -44,9 +44,10 @@ export function useWebSocket(): UseWebSocket {
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data) as WSMessage
+        console.debug('[WS]', msg.type, msg.phase ?? '', msg.data)
         routeMessage(msg)
-      } catch {
-        // Ignore malformed messages
+      } catch (err) {
+        console.warn('[WS] Failed to parse message:', err, event.data)
       }
     }
 

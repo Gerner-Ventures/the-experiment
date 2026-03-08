@@ -210,7 +210,7 @@ neon-create: ## Create a Neon branch for current git branch (from prod, 7-day TT
 		--branch $(BRANCH_NAME) \
 		--database-name $(NEON_DB_NAME) \
 		--role-name $(NEON_ROLE)) && \
-	ASYNC_URL=$$(echo "$$FULL_URL" | sed 's|postgresql://|postgresql+asyncpg://|' | sed 's|?.*||')\"?ssl=require\" && \
+	ASYNC_URL=$$(echo "$$FULL_URL" | sed 's|postgresql://|postgresql+asyncpg://|' | sed 's|?.*||')'?ssl=require' && \
 	doppler secrets set DATABASE_URL="$$ASYNC_URL" --project the-experiment --config dev && \
 	echo "Neon branch '$(BRANCH_NAME)' created and DATABASE_URL updated in Doppler dev config."
 

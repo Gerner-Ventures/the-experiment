@@ -359,7 +359,7 @@ class ExperimentRuntime:
 
                 await self.store.save_state(state)
                 await self.store.record_round_result(experiment_id, round_result)
-                await self._log_round_result(experiment_id, round_result)
+                await self._log_round_result(experiment_id, round_result, state)
 
             # Broadcast round_end with full state so FE can do a final sync
             await self.connection_manager.broadcast(
