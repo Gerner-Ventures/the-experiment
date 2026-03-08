@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -202,6 +203,7 @@ def test_log_endpoint_filters_and_paginates(client: TestClient) -> None:
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     log_response = client.get(
         f"{API_PREFIX}/experiments/{experiment_id}/log", params={"limit": 5, "phase": "dawn"}
@@ -243,11 +245,9 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
             "threat_update",
             "round_end",
         }
-        for _ in range(40):
+        while "round_end" not in seen_types:
             message = websocket.receive_json()
             seen_types.add(message["type"])
-            if required <= seen_types:
-                break
 
         assert required <= seen_types
 
@@ -257,6 +257,7 @@ def test_analytics_and_replay_endpoints_return_round_data(client: TestClient) ->
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
     assert summary.status_code == 200
@@ -284,6 +285,7 @@ def test_derived_round_logs_are_persisted(client: TestClient) -> None:
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     agent_actions = client.get(
         f"{API_PREFIX}/experiments/{experiment_id}/log",
@@ -353,6 +355,7 @@ def test_report_grade_analytics_use_resolved_action_outcomes(
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     summary = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/summary")
     assert summary.status_code == 200
@@ -436,6 +439,7 @@ def test_goal_analytics_preserves_chronological_progress_for_multi_action_agents
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
     assert goals.status_code == 200
@@ -469,6 +473,7 @@ def test_goal_analytics_uses_unknown_when_progress_text_has_no_signal(
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     goals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/goals")
     assert goals.status_code == 200
@@ -500,6 +505,7 @@ def test_betrayal_and_faction_analytics_expose_timeline_data(
     experiment_id = created.json()["experiment_id"]
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
     client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    _wait_for_round_completion(client, experiment_id)
 
     betrayals = client.get(f"{API_PREFIX}/experiments/{experiment_id}/analytics/betrayals")
     assert betrayals.status_code == 200
@@ -548,3 +554,21 @@ def test_usage_and_prompt_trace_endpoints_group_records(
     assert traces.status_code == 200
     assert traces.json()["total"] == 1
     assert traces.json()["items"][0]["response_content"] == '{"round_theme":"Pressure builds"}'
+
+
+def _wait_for_round_completion(
+    client: TestClient,
+    experiment_id: str,
+    *,
+    expected_round: int = 1,
+    attempts: int = 100,
+    delay_seconds: float = 0.05,
+) -> None:
+    for _ in range(attempts):
+        response = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
+        if response.status_code == 200 and response.json()["current_round"] >= expected_round:
+            return
+        time.sleep(delay_seconds)
+    raise AssertionError(
+        f"Timed out waiting for experiment {experiment_id} to reach round {expected_round}."
+    )

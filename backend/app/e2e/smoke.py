@@ -81,10 +81,11 @@ async def run_smoke(config: SmokeConfig) -> str:
                 stepped = await _request_json(
                     client, "POST", f"/api/experiments/{experiment_id}/step"
                 )
-                round_result = _require_mapping(stepped, "round_result")
                 _require(
-                    round_result.get("round_number") == 1, "Round step did not advance to round 1."
+                    stepped.get("status") == "step_started",
+                    "Step request did not start a round.",
                 )
+                _require(stepped.get("round_number") == 1, "Step request did not start round 1.")
 
                 seen_types = await _collect_ws_types(
                     websocket, timeout_seconds=config.timeout_seconds
@@ -177,7 +178,7 @@ async def _collect_ws_types(
 ) -> set[str]:
     seen_types: set[str] = set()
     deadline = asyncio.get_running_loop().time() + timeout_seconds
-    while asyncio.get_running_loop().time() < deadline and not REQUIRED_WS_TYPES <= seen_types:
+    while asyncio.get_running_loop().time() < deadline and "round_end" not in seen_types:
         remaining = deadline - asyncio.get_running_loop().time()
         try:
             raw_message = await asyncio.wait_for(websocket.recv(), timeout=max(remaining, 0.1))

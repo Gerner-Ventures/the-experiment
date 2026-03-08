@@ -388,6 +388,22 @@ class ExperimentRuntime:
                 await self.store.record_round_result(experiment_id, round_result)
                 await self._log_round_result(experiment_id, round_result, state)
 
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "resource_update",
+                    round_number=round_result.round_number,
+                    data=state.world_state.resources.model_dump(mode="json"),
+                ),
+            )
+            await self.connection_manager.broadcast(
+                experiment_id,
+                self._message(
+                    "threat_update",
+                    round_number=round_result.round_number,
+                    data={"threat_level": state.world_state.threat_level},
+                ),
+            )
             # Broadcast round_end with full state so FE can do a final sync
             await self.connection_manager.broadcast(
                 experiment_id,
@@ -1278,6 +1294,7 @@ class ExperimentRuntime:
             round_number=round_result.round_number,
             data=round_summary,
         )
+
     def _build_round_summary(
         self, state: SimulationState, round_result: RoundResult
     ) -> dict[str, Any]:
@@ -1512,6 +1529,8 @@ class ExperimentRuntime:
             except ValueError:
                 return 0.0
         return 0.0
+
+
 class _StreamingHook:
     """RoundHook implementation that broadcasts WS messages via ConnectionManager."""
 
