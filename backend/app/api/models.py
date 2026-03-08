@@ -283,10 +283,25 @@ class GMTimelinePage(APIRequestModel):
     items: list[GMRoundTimelineItem] = Field(default_factory=list)
 
 
+HighlightScope = Literal["round", "game"]
+HighlightCategory = Literal[
+    "crisis",
+    "betrayal",
+    "resource_swing",
+    "alliance_shift",
+    "close_vote",
+    "suspicion_spike",
+]
+
+
 class HighlightItem(APIRequestModel):
-    round_number: int | None = None
+    id: str
+    round_number: int
+    phase: str | None = None
     score: float = 0.0
-    category: str
+    category: HighlightCategory
+    event_type: str
+    event_kind: str | None = None
     summary: str
     data: dict[str, Any] = Field(default_factory=dict)
 
@@ -363,4 +378,6 @@ class FactionAnalytics(APIRequestModel):
 
 
 class HighlightPage(APIRequestModel):
+    scope: HighlightScope = "game"
+    round_number: int | None = None
     items: list[HighlightItem] = Field(default_factory=list)

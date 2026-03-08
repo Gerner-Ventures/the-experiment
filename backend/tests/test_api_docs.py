@@ -39,6 +39,10 @@ def test_docs_and_openapi_endpoints_are_available() -> None:
         == "Get round narration metadata"
     )
     assert (
+        body["paths"]["/api/experiments/{experiment_id}/highlights"]["get"]["summary"]
+        == "Get experiment highlights"
+    )
+    assert (
         body["paths"]["/api/experiments/{experiment_id}/usage"]["get"]["summary"]
         == "Get LLM usage report"
     )

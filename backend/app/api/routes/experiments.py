@@ -15,6 +15,7 @@ from app.api.models import (
     GMTimelinePage,
     GoalAnalytics,
     HighlightPage,
+    HighlightScope,
     PromptTracePage,
     RelationshipAnalytics,
     ReplayIndex,
@@ -341,15 +342,56 @@ async def get_gm_timeline(experiment_id: str, request: Request) -> GMTimelinePag
 
 
 @router.get(
+    "/{experiment_id}/highlights",
+    response_model=HighlightPage,
+    summary="Get experiment highlights",
+    description=(
+        "Return the ranked highlight reel for one round or the full game, derived from the "
+        "persisted event log and round summaries."
+    ),
+)
+async def get_highlights(
+    experiment_id: str,
+    request: Request,
+    scope: HighlightScope = Query(default="game"),
+    round_number: int | None = Query(default=None, alias="round", ge=1),
+) -> HighlightPage:
+    runtime = _runtime_from_request(request)
+    state = await _get_state(runtime, experiment_id)
+    if scope == "round" and round_number is None:
+        raise HTTPException(status_code=422, detail="round is required when scope=round")
+    if scope == "round" and round_number is not None and round_number > state.current_round:
+        raise HTTPException(status_code=404, detail="Round highlights not found")
+    return HighlightPage(
+        scope=scope,
+        round_number=round_number if scope == "round" else None,
+        items=await runtime.get_highlights(
+            experiment_id,
+            scope=scope,
+            round_number=round_number,
+        ),
+    )
+
+
+@router.get(
     "/{experiment_id}/analytics/highlights",
     response_model=HighlightPage,
     summary="Get experiment highlights",
-    description="Return the highest-signal events derived from the persisted event log.",
+    description="Backward-compatible alias for the highlight reel endpoint.",
+    include_in_schema=False,
 )
-async def get_highlights(experiment_id: str, request: Request) -> HighlightPage:
-    runtime = _runtime_from_request(request)
-    await _get_state(runtime, experiment_id)
-    return HighlightPage(items=await runtime.get_highlights(experiment_id))
+async def get_analytics_highlights(
+    experiment_id: str,
+    request: Request,
+    scope: HighlightScope = Query(default="game"),
+    round_number: int | None = Query(default=None, alias="round", ge=1),
+) -> HighlightPage:
+    return await get_highlights(
+        experiment_id=experiment_id,
+        request=request,
+        scope=scope,
+        round_number=round_number,
+    )
 
 
 @router.get(

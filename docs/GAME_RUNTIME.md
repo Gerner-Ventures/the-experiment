@@ -438,6 +438,7 @@ The API runtime now persists report-grade derived analytics at round end:
 - `agent_action` log rows include both requested and resolved action types
 - `round_end` log rows include compact round summaries for cooperation, goals, suspicion, factions, and GM context
 - replay and analytics endpoints read from those persisted summaries instead of reconstructing everything from websocket-only state
+- the highlight reel endpoint combines both sources: event-log rows drive crisis, betrayal, and close-vote moments, while `round_end` summaries drive resource swings, alliance shifts, and suspicion spikes
 
 ## Runtime Ownership
 

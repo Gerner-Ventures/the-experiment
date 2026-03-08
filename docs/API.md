@@ -67,7 +67,7 @@ Important behavior:
 | `GET` | `/api/experiments/{experiment_id}/analytics/relationships` | Relationship graph edges derived from agent memory |
 | `GET` | `/api/experiments/{experiment_id}/analytics/factions` | Current faction state plus pressure and membership-change timeline |
 | `GET` | `/api/experiments/{experiment_id}/analytics/gm` | GM narration and crisis timeline by round |
-| `GET` | `/api/experiments/{experiment_id}/analytics/highlights` | High-signal events ranked from the log |
+| `GET` | `/api/experiments/{experiment_id}/highlights` | Variety-aware highlight reel for a round or the full game |
 | `GET` | `/api/experiments/{experiment_id}/replay` | Replay index with round summaries and highlights |
 | `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/narration` | Round narration text and backend audio metadata |
 | `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio` | Stream round narration audio |
@@ -182,7 +182,14 @@ Useful follow-up reads after a round completes:
 
 - `GET /api/experiments/{id}/log?round_number=N`
 - `GET /api/experiments/{id}/rounds/{N}/snapshot`
-- `GET /api/experiments/{id}/analytics/highlights`
+- `GET /api/experiments/{id}/highlights?scope=round&round=N`
+  - returns the end-of-round reel for one completed round
+  - up to 5 highlights, scored and ordered by dramatic significance
+  - categories currently include `betrayal`, `crisis`, `resource_swing`, `alliance_shift`, `close_vote`, and `suspicion_spike`
+- `GET /api/experiments/{id}/highlights?scope=game`
+  - returns the cross-game reel
+  - up to 12 highlights, ranked from the persisted log and round summaries
+  - selection prefers category variety before filling the remaining slots by score
 - `GET /api/experiments/{id}/usage?round_number=N`
 
 ## Event Log Filters
@@ -256,11 +263,14 @@ Additional report-grade analytics endpoints expose persisted derived views for f
   - round theme
   - narration
   - crisis payload
+- `GET /api/experiments/{experiment_id}/highlights`
+  - `scope=round` requires `round`
+  - items include the ranked category, source `event_type`, optional `event_kind`, round, phase, score, summary, and contextual data
 
 `GET /api/experiments/{experiment_id}/replay` returns a replay-friendly index:
 
 - one item per completed round with a summary, threat level, event count, cooperation score, sabotage count, betrayal count, and GM context
-- the same highlight feed used by the analytics highlight endpoint
+- the same game-scoped highlight feed used by the highlights endpoint
 
 `GET /api/experiments/{experiment_id}/usage` and `.../usage/traces` expose LLM usage:
 
