@@ -9,7 +9,7 @@ const TYPEWRITER_MS = 35
 const HOLD_AFTER_TYPING_MS = 2000
 const MIN_LIFETIME_MS = 4000
 /** Vertical offset above the agent sprite anchor so the bubble clears the sprite head */
-const BUBBLE_OFFSET_PX = 100
+const BUBBLE_OFFSET_PX = 120
 const PENDING_TIMEOUT_MS = 3000
 
 const locale = useLocale()
