@@ -18,7 +18,7 @@ def _setup_otel_logging(log_level: int) -> None:
     from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
     from opentelemetry.sdk.resources import Resource
 
-    endpoint = os.environ.get("POSTHOG_OTLP_ENDPOINT", "https://us.i.posthog.com/v1")
+    endpoint = os.environ.get("POSTHOG_OTLP_ENDPOINT", "https://us.i.posthog.com/i/v1")
 
     resource = Resource.create(
         {

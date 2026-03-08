@@ -18,7 +18,7 @@ structlog -> Python logging -> [stdout JSON handler (existing)]
 ## Changes
 
 1. **`backend/pyproject.toml`** — Add `opentelemetry-sdk`, `opentelemetry-exporter-otlp-proto-http`
-2. **`backend/app/core/config.py`** — Add `posthog_otlp_endpoint` setting
+2. **`backend/app/core/config.py`** — Add `posthog_otlp_endpoint` setting (default: `https://us.i.posthog.com/i/v1`)
 3. **`backend/app/logging.py`** — Add OTel LoggingHandler + OTLP exporter
 4. **`backend/app/main.py`** — Flush OTel log provider on shutdown
 5. **`chart/the-experiment/templates/configmap.yaml`** — Add OTLP endpoint env var

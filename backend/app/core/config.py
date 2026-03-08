@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     posthog_key: str | None = None
     posthog_host: str = "https://us.posthog.com"
-    posthog_otlp_endpoint: str = "https://us.i.posthog.com/v1"
+    posthog_otlp_endpoint: str = "https://us.i.posthog.com/i/v1"
     anthropic_api_key: str | None = None
     gm_model: str = "anthropic/claude-sonnet-4-5-20250514"
     gm_fallback_model: str = "anthropic/claude-haiku-4-5-20251001"
