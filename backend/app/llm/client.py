@@ -70,8 +70,17 @@ class LLMClient:
         metadata = {
             **request.metadata,
             **get_trace_context(),
-            "generation_name": request.role,
+            "generation_name": request.generation_name or request.role,
+            "session_id": request.metadata.get("experiment_id", ""),
+            "trace_user_id": request.metadata.get("agent_name", request.role),
         }
+        log.debug(
+            "langfuse_context",
+            trace_id=metadata.get("trace_id"),
+            parent_observation_id=metadata.get("parent_observation_id"),
+            generation_name=metadata.get("generation_name"),
+            has_context=bool(get_trace_context()),
+        )
         response = await self.router.acompletion(
             model=request.model_override or model_config.primary_model,
             messages=cast(Any, messages),
