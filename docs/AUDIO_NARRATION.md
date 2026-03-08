@@ -37,6 +37,22 @@ This split is intentional:
 - the existing experiment websocket path is JSON-only and not a good place to push binary media
 - HTTP streaming is simpler for browser audio playback, retries, and cache behavior
 
+```mermaid
+flowchart LR
+    GM["Applied GM Plan<br/>narration text"] --> RT["ExperimentRuntime"]
+    RT --> WS["WebSocket<br/>gm_audio_status"]
+    RT --> META["GET /narration<br/>text + metadata"]
+    RT --> TTS["NarrationTTSService"]
+    TTS --> CACHE["In-memory audio cache"]
+    TTS --> EL["ElevenLabs TTS"]
+    EL --> TTS
+    CACHE --> AUDIO["GET /narration/audio<br/>audio/mpeg stream"]
+    TTS --> AUDIO
+    META --> FE["Frontend narration UI"]
+    WS --> FE
+    AUDIO --> FE
+```
+
 ## Runtime Flow
 
 1. A GM plan is generated or approved.
