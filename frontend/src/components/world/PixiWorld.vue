@@ -54,6 +54,7 @@ onMounted(async () => {
   // Start demo mode if no backend
   if (props.demoMode) {
     world.startDemo()
+    world.startDemoCycle()
   }
 
   // Center on map middle
@@ -77,6 +78,7 @@ defineExpose({
   clearHighlight: world.clearHighlight,
   moveAgentTo: world.moveAgentTo,
   getAgents: world.getAgents,
+  setPhase: world.setPhase,
 })
 </script>
 

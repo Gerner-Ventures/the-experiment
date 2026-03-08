@@ -240,6 +240,12 @@ function handleAgentClick(agentId: string) {
   uiStore.selectAgent(agentId)
 }
 
+// ─── Day/night cycle phase wiring ───
+
+watch(() => experimentStore.currentPhase, (phase) => {
+  if (phase) pixiWorldRef.value?.setPhase(phase)
+})
+
 // ─── Turn store handler wiring ───
 
 function wireTurnHandlers() {

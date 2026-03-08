@@ -54,6 +54,13 @@ export interface AmbientConfig {
   scanlines?: boolean
 }
 
+/** Day/night cycle visual config */
+export interface DayNightConfig {
+  enabled: boolean
+  showCelestialBodies: boolean
+  celestialVariant?: 'standard' | 'digital'
+}
+
 /** Map theme definition */
 export interface MapTheme {
   id: string
@@ -62,6 +69,7 @@ export interface MapTheme {
   tilePalette: TilePalette
   buildingStyle: BuildingStyle
   ambient: AmbientConfig
+  dayNight?: DayNightConfig
   preview: string[]  // 3-4 hex colors for the theme picker swatch
 }
 
