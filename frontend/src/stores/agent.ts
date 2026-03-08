@@ -57,7 +57,13 @@ export const useAgentStore = defineStore('agent', () => {
     const actionType = typeof data.action === 'string'
       ? data.action
       : (data.action?.type as string) ?? 'observe'
+    const actionLocation = typeof data.action === 'string'
+      ? undefined
+      : (data.action?.location as string | undefined)
     if (agent) {
+      if (actionLocation) {
+        agent.location = actionLocation
+      }
       agent.status = actionToStatus(actionType)
     }
     const agentName = data.agent_name ?? agent?.name ?? 'Agent'
@@ -66,15 +72,6 @@ export const useAgentStore = defineStore('agent', () => {
         .replace('{name}', agentName)
         .replace('{action}', actionType),
     )
-  }
-
-  function onMove(msg: WSMessage) {
-    const data = msg.data as { agent_id: string; location: string }
-    const agent = agents.value.get(data.agent_id)
-    if (agent) {
-      agent.location = data.location
-      agent.status = 'moving'
-    }
   }
 
   function onAgentUpdate(agentId: string, updates: Partial<Agent>) {
@@ -96,7 +93,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   return {
     agents, agentList, agentConfigs, agentCount,
-    setAgents, getAgent, onAction, onMove, onAgentUpdate, updateAgentFromDossier, resetStatuses,
+    setAgents, getAgent, onAction, onAgentUpdate, updateAgentFromDossier, resetStatuses,
     $reset,
   }
 })

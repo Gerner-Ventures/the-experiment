@@ -313,7 +313,7 @@ Connection semantics:
 | `gm_audio_status` | `{ "status": "pending|ready|error", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
-| `agent_action` | `{ "agent_id", "action", "cooperation_intent", "goal_progress" }` |
+| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought", "cooperation_intent", "goal_progress" }` |
 | `agent_speak` | `{ "kind", "speaker_id", "speaker_name", "listener_id", "listener_name", "tone", "location", "trust_delta" }` |
 | `meeting_start` | `{ "kind", "proposal" }` |
 | `meeting_speech` | `{ "kind", "agent_id", "agent_name", "stance", "content" }` |

@@ -1405,6 +1405,8 @@ class ExperimentRuntime:
                 data=action.model_dump(mode="json"),
             )
             if action.resolved_action_type == "move":
+                # Keep movement in the durable event log for analytics/history even
+                # though realtime movement is now conveyed via agent_action payloads.
                 await self._log(
                     experiment_id,
                     event_type="agent_move",
@@ -1426,7 +1428,7 @@ class ExperimentRuntime:
             event_type="threat_update",
             summary="Threat settles after the round resolves.",
             round_number=round_result.round_number,
-            data={"threat_level": round_result.threat_level},
+            data={"threat_level": state.world_state.threat_level},
         )
         round_summary = self._build_round_summary(state, round_result)
         await self._log(
@@ -1489,7 +1491,7 @@ class ExperimentRuntime:
         return {
             "summary": (
                 f"Round {round_result.round_number} closes with cooperation "
-                f"{cooperation_score:.2f} and threat {round_result.threat_level:.2f}."
+                f"{cooperation_score:.2f} and threat {state.world_state.threat_level:.2f}."
             ),
             "gm": {
                 "round_theme": round_result.gm_plan.plan.round_theme,
@@ -1503,7 +1505,7 @@ class ExperimentRuntime:
             },
             "betrayal_count": betrayal_count,
             "sabotage_count": sabotage_count,
-            "threat_level": round_result.threat_level,
+            "threat_level": state.world_state.threat_level,
             "resources": round_result.world_state.resources.model_dump(mode="json"),
             "dominant_faction": dominant_faction.name if dominant_faction is not None else None,
             "factions": [faction.model_dump(mode="json") for faction in state.factions],

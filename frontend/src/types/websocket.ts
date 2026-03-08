@@ -4,7 +4,7 @@ export type WSMessageType =
   | 'round_start' | 'round_end'
   | 'phase_change'
   | 'gm_plan' | 'gm_narration' | 'gm_audio_status'
-  | 'agent_action' | 'agent_move' | 'agent_speak'
+  | 'agent_action' | 'agent_speak'
   | 'crisis_event'
   | 'meeting_start' | 'meeting_speech' | 'meeting_vote' | 'meeting_result'
   | 'faction_update' | 'cult_activity'

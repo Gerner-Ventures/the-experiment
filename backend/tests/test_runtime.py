@@ -700,6 +700,8 @@ def _build_hook_round_result(state, *, round_number: int) -> RoundResult:
 
 
 async def _fake_run_round(state, *, hook) -> RoundResult:
+    # This helper only simulates hook ordering and final payload parity; it is
+    # not intended to exercise the full experiment lifecycle/status machine.
     round_number = state.current_round + 1
     round_result = _build_hook_round_result(state, round_number=round_number)
 

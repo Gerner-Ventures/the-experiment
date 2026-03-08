@@ -116,7 +116,6 @@ function routeMessage(msg: WSMessage) {
     gm_narration: (m) => gmStore.onNarration(m),
     gm_audio_status: (m) => gmStore.onAudioStatus(m as unknown as WSMessage<GMAudioStatusData>),
     agent_action: (m) => agentStore.onAction(m),
-    agent_move: (m) => agentStore.onMove(m),
     agent_speak: (m) => socialStore.onSpeak(m),
     crisis_event: (m) => worldStore.onCrisis(m),
     threat_update: (m) => worldStore.onThreatUpdate(m),
