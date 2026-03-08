@@ -136,6 +136,11 @@ The event log also stores derived round entries that sit alongside the phase eve
 Those derived entries are what the analytics summary, highlight feed, replay index, and headless
 runner use when they compute cooperation, surface notable moments, or summarize a finished run.
 
+Hostile actions can now emit an additional derived `agent_action` row for the affected target with
+`is_consequence: true`. These consequence rows are persisted for replay and UI reaction purposes,
+but they are excluded from cooperation and goal-progress analytics so decision metrics still reflect
+only agent-authored turns.
+
 The highlight selector mixes direct log rows with `round_end` rollups:
 
 - direct signals: `crisis_event`, hostile or sabotage `agent_action`, and close-vote `midday` / `exile_vote` rows
@@ -198,7 +203,7 @@ Outputs:
 - crisis event
 - resource modifiers
 - environmental flavor
-- narration
+- narration, kept brief enough for roughly 15-20 seconds of spoken delivery
 
 ### 2. Dawn
 
@@ -260,6 +265,10 @@ Only active agents participate. Dead or exiled agents are excluded from the meet
 Each active agent receives 1 additional action turn.
 
 Resolution uses the same grouping and consequence system as the morning phase.
+Hostile actions (`attack`, `threaten`, `stab`, `shoot`, `poison`) may enqueue a follow-up
+consequence action for the target immediately after the aggressor resolves.
+Hostile actions (`attack`, `threaten`, `stab`, `shoot`, `poison`) may enqueue a follow-up
+consequence action for the target immediately after the aggressor resolves.
 
 ### 6. Night
 
@@ -447,6 +456,7 @@ Code references:
 The API runtime now persists report-grade derived analytics at round end:
 
 - `agent_action` log rows include both requested and resolved action types
+- consequence `agent_action` rows carry `is_consequence: true` plus `source_agent_*` metadata
 - `round_end` log rows include compact round summaries for cooperation, goals, suspicion, factions, and GM context
 - replay and analytics endpoints read from those persisted summaries instead of reconstructing everything from websocket-only state
 - the highlight reel endpoint combines both sources: event-log rows drive crisis, betrayal, and close-vote moments, while `round_end` summaries drive resource swings, alliance shifts, and suspicion spikes

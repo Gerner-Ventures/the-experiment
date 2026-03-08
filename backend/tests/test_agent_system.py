@@ -36,7 +36,7 @@ from app.llm.models import (
     RelationshipConsolidationDecision,
 )
 from app.llm.service import LLMService
-from app.schemas.agent_decision import AGENT_DECISION_MAX_TOKENS
+from app.schemas.agent_decision import AGENT_DECISION_MAX_TOKENS, DECISION_ACTION_TYPES
 from app.world import build_default_world_state
 
 
@@ -305,6 +305,12 @@ def test_prompt_instructs_concise_inner_thoughts() -> None:
 
     assert "Keep `inner_thought` to 1-2 short sentences" in prompt
     assert "Good `inner_thought`" in prompt
+    assert "bleeding" not in prompt
+
+
+def test_decision_action_catalog_excludes_engine_only_consequences() -> None:
+    assert "bleeding" not in DECISION_ACTION_TYPES
+    assert "poisoned" not in DECISION_ACTION_TYPES
 
 
 @pytest.mark.asyncio

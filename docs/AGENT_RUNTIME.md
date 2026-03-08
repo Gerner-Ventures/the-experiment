@@ -408,7 +408,6 @@ Use round and social events to animate or narrate runtime changes.
 Relevant event families:
 
 - `agent_action`
-- `agent_move`
 - `agent_speak`
 - `meeting_speech`
 - `meeting_vote`
@@ -416,6 +415,9 @@ Relevant event families:
 - `cult_activity`
 - `exile_vote`
 - `exile_enacted`
+
+`agent_action` carries the mid-round action payload, including `action.location` when the frontend
+should update an agent's current location before `round_end`.
 
 ## Replay and analytics
 

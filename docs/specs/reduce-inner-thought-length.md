@@ -39,7 +39,7 @@ Inner thoughts should be concise — a brief window into the agent's reasoning, 
 
 ### Approach Options
 
-1. **Prompt engineering** — ✅ Implemented: System and user prompts now explicitly constrain `inner_thoughts` to 1-2 sentences under 160 characters with examples of good/bad thoughts. Add examples of good vs bad thought length.
+1. **Prompt engineering** — ✅ Implemented: System and user prompts now explicitly constrain `inner_thoughts` to 1-2 sentences. This pattern was also applied to GM narration (PR #138), which caps at 45 words with similar prompt constraints.ences under 160 characters with examples of good/bad thoughts. Add examples of good vs bad thought length.
 2. **Schema constraint** — Add `maxLength` to the `inner_thoughts` field in the response schema or function call definition.
 3. **Post-processing truncation** — Truncate thoughts server-side before broadcasting to the frontend (least preferred — wastes tokens).
 

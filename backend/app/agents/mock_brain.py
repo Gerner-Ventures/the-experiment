@@ -8,7 +8,6 @@ from typing import Any, cast, get_args
 
 from app.agents.brain import AgentBrain
 from app.agents.models import (
-    ACTION_TYPES,
     AgentContext,
     AgentTurnResult,
     KeyMemory,
@@ -22,13 +21,21 @@ from app.llm.models import (
     MemoryPromotionDecision,
     RelationshipConsolidationDecision,
 )
-from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType, Dialogue
+from app.schemas.agent_decision import (
+    AgentDecision,
+    DecisionAction,
+    DECISION_ACTION_TYPES,
+    DecisionActionType,
+    Dialogue,
+)
 
 # Weighted by personality
 COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
 SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
 TERMINAL_ACTIONS = get_args(TerminalActionType)
-NON_TERMINAL_ACTIONS = tuple(action for action in ACTION_TYPES if action not in TERMINAL_ACTIONS)
+NON_TERMINAL_ACTIONS = tuple(
+    action for action in DECISION_ACTION_TYPES if action not in TERMINAL_ACTIONS
+)
 
 LOCATIONS = (
     "town_square",

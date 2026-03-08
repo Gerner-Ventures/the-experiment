@@ -262,6 +262,14 @@ entries written at step time:
 - `threat_update`
 - `round_end`
 
+Hostile action resolution can also append engine-generated consequence `agent_action` rows for the
+affected target. Those rows are marked with `is_consequence: true` and are intended for replay/UI
+state rather than cooperation scoring.
+
+Hostile action resolution can also append engine-generated consequence `agent_action` rows for the
+affected target. Those rows are marked with `is_consequence: true` and are intended for replay/UI
+state rather than cooperation scoring.
+
 Still in-memory today:
 
 - active WebSocket connection handles

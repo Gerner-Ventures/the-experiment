@@ -296,6 +296,66 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
         assert required <= seen_types
 
 
+def test_websocket_and_logs_include_system_consequences(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    runtime.engine.agent_service = _ScriptedAgentService(
+        {
+            "Mara": [
+                {
+                    "action_type": "shoot",
+                    "target": "Jon",
+                    "location": "town_square",
+                    "goal_progress": "I forced the issue.",
+                    "cooperation_intent": "low",
+                },
+                {"action_type": "observe", "location": "town_square"},
+                {"action_type": "observe", "location": "town_square"},
+            ],
+            "Jon": [
+                {"action_type": "observe", "location": "town_square"},
+                {"action_type": "observe", "location": "town_square"},
+                {"action_type": "observe", "location": "town_square"},
+            ],
+        }
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+
+    with client.websocket_connect(f"{API_PREFIX}/experiments/{experiment_id}/ws") as websocket:
+        websocket.receive_json()
+        stepped = client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+        assert stepped.status_code == 200
+
+        consequence_message = None
+        for _ in range(60):
+            message = websocket.receive_json()
+            if message["type"] == "agent_action" and message.get("is_consequence") is True:
+                consequence_message = message
+            if message["type"] == "round_end":
+                break
+
+    assert consequence_message is not None
+    assert consequence_message["data"]["agent_name"] == "Jon"
+    assert consequence_message["data"]["source_agent_name"] == "Mara"
+    assert consequence_message["data"]["source_action_type"] == "shoot"
+    assert consequence_message["data"]["action"]["type"] in {"bleeding", "injured"}
+    assert consequence_message["data"]["is_consequence"] is True
+
+    action_logs = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "agent_action"},
+    )
+    assert action_logs.status_code == 200
+    consequence_rows = [
+        item for item in action_logs.json()["items"] if item["data"].get("is_consequence") is True
+    ]
+    assert len(consequence_rows) == 1
+    assert consequence_rows[0]["data"]["source_action_type"] == "shoot"
+    assert consequence_rows[0]["data"]["resolved_action_type"] in {"bleeding", "injured"}
+
+
 def test_step_endpoint_returns_409_while_round_in_progress_for_same_experiment(
     client: TestClient, runtime: ExperimentRuntime
 ) -> None:

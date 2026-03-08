@@ -2,6 +2,10 @@
 
 ## Working Norms
 
+- When assigned a new task, start from the local `main` branch unless the user explicitly asks you to continue from a different branch or worktree.
+- Before doing any work, check whether the current checkout has uncommitted changes. If it does, ask the user how to proceed before making any edits.
+- If the checkout is clean, update `main` from `origin/main` with a fast-forward-only pull before starting the task.
+- If the task requires any file changes, create a new branch in a separate git worktree from the updated `main` branch and do the work there.
 - Prefer creating a new git worktree for feature work instead of reusing a dirty checkout.
 - Use one branch per worktree so feature changes stay isolated and reviewable.
 - Keep PRs focused. If the repo already has unrelated local changes, do not mix them into your branch.
