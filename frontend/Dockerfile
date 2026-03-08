@@ -11,6 +11,9 @@ COPY . .
 ARG VITE_POSTHOG_KEY=""
 ENV VITE_POSTHOG_KEY=$VITE_POSTHOG_KEY
 
+ARG VITE_API_URL=""
+ENV VITE_API_URL=$VITE_API_URL
+
 RUN npm run build
 
 # ── Stage 2: Serve with nginx ──────────────────────────

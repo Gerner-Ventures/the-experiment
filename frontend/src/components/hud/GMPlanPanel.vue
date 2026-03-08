@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Drawer, Button, Tag, Space, Typography, Descriptions } from 'ant-design-vue'
+import { ref } from 'vue'
+import { Drawer, Button, Tag, Space, Collapse } from 'ant-design-vue'
 import { CheckOutlined } from '@ant-design/icons-vue'
 import type { GMPlan } from '@/types/gm'
 import { useLocale } from '@/locales'
@@ -16,14 +17,24 @@ const emit = defineEmits<{
   close: []
 }>()
 
+const reasoningOpen = ref<string[]>([])
+
+const VALID_SEVERITIES: readonly string[] = ['low', 'medium', 'high', 'critical']
+
 function severityColor(severity: string): string {
-  switch (severity) {
-    case 'low': return 'green'
-    case 'medium': return 'gold'
-    case 'high': return 'orange'
-    case 'critical': return 'red'
-    default: return 'default'
-  }
+  const key = VALID_SEVERITIES.includes(severity) ? severity : 'critical'
+  return `var(--color-threat-${key})`
+}
+
+const RESOURCE_COLORS: Record<string, string> = {
+  food: 'var(--color-food)',
+  water: 'var(--color-water)',
+  materials: 'var(--color-materials)',
+  power: 'var(--color-power)',
+}
+
+function resourceColor(key: string): string {
+  return RESOURCE_COLORS[key] ?? 'var(--ant-color-text)'
 }
 </script>
 
@@ -37,61 +48,88 @@ function severityColor(severity: string): string {
     @close="emit('close')"
   >
     <template v-if="plan">
-      <div class="space-y-4">
+      <div class="flex flex-col gap-5">
         <!-- Theme -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase">{{ locale.gm.theme }}</Typography.Text>
-          <Typography.Title :level="4" class="!mt-1 !mb-0">{{ plan.roundTheme }}</Typography.Title>
+        <div class="flex flex-col gap-1.5">
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.theme }}</div>
+          <div class="font-display text-xl font-semibold text-[var(--ant-color-text)]">{{ plan.roundTheme }}</div>
         </div>
 
         <!-- Crisis Event -->
-        <div class="p-3 rounded-lg border border-white/[0.08] bg-white/[0.02]">
-          <div class="flex items-center gap-2 mb-2">
-            <Typography.Text class="!text-white/40 font-mono !text-xs uppercase">{{ locale.gm.crisis }}</Typography.Text>
-            <Tag :color="severityColor(plan.crisisEvent.severity)">
-              {{ plan.crisisEvent.severity.toUpperCase() }}
+        <div
+          class="rounded-lg border border-[var(--ant-color-border)] border-l-[3px] bg-white/[0.03] p-4"
+          :style="{ borderLeftColor: severityColor(plan.crisisEvent.severity) }"
+        >
+          <div class="mb-1 font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.crisis }}</div>
+          <div class="mb-2.5 flex items-center gap-2">
+            <Tag
+              :style="{
+                background: severityColor(plan.crisisEvent.severity),
+                color: 'var(--color-void)',
+                border: 'none',
+                fontWeight: 700,
+                fontSize: '12px',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }"
+            >
+              {{ plan.crisisEvent.severity }}
             </Tag>
-            <Tag>{{ plan.crisisEvent.type }}</Tag>
+            <Tag class="capitalize">{{ plan.crisisEvent.type }}</Tag>
           </div>
-          <Typography.Paragraph class="!mb-0 !text-white/70">
-            {{ plan.crisisEvent.description }}
-          </Typography.Paragraph>
+          <div class="text-[var(--ant-color-text)] leading-relaxed">{{ plan.crisisEvent.description }}</div>
         </div>
 
         <!-- Resource Modifiers -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.resourceModifiers }}</Typography.Text>
-          <Descriptions :column="2" size="small" bordered>
-            <Descriptions.Item v-for="(val, key) in plan.resourceModifiers" :key="key" :label="String(key)">
-              <span :class="(val as number) < 0 ? 'text-red-400' : 'text-green-400'">
+        <div v-if="Object.keys(plan.resourceModifiers).length" class="flex flex-col gap-1.5">
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.resourceModifiers }}</div>
+          <div class="grid grid-cols-2 gap-2">
+            <div
+              v-for="(val, key) in plan.resourceModifiers"
+              :key="key"
+              class="flex items-center justify-between rounded-md border border-[var(--ant-color-border)] bg-white/[0.03] px-3 py-2"
+            >
+              <span class="font-mono text-xs font-medium capitalize" :style="{ color: resourceColor(String(key)) }">
+                {{ String(key) }}
+              </span>
+              <span
+                class="font-mono text-sm font-bold"
+                :style="{
+                  color: (val as number) < 0
+                    ? 'var(--ant-color-error)'
+                    : (val as number) > 0
+                      ? 'var(--ant-color-success)'
+                      : 'var(--ant-color-text-secondary)',
+                }"
+              >
                 {{ (val as number) > 0 ? '+' : '' }}{{ val }}
               </span>
-            </Descriptions.Item>
-          </Descriptions>
+            </div>
+          </div>
         </div>
 
-        <!-- Narration Preview -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.narration }}</Typography.Text>
-          <Typography.Paragraph class="!text-white/60 italic">
+        <!-- Narration -->
+        <div class="flex flex-col gap-1.5">
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.narration }}</div>
+          <blockquote class="m-0 border-l-2 border-[var(--ant-color-border)] py-3 pl-4 italic leading-relaxed text-[var(--ant-color-text-secondary)]">
             "{{ plan.narration }}"
-          </Typography.Paragraph>
+          </blockquote>
         </div>
 
-        <!-- Reasoning -->
-        <div>
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.reasoning }}</Typography.Text>
-          <Typography.Paragraph class="!text-white/50 !text-sm">
-            {{ plan.reasoning }}
-          </Typography.Paragraph>
-        </div>
+        <!-- Reasoning (collapsible) -->
+        <Collapse v-model:activeKey="reasoningOpen" ghost>
+          <Collapse.Panel key="reasoning" :header="locale.gm.reasoning">
+            <p class="m-0 text-[13px] leading-normal text-[var(--ant-color-text-tertiary)]">{{ plan.reasoning }}</p>
+          </Collapse.Panel>
+        </Collapse>
 
-        <!-- Meta hint -->
-        <div v-if="plan.metaHint">
-          <Typography.Text class="!text-white/40 font-mono !text-xs uppercase block mb-1">{{ locale.gm.metaHint }}</Typography.Text>
-          <Typography.Paragraph class="!text-accent/60 !text-sm italic">
-            {{ plan.metaHint }}
-          </Typography.Paragraph>
+        <!-- Meta Hint -->
+        <div
+          v-if="plan.metaHint"
+          class="rounded-lg border border-accent/20 bg-accent/[0.04] p-3"
+        >
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.metaHint }}</div>
+          <p class="m-0 mt-1.5 text-[13px] italic leading-normal text-accent-dim">{{ plan.metaHint }}</p>
         </div>
       </div>
     </template>
@@ -99,7 +137,7 @@ function severityColor(severity: string): string {
     <template #footer>
       <Space class="w-full justify-end">
         <Button @click="emit('close')">{{ locale.gm.dismiss }}</Button>
-        <Button type="primary" @click="emit('approve')">
+        <Button type="primary" size="large" @click="emit('approve')">
           <template #icon><CheckOutlined /></template>
           {{ locale.gm.approve }}
         </Button>
