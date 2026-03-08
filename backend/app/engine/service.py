@@ -128,7 +128,7 @@ class SimulationEngine:
 
         trace = lf.trace(
             name=f"round-{round_number}",
-            session_id=state.experiment_id,
+            session_id=state.experiment_id or None,
             input={
                 "round": round_number,
                 "arc": state.arc.name,

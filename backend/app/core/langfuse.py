@@ -38,7 +38,7 @@ def shutdown() -> None:
         _client = None
 
 
-def trace(*, name: str, session_id: str, **kwargs: Any) -> Any:
+def trace(*, name: str, session_id: str | None = None, **kwargs: Any) -> Any:
     if _client is None:
         return None
     try:

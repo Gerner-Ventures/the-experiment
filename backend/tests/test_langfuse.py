@@ -533,7 +533,6 @@ class TestRepairAndStatusMetadata:
     @pytest.mark.asyncio
     async def test_repair_attempt_logged_as_span_event(self) -> None:
         """When JSON repair occurs, a span event should be recorded."""
-        import json
         from app.core.langfuse import set_trace_context, _trace_context
 
         calls: list[dict[str, object]] = []
@@ -545,29 +544,7 @@ class TestRepairAndStatusMetadata:
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
 
-        class FakeResponse:
-            def __init__(self, content: str) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
-                self.usage = type(
-                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        good_json = json.dumps(
-            {
-                "inner_thought": "ok",
-                "suspicion": None,
-                "action": {"type": "observe", "target": "well", "location": "well"},
-                "dialogue": None,
-                "goal_progress": "none",
-                "cooperation_intent": "medium",
-            }
-        )
-
-        class FakeRouter:
+        class RepairFakeRouter:
             def __init__(self) -> None:
                 self.call_count = 0
 
@@ -575,10 +552,10 @@ class TestRepairAndStatusMetadata:
                 self.call_count += 1
                 if self.call_count == 1:
                     return FakeResponse("not-valid-json")
-                return FakeResponse(good_json)
+                return FakeResponse()
 
         client = LLMClient()
-        client.router = FakeRouter()  # type: ignore[assignment]
+        client.router = RepairFakeRouter()  # type: ignore[assignment]
         token = set_trace_context(trace_id="t-1", span_id="s-1")
         try:
             with patch("app.llm.client.log_event", side_effect=mock_log_event):
