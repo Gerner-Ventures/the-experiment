@@ -38,7 +38,9 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
-                generation_name=str(gn) if (gn := (metadata or {}).get("generation_name")) else None,
+                generation_name=str(gn)
+                if (gn := (metadata or {}).get("generation_name"))
+                else None,
             )
         )
 
@@ -57,7 +59,9 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
-                generation_name=str(gn) if (gn := (metadata or {}).get("generation_name")) else None,
+                generation_name=str(gn)
+                if (gn := (metadata or {}).get("generation_name"))
+                else None,
             )
         )
 
