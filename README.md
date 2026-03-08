@@ -73,6 +73,13 @@ To enable local Ruff autofixes before each commit, run `pre-commit install`.
 - ReDoc: http://localhost:8000/redoc
 - Backend guide: [docs/BACKEND.md](docs/BACKEND.md)
 
+## Codex Skills
+
+This repo includes in-repo Codex skills under `.codex/skills/`.
+
+- Use `$backend` for backend-only implementation and review work.
+- Use `$pr-review <number>` to review a GitHub pull request and submit the actual review on GitHub.
+
 ### Headless Backend Simulation
 
 You can run the backend round loop without starting the backend stack:
