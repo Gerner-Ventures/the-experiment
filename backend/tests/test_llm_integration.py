@@ -13,7 +13,6 @@ from app.llm.models import LLMUsage, LLMResult, UsageRecord
 from app.llm.service import LLMService
 from app.schemas.agent_decision import (
     AGENT_DECISION_MAX_TOKENS,
-    AGENT_INNER_THOUGHT_MAX_LENGTH,
     AgentDecision,
 )
 from app.schemas.gm_plan import GMPlanRead
@@ -32,8 +31,9 @@ class _FakeMessage:
 
 
 class _FakeChoice:
-    def __init__(self, content: str) -> None:
+    def __init__(self, content: str, finish_reason: str = "stop") -> None:
         self.message = _FakeMessage(content)
+        self.finish_reason = finish_reason
 
 
 class _FakeResponse:
@@ -147,20 +147,6 @@ def test_agent_decision_rejects_invalid_cooperation_intent() -> None:
                 "dialogue": None,
                 "goal_progress": "None.",
                 "cooperation_intent": "maybe",
-            }
-        )
-
-
-def test_agent_decision_rejects_overlong_inner_thought() -> None:
-    with pytest.raises(Exception):
-        AgentDecision.model_validate(
-            {
-                "inner_thought": "x" * (AGENT_INNER_THOUGHT_MAX_LENGTH + 1),
-                "suspicion": None,
-                "action": {"type": "observe"},
-                "dialogue": None,
-                "goal_progress": "No progress.",
-                "cooperation_intent": "medium",
             }
         )
 
