@@ -64,7 +64,11 @@ make dev-detached
 make migrate
 ```
 
-To enable local Ruff autofixes before each commit, run `pre-commit install`.
+To enable local hooks, run `pre-commit install`.
+
+- the `pre-commit` hook runs local Ruff autofixes/checks on staged backend Python files
+- the `pre-push` hook runs backend-wide `ruff format --check`, `mypy`, and `pytest`
+- `pre-commit install` will install both hook types by default from the checked-in config
 
 - Frontend: http://localhost:5173
 - Backend API: http://localhost:8000/api
