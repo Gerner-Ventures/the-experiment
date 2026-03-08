@@ -53,6 +53,26 @@ def build_prompt_package(context: GMPlanningContext) -> PromptPackage:
     )
 
 
+def build_revision_prompt_package(
+    context: GMPlanningContext,
+    current_plan: GMPlanData,
+    feedback: str,
+) -> PromptPackage:
+    base = build_prompt_package(context)
+    user_prompt = (
+        f"{base.user_prompt}\n"
+        f"Current draft plan: {current_plan.model_dump(mode='json')}\n"
+        f"User feedback: {feedback}\n"
+        f"Revise the entire GM plan coherently in response to the feedback, not just the narration. "
+        f"Preserve round={current_plan.round} exactly. Keep the result fully consistent with the planning context."
+    )
+    return PromptPackage(
+        system_prompt=base.system_prompt,
+        user_prompt=user_prompt,
+        response_schema=base.response_schema,
+    )
+
+
 def generate_rule_based_plan(context: GMPlanningContext) -> GMPlanData:
     act = get_current_act(context.arc, context.round_number)
     severity = choose_severity(context, act)

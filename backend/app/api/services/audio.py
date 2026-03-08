@@ -272,7 +272,7 @@ class RuntimeAudioService:
         experiment_id: str,
         gm_plan: GMPlanRecord | None,
     ) -> None:
-        if gm_plan is None or gm_plan.status != "applied" or not gm_plan.plan.narration.strip():
+        if gm_plan is None or not gm_plan.plan.narration.strip():
             return
         request = await self._narration_audio_request(
             experiment_id,
@@ -309,7 +309,7 @@ class RuntimeAudioService:
     ) -> None:
         if self.tts_service is None or not self.tts_service.configured:
             return
-        if gm_plan.status != "applied" or not gm_plan.plan.narration.strip():
+        if not gm_plan.plan.narration.strip():
             return
         request = await self._narration_audio_request(
             experiment_id,
@@ -450,7 +450,6 @@ class RuntimeAudioService:
         current_plan = resolved_state.gm_plan
         if (
             current_plan is not None
-            and current_plan.status == "applied"
             and current_plan.plan.round == round_number
             and current_plan.plan.narration.strip()
         ):
