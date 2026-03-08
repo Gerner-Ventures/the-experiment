@@ -6,11 +6,16 @@ from typing import Any, cast
 import litellm
 from pydantic import BaseModel, ValidationError
 
+import structlog
+
 from app.core.config import get_settings
+from app.core import posthog as ph
 from app.core.langfuse import get_trace_context, log_event
 from app.llm.config import get_default_model_configs
 from app.llm.models import LLMModelConfig, LLMRequest, LLMResult, LLMUsage, RepairAttempt
 from app.llm.tracker import UsageTracker
+
+log = structlog.get_logger(__name__)
 
 
 class LLMClient:
@@ -90,6 +95,20 @@ class LLMClient:
                 if repaired is not None:
                     result = repaired
                 else:
+                    log.error(
+                        "llm_structured_parse_failed",
+                        role=request.role,
+                        model=result.model,
+                        experiment_id=request.metadata.get("experiment_id"),
+                    )
+                    ph.capture(
+                        "llm_parse_failure",
+                        {
+                            "role": request.role,
+                            "model": result.model,
+                            "experiment_id": request.metadata.get("experiment_id"),
+                        },
+                    )
                     raise ValueError(
                         f"model response did not match expected structured format. "
                         f"Raw content: {result.content[:300]}"
