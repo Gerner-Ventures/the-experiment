@@ -47,19 +47,19 @@ function resourceColor(key: string): string {
     @close="emit('close')"
   >
     <template v-if="plan">
-      <div class="gm-panel">
+      <div class="flex flex-col gap-5">
         <!-- Theme -->
-        <div class="gm-section">
-          <div class="gm-label">{{ locale.gm.theme }}</div>
-          <div class="gm-theme-title">{{ plan.roundTheme }}</div>
+        <div class="flex flex-col gap-1.5">
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.theme }}</div>
+          <div class="font-display text-xl font-semibold text-[var(--ant-color-text)]">{{ plan.roundTheme }}</div>
         </div>
 
         <!-- Crisis Event -->
         <div
-          class="gm-crisis-card"
+          class="rounded-lg border border-[var(--ant-color-border)] border-l-3 bg-white/[0.03] p-4"
           :style="{ borderLeftColor: severityColor(plan.crisisEvent.severity) }"
         >
-          <div class="gm-crisis-header">
+          <div class="mb-2.5 flex items-center gap-2">
             <Tag
               :style="{
                 background: severityColor(plan.crisisEvent.severity),
@@ -73,26 +73,26 @@ function resourceColor(key: string): string {
             >
               {{ plan.crisisEvent.severity }}
             </Tag>
-            <Tag class="gm-type-tag">{{ plan.crisisEvent.type }}</Tag>
+            <Tag class="capitalize">{{ plan.crisisEvent.type }}</Tag>
           </div>
-          <div class="gm-crisis-label">{{ locale.gm.crisis }}</div>
-          <div class="gm-crisis-description">{{ plan.crisisEvent.description }}</div>
+          <div class="mb-1 font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.crisis }}</div>
+          <div class="text-[var(--ant-color-text)] leading-relaxed">{{ plan.crisisEvent.description }}</div>
         </div>
 
         <!-- Resource Modifiers -->
-        <div class="gm-section">
-          <div class="gm-label">{{ locale.gm.resourceModifiers }}</div>
-          <div class="gm-resource-grid">
+        <div class="flex flex-col gap-1.5">
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.resourceModifiers }}</div>
+          <div class="grid grid-cols-2 gap-2">
             <div
               v-for="(val, key) in plan.resourceModifiers"
               :key="key"
-              class="gm-resource-item"
+              class="flex items-center justify-between rounded-md border border-[var(--ant-color-border)] bg-white/[0.03] px-3 py-2"
             >
-              <span class="gm-resource-name" :style="{ color: resourceColor(String(key)) }">
+              <span class="font-mono text-xs font-medium capitalize" :style="{ color: resourceColor(String(key)) }">
                 {{ String(key) }}
               </span>
               <span
-                class="gm-resource-value"
+                class="font-mono text-sm font-bold"
                 :style="{
                   color: (val as number) < 0
                     ? 'var(--ant-color-error)'
@@ -106,9 +106,9 @@ function resourceColor(key: string): string {
         </div>
 
         <!-- Narration -->
-        <div class="gm-section">
-          <div class="gm-label">{{ locale.gm.narration }}</div>
-          <blockquote class="gm-narration">
+        <div class="flex flex-col gap-1.5">
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.narration }}</div>
+          <blockquote class="m-0 border-l-2 border-[var(--ant-color-border)] py-3 pl-4 italic leading-relaxed text-[var(--ant-color-text-secondary)]">
             "{{ plan.narration }}"
           </blockquote>
         </div>
@@ -116,14 +116,17 @@ function resourceColor(key: string): string {
         <!-- Reasoning (collapsible) -->
         <Collapse v-model:activeKey="reasoningOpen" ghost>
           <Collapse.Panel key="reasoning" :header="locale.gm.reasoning">
-            <p class="gm-reasoning">{{ plan.reasoning }}</p>
+            <p class="m-0 text-[13px] leading-normal text-[var(--ant-color-text-tertiary)]">{{ plan.reasoning }}</p>
           </Collapse.Panel>
         </Collapse>
 
         <!-- Meta Hint -->
-        <div v-if="plan.metaHint" class="gm-meta-hint">
-          <div class="gm-label">{{ locale.gm.metaHint }}</div>
-          <p class="gm-meta-hint-text">{{ plan.metaHint }}</p>
+        <div
+          v-if="plan.metaHint"
+          class="rounded-lg border border-accent/20 bg-accent/[0.04] p-3"
+        >
+          <div class="font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.metaHint }}</div>
+          <p class="m-0 mt-1.5 text-[13px] italic leading-normal text-accent-dim">{{ plan.metaHint }}</p>
         </div>
       </div>
     </template>
@@ -139,130 +142,3 @@ function resourceColor(key: string): string {
     </template>
   </Drawer>
 </template>
-
-<style scoped>
-.gm-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-
-.gm-section {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.gm-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ant-color-text-tertiary);
-}
-
-.gm-theme-title {
-  font-family: var(--font-display);
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--ant-color-text);
-}
-
-/* Crisis card */
-.gm-crisis-card {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--ant-color-border);
-  border-left: 3px solid;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-.gm-crisis-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-.gm-type-tag {
-  text-transform: capitalize;
-}
-
-.gm-crisis-label {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--ant-color-text-tertiary);
-  margin-bottom: 4px;
-}
-
-.gm-crisis-description {
-  color: var(--ant-color-text);
-  line-height: 1.6;
-}
-
-/* Resource grid */
-.gm-resource-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-
-.gm-resource-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--ant-color-border);
-  border-radius: 6px;
-}
-
-.gm-resource-name {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  text-transform: capitalize;
-  font-weight: 500;
-}
-
-.gm-resource-value {
-  font-family: var(--font-mono);
-  font-size: 14px;
-  font-weight: 700;
-}
-
-/* Narration */
-.gm-narration {
-  margin: 0;
-  padding: 12px 16px;
-  border-left: 2px solid var(--ant-color-border);
-  color: var(--ant-color-text-secondary);
-  font-style: italic;
-  line-height: 1.6;
-}
-
-/* Reasoning */
-.gm-reasoning {
-  margin: 0;
-  color: var(--ant-color-text-tertiary);
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-/* Meta hint */
-.gm-meta-hint {
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--color-accent) 20%, transparent);
-  background: color-mix(in srgb, var(--color-accent) 4%, transparent);
-}
-
-.gm-meta-hint-text {
-  margin: 0;
-  color: var(--color-accent-dim);
-  font-size: 13px;
-  font-style: italic;
-  line-height: 1.5;
-}
-</style>
