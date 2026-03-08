@@ -1,0 +1,7 @@
+interface:
+  display_name: "Address Feedback"
+  short_description: "Address PR feedback and reply on GitHub"
+  default_prompt: "Use $address-feedback followed by a PR number, for example `$address-feedback 105`, to address that pull request's review feedback and post the follow-up responses on GitHub."
+
+policy:
+  allow_implicit_invocation: false
