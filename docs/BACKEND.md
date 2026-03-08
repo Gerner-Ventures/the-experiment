@@ -3,6 +3,7 @@
 This document is the contributor-oriented map of the FastAPI backend: how it is structured, how to run it locally, which configuration matters, and where to make changes.
 
 For the external API contract, see [docs/API.md](API.md).
+For narration audio architecture and local verification, see [docs/AUDIO_NARRATION.md](AUDIO_NARRATION.md).
 For deployment and persistence details, see [docs/INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 
 ## System Map
@@ -76,7 +77,8 @@ make env
 
 Then edit `backend/.env`:
 
-- keep `DATABASE_URL` pointed at your local Postgres unless you intentionally want a remote database
+- keep `DATABASE_URL` aligned with the backend runtime you are launching outside Doppler;
+  `make migrate` itself uses the Neon branch wired through Doppler `dev`
 - add whichever LLM provider keys you plan to use
 
 ### Start the stack
@@ -86,6 +88,12 @@ make dev-detached
 make migrate
 ```
 
+If you need to bypass Neon and use the local `DATABASE_URL` from `backend/.env`, run:
+
+```bash
+make local-migrate
+```
+
 Useful commands:
 
 - `make logs-backend`
@@ -93,13 +101,14 @@ Useful commands:
 - `make test-backend`
 - `make lint-backend`
 - `make db-shell`
-- `make db-reset`
 - `make backend-run`
 - `make backend-e2e`
 
 Notes:
 
 - `docker compose up` does not run Alembic automatically in local dev, so `make migrate` is required before creating experiments.
+- `make migrate` provisions or reuses the Neon branch for the current git branch, updates Doppler
+  `dev` `DATABASE_URL`, and then runs Alembic against that branch.
 - `GET /api/health` is the only built-in health endpoint today.
 - If the backend restarts, experiment state should survive, but active WebSocket subscribers will need to reconnect.
 
@@ -125,7 +134,7 @@ Behavior:
 This is the fastest way to sanity-check that the backend round loop, derived analytics, and
 persisted event logs match your mental model before you involve the HTTP API or real persistence.
 
-### Local Postgres-Backed Backend E2E Smoke
+### Neon-Backed Backend E2E Smoke
 
 Use this workflow when you need the real FastAPI runtime path that the frontend talks to:
 
@@ -157,7 +166,8 @@ Command notes:
 - set `BACKEND_RUNTIME_MODE=smoke_mock` for the repeatable local smoke path
 - `make backend-e2e` runs `python -m app.e2e.smoke` against `http://127.0.0.1:8000` by default
 - override `BACKEND_HOST`, `BACKEND_PORT`, or `BACKEND_BASE_URL` when needed
-- migrations must be applied before the smoke client runs
+- `make migrate` prepares the Neon branch for the current git branch and applies migrations before
+  the smoke client runs
 
 Use `headless` when you only need a fast mechanics harness. Use `backend-e2e` when you need to
 validate app wiring, route/schema integration, persistence, or websocket fanout end to end.
@@ -168,7 +178,7 @@ The backend settings are defined in `backend/app/core/config.py` and sample valu
 
 | Variable | Default | Required | Purpose |
 |----------|---------|----------|---------|
-| `DATABASE_URL` | `postgresql+asyncpg://experiment:experiment@localhost:5432/experiment` | Yes | Durable experiment state, logs, GM plans, snapshots |
+| `DATABASE_URL` | `postgresql+asyncpg://experiment:experiment@localhost:5432/experiment` | Yes | Durable experiment state, logs, GM plans, snapshots; `make migrate` overrides this via Doppler `dev` for Neon-backed migrations |
 | `BACKEND_RUNTIME_MODE` | `default` | No | Runtime wiring mode: `default`, `smoke_mock`, or `smoke_live` |
 | `SMOKE_SEED` | `11` | No | Seed used for deterministic mock smoke runs |
 | `REDIS_URL` | `redis://localhost:6379/0` | No | Reserved for future ephemeral coordination and fanout |
@@ -189,6 +199,22 @@ The backend settings are defined in `backend/app/core/config.py` and sample valu
 | `LLM_MAX_RETRIES` | `2` | No | Retries before falling back |
 | `LLM_MAX_FALLBACKS` | `2` | No | Number of fallback attempts |
 | `LLM_DEFAULT_TEMPERATURE` | `0.8` | No | Default generation temperature |
+| `ELEVENLABS_API_KEY` | unset | No | Enables backend-generated narration audio |
+| `ELEVENLABS_VOICE_ID` | unset | No | Default narration voice; choose one from your ElevenLabs account |
+| `ELEVENLABS_MODEL_ID` | unset | No | Default ElevenLabs TTS model |
+| `ELEVENLABS_OUTPUT_FORMAT` | `mp3_44100_128` | No | Output codec/sample-rate/bitrate for narration audio |
+| `ELEVENLABS_TIMEOUT_SECONDS` | `8` | No | Timeout for narration audio generation |
+| `ELEVENLABS_STABILITY` | `0.6` | No | ElevenLabs stability tuning for narration |
+| `ELEVENLABS_SIMILARITY_BOOST` | `0.75` | No | ElevenLabs voice similarity tuning for narration |
+| `ELEVENLABS_STYLE` | `0.0` | No | ElevenLabs style exaggeration for narration |
+| `ELEVENLABS_SPEED` | `0.95` | No | ElevenLabs speaking rate for narration |
+
+Per-map narrator voice overrides are currently defined in code in
+`backend/app/core/config.py` via `MAP_NARRATOR_VOICE_IDS`, with fallback to
+`ELEVENLABS_VOICE_ID`.
+
+`backend/.env.example` intentionally does not include a sample `ELEVENLABS_VOICE_ID`; pick one
+explicitly from your ElevenLabs account when you enable narration audio.
 
 Provider guidance:
 

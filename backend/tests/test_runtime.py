@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
@@ -10,8 +11,11 @@ from starlette.websockets import WebSocketState
 from app.api.models import CreateExperimentRequest, EventLogItem
 from app.api.runtime import ConnectionManager, ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
+from app.core.config import Settings
 from app.engine.models import ActionResolution, RoundResult
 from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
+from app.tts import NarrationTTSService
+from app.tts.models import NarrationAudioRequest, ProviderAudioStream
 
 
 def _request() -> CreateExperimentRequest:
@@ -85,9 +89,34 @@ def _gm_plan(round_number: int) -> GMPlanRecord:
     )
 
 
+class _FakeNarrationProvider:
+    async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
+        async def iterate() -> AsyncIterator[bytes]:
+            yield b"audio"
+
+        return ProviderAudioStream(
+            content_type="audio/mpeg",
+            request_id=f"req-{request.round_number}",
+            stream=iterate(),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def runtime_instance() -> ExperimentRuntime:
-    return ExperimentRuntime(store=InMemoryExperimentStore())
+    return ExperimentRuntime(
+        store=InMemoryExperimentStore(),
+        tts_service=NarrationTTSService(
+            Settings(
+                elevenlabs_api_key="test-key",
+                elevenlabs_voice_id="voice-test",
+                elevenlabs_model_id="model-test",
+            ),
+            provider=_FakeNarrationProvider(),
+        ),
+    )
 
 
 @pytest.mark.asyncio
@@ -290,3 +319,29 @@ async def test_connection_manager_prunes_non_connected_sockets_before_sending(
     non_connected_socket.send_json.assert_not_awaited()
     assert live_socket in manager.connections["exp-1"]
     assert non_connected_socket not in manager.connections["exp-1"]
+
+
+@pytest.mark.asyncio
+async def test_approve_gm_plan_emits_audio_status(runtime_instance: ExperimentRuntime) -> None:
+    runtime_instance.connection_manager = AsyncMock()
+    state = await runtime_instance.create_experiment(_request())
+
+    applied = await runtime_instance.approve_gm_plan(state.experiment_id)
+    await asyncio.sleep(0.01)
+
+    sent_types = [
+        call.args[1]["type"]
+        for call in runtime_instance.connection_manager.broadcast.await_args_list
+    ]
+    assert applied.status == "applied"
+    assert "gm_audio_status" in sent_types
+
+
+@pytest.mark.asyncio
+async def test_broadcast_narration_audio_status_is_noop_without_tts_service() -> None:
+    runtime = ExperimentRuntime(store=InMemoryExperimentStore())
+    runtime.connection_manager = AsyncMock()
+
+    await runtime._broadcast_narration_audio_status_for_plan("exp-1", _gm_plan(1))
+
+    runtime.connection_manager.broadcast.assert_not_awaited()

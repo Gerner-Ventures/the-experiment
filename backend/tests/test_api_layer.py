@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from collections.abc import AsyncIterator
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -18,6 +19,8 @@ from app.llm import UsageTracker
 from app.llm.models import LLMUsage, UsageRecord
 from app.main import create_app
 from app.schemas.agent_decision import AgentDecision, DecisionAction
+from app.tts import NarrationAudioError, NarrationTTSService
+from app.tts.models import NarrationAudioRequest, ProviderAudioStream
 
 API_PREFIX = "/api"
 
@@ -79,6 +82,31 @@ class _ScriptedAgentService(AgentService):
         )
 
 
+class _FakeNarrationProvider:
+    def __init__(self, chunks: list[bytes] | None = None, error: Exception | None = None) -> None:
+        self._chunks = chunks or [b"audio-chunk-1", b"audio-chunk-2"]
+        self._error = error
+        self.calls = 0
+
+    async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
+        self.calls += 1
+        if self._error is not None:
+            raise self._error
+
+        async def iterate() -> AsyncIterator[bytes]:
+            for chunk in self._chunks:
+                yield chunk
+
+        return ProviderAudioStream(
+            content_type="audio/mpeg",
+            request_id=f"req-{request.round_number}",
+            stream=iterate(),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
 @pytest.fixture()
 def runtime() -> ExperimentRuntime:
     runtime, _ = build_runtime(
@@ -97,6 +125,15 @@ def runtime() -> ExperimentRuntime:
         )
     else:
         runtime.engine.gm_service.llm_service.client.tracker = gm_tracker
+    runtime.tts_service = NarrationTTSService(
+        Settings(
+            backend_runtime_mode="smoke_mock",
+            elevenlabs_api_key="test-key",
+            elevenlabs_voice_id="voice-test",
+            elevenlabs_model_id="model-test",
+        ),
+        provider=_FakeNarrationProvider(),
+    )
     return runtime
 
 
@@ -239,6 +276,7 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
         required = {
             "round_start",
             "gm_plan",
+            "gm_audio_status",
             "crisis_event",
             "agent_action",
             "resource_update",
@@ -280,6 +318,58 @@ def test_analytics_and_replay_endpoints_return_round_data(client: TestClient) ->
     assert highlights.status_code == 200
     assert highlights.json()["items"]
     assert highlights.json()["items"][0]["category"] == "crisis_event"
+
+
+def test_round_narration_metadata_and_audio_routes(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 200
+    assert metadata.json()["round_number"] == 1
+    assert metadata.json()["text"]
+    assert metadata.json()["audio_url"].endswith("/rounds/1/narration/audio")
+    assert metadata.json()["status"] in {"pending", "ready"}
+
+    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    assert audio.status_code == 200
+    assert audio.headers["content-type"].startswith("audio/mpeg")
+    assert audio.content == b"audio-chunk-1audio-chunk-2"
+
+
+def test_round_narration_requires_available_narration_text(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 409
+
+
+def test_round_narration_audio_surfaces_provider_errors(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    runtime.tts_service = NarrationTTSService(
+        Settings(
+            backend_runtime_mode="smoke_mock",
+            elevenlabs_api_key="test-key",
+            elevenlabs_voice_id="voice-test",
+            elevenlabs_model_id="model-test",
+        ),
+        provider=_FakeNarrationProvider(
+            error=NarrationAudioError(
+                "Narration audio provider is rate limited.",
+                status_code=503,
+            )
+        ),
+    )
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+
+    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    assert audio.status_code == 503
 
 
 def test_derived_round_logs_are_persisted(client: TestClient) -> None:

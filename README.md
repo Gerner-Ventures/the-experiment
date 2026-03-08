@@ -16,6 +16,7 @@ A **Layered Game Master** system controls the narrative:
 See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full game loop and mechanics.
 API usage and endpoint details live in [docs/API.md](docs/API.md).
 Backend architecture, setup, and configuration live in [docs/BACKEND.md](docs/BACKEND.md).
+Audio narration architecture lives in [docs/AUDIO_NARRATION.md](docs/AUDIO_NARRATION.md).
 Infrastructure and persistence notes live in [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
 
 ## Architecture

@@ -337,6 +337,21 @@ class RoundSnapshotResponse(APIRequestModel):
     events: list[EventLogItem] = Field(default_factory=list)
 
 
+NarrationAudioStatus = Literal["pending", "ready", "unavailable"]
+
+
+class NarrationAudioMetadata(APIRequestModel):
+    experiment_id: str
+    round_number: int
+    text: str
+    voice_id: str
+    model_id: str
+    output_format: str
+    status: NarrationAudioStatus
+    audio_url: str | None = None
+    cache_hit: bool = False
+
+
 class RelationshipAnalytics(APIRequestModel):
     items: list[RelationshipEdge] = Field(default_factory=list)
 

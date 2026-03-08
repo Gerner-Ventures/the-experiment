@@ -69,6 +69,8 @@ Important behavior:
 | `GET` | `/api/experiments/{experiment_id}/analytics/gm` | GM narration and crisis timeline by round |
 | `GET` | `/api/experiments/{experiment_id}/analytics/highlights` | High-signal events ranked from the log |
 | `GET` | `/api/experiments/{experiment_id}/replay` | Replay index with round summaries and highlights |
+| `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/narration` | Round narration text and backend audio metadata |
+| `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio` | Stream round narration audio |
 | `GET` | `/api/experiments/{experiment_id}/rounds/{round_number}/snapshot` | World snapshot and per-round events |
 | `GET` | `/api/experiments/{experiment_id}/usage` | Aggregated LLM usage by role, model, agent, and round |
 | `GET` | `/api/experiments/{experiment_id}/usage/traces` | Paginated prompt-level usage traces |
@@ -297,6 +299,7 @@ Connection semantics:
 | `connected` | `{ "experiment_id": "<id>" }` |
 | `round_start` | `{ "theme": "<round theme>" }` |
 | `gm_plan` | Full `GMPlanRecord` payload |
+| `gm_audio_status` | `{ "status": "pending|ready|error", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
 | `agent_action` | `{ "agent_id", "action", "cooperation_intent", "goal_progress" }` |
@@ -336,7 +339,10 @@ Analytics persistence notes:
 
 - Unknown experiments return `404 Experiment not found`.
 - Unknown agents return `404 Agent not found`.
+- Unknown rounds return `404 Round not found`.
 - Missing round snapshots return `404 Round snapshot not found`.
+- Round narration that has not been approved or persisted yet returns `409 Narration is not available for this round yet.`.
+- Unconfigured ElevenLabs audio returns `503 Narration audio is not configured.`.
 - Invalid query/body payloads return FastAPI `422 Unprocessable Entity` responses.
 
 ## Notes
