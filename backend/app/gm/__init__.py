@@ -9,6 +9,7 @@ from app.gm.models import (
     GMPlanningContext,
     PromptPackage,
 )
+from app.gm.mock_service import RuleBasedGMService
 from app.gm.planner import build_prompt_package, generate_rule_based_plan
 from app.gm.presets import get_preset_arc, list_preset_arcs
 from app.gm.service import GMService
@@ -23,6 +24,7 @@ __all__ = [
     "GMPlanningContext",
     "GMService",
     "PromptPackage",
+    "RuleBasedGMService",
     "build_prompt_package",
     "generate_rule_based_plan",
     "get_current_act",

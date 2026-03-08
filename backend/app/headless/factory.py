@@ -8,8 +8,7 @@ from app.api.runtime import ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
 from app.core.config import get_settings
 from app.engine import SimulationEngine
-from app.gm import GMPlanningContext, GMService, generate_rule_based_plan
-from app.gm.models import GMPlanRecord
+from app.gm import GMService, RuleBasedGMService
 from app.headless.models import HeadlessMode
 from app.llm.config import get_default_model_configs
 
@@ -18,18 +17,6 @@ PROVIDER_ENV_VARS = {
     "google": "GOOGLE_API_KEY",
     "openai": "OPENAI_API_KEY",
 }
-
-
-class RuleBasedGMService(GMService):
-    def __init__(self) -> None:
-        # Mock headless runs should never touch live LLM clients.
-        pass
-
-    async def generate_plan(self, context: GMPlanningContext) -> GMPlanRecord:
-        record = GMPlanRecord(plan=generate_rule_based_plan(context))
-        if context.auto_approve:
-            return self.apply_plan(self.approve_plan(record))
-        return record
 
 
 def build_headless_runtime(*, mode: HeadlessMode, seed: int) -> ExperimentRuntime:

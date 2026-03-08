@@ -48,3 +48,5 @@ def test_docs_and_openapi_endpoints_are_available() -> None:
     )
     assert body["paths"]["/api/health"]["get"]["summary"] == "Liveness check"
     assert body["paths"]["/api/health/ready"]["get"]["summary"] == "Readiness check"
+    assert body["paths"]["/api/runtime/llm-mode"]["get"]["summary"] == "Get backend LLM mode"
+    assert body["paths"]["/api/runtime/llm-mode"]["put"]["summary"] == "Set backend LLM mode"

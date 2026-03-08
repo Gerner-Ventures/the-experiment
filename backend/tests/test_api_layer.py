@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from app.agents.mock_brain import MockAgentBrain
 from app.agents.models import AgentTurnResult
 from app.agents.service import AgentService
 from app.api.models import EventLogItem
@@ -19,6 +20,7 @@ from app.api.runtime import ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
 from app.core.config import Settings
 from app.core.runtime_factory import build_runtime
+from app.gm import RuleBasedGMService
 from app.llm import UsageTracker
 from app.llm.models import LLMUsage, UsageRecord
 from app.main import create_app
@@ -220,6 +222,31 @@ def test_create_get_and_step_experiment_flow(client: TestClient) -> None:
     assert stepped.json()["status"] == "step_started"
     assert stepped.json()["round_number"] == 1
     assert stepped.json()["experiment_id"] == experiment_id
+
+
+def test_runtime_llm_mode_routes_toggle_process_local_mock_mode() -> None:
+    runtime, _ = build_runtime(
+        Settings(backend_runtime_mode="default"),
+        store=InMemoryExperimentStore(),
+    )
+    app = create_app(runtime=runtime)
+
+    with TestClient(app) as test_client:
+        initial = test_client.get(f"{API_PREFIX}/runtime/llm-mode")
+        assert initial.status_code == 200
+        assert initial.json() == {"mode": "live", "llm_calls_enabled": True}
+
+        switched = test_client.put(f"{API_PREFIX}/runtime/llm-mode", json={"mode": "mock"})
+        assert switched.status_code == 200
+        assert switched.json() == {"mode": "mock", "llm_calls_enabled": False}
+        assert isinstance(runtime.gm_service, RuleBasedGMService)
+        assert isinstance(runtime.engine.agent_service.brain, MockAgentBrain)
+
+        restored = test_client.put(f"{API_PREFIX}/runtime/llm-mode", json={"mode": "live"})
+        assert restored.status_code == 200
+        assert restored.json() == {"mode": "live", "llm_calls_enabled": True}
+        assert not isinstance(runtime.gm_service, RuleBasedGMService)
+        assert not isinstance(runtime.engine.agent_service.brain, MockAgentBrain)
 
 
 def test_start_and_pause_routes_update_experiment_status(client: TestClient) -> None:
