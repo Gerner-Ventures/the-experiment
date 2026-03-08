@@ -15,8 +15,8 @@ GM_NARRATION_MAX_WORDS = 45
 
 
 def _normalize_narration(text: str) -> str:
-    normalized = " ".join(text.split())
-    words = normalized.split()
+    words = text.split()
+    normalized = " ".join(words)
     if len(words) <= GM_NARRATION_MAX_WORDS:
         return normalized
 

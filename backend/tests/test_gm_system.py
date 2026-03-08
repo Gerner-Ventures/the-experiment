@@ -19,6 +19,24 @@ from app.llm.models import LLMResult
 from app.world import build_default_world_state
 
 
+def _plan_with_narration(narration: str) -> GMPlanData:
+    return GMPlanData.model_validate(
+        {
+            "round": 1,
+            "round_theme": "The Town Hears Itself Breathe",
+            "reasoning": "Keep the opener tight.",
+            "crisis_event": {
+                "type": "social",
+                "description": "A hush falls over the square.",
+                "affects": ["town_square"],
+                "severity": "low",
+            },
+            "resource_modifiers": {"food": 0, "water": 0, "materials": 0, "power": 0},
+            "narration": narration,
+        }
+    )
+
+
 def _context(round_number: int, auto_approve: bool = False) -> GMPlanningContext:
     return GMPlanningContext(
         round_number=round_number,
@@ -75,24 +93,34 @@ def test_rule_based_plan_pushes_drama_even_when_calm() -> None:
 def test_gm_plan_data_caps_narration_to_short_spoken_length() -> None:
     long_narration = " ".join(f"word{i}" for i in range(GM_NARRATION_MAX_WORDS + 8))
 
-    plan = GMPlanData.model_validate(
-        {
-            "round": 1,
-            "round_theme": "The Town Hears Itself Breathe",
-            "reasoning": "Keep the opener tight.",
-            "crisis_event": {
-                "type": "social",
-                "description": "A hush falls over the square.",
-                "affects": ["town_square"],
-                "severity": "low",
-            },
-            "resource_modifiers": {"food": 0, "water": 0, "materials": 0, "power": 0},
-            "narration": long_narration,
-        }
-    )
+    plan = _plan_with_narration(long_narration)
 
     assert len(plan.narration.split()) == GM_NARRATION_MAX_WORDS
     assert plan.narration.endswith("...")
+
+
+def test_gm_plan_data_strips_trailing_comma_before_appending_ellipsis() -> None:
+    words = [f"word{i}" for i in range(GM_NARRATION_MAX_WORDS - 1)]
+    words.append(f"word{GM_NARRATION_MAX_WORDS - 1},")
+    words.extend(["after", "that"])
+
+    plan = _plan_with_narration(" ".join(words))
+
+    assert len(plan.narration.split()) == GM_NARRATION_MAX_WORDS
+    assert not plan.narration.endswith(",...")
+    assert plan.narration.endswith("...")
+
+
+def test_gm_plan_data_preserves_terminal_period_without_ellipsis() -> None:
+    words = [f"word{i}" for i in range(GM_NARRATION_MAX_WORDS - 1)]
+    words.append(f"word{GM_NARRATION_MAX_WORDS - 1}.")
+    words.extend(["after", "that"])
+
+    plan = _plan_with_narration(" ".join(words))
+
+    assert len(plan.narration.split()) == GM_NARRATION_MAX_WORDS
+    assert plan.narration.endswith(".")
+    assert not plan.narration.endswith("...")
 
 
 class _StubLLMService(LLMService):
