@@ -5,6 +5,7 @@ import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
 import { useUIStore } from '@/stores/ui'
+import { useTurnStore } from '@/stores/turn'
 import type { WSMessage } from '@/types/websocket'
 
 /** Helper to create a WSMessage with minimal required fields */
@@ -216,35 +217,28 @@ describe('agentStore', () => {
   })
 
   describe('onAction', () => {
-    it('sets agent status based on action type', () => {
+    it('enqueues a turn in the turn store', () => {
       const store = useAgentStore()
+      const turnStore = useTurnStore()
       store.setAgents(sampleAgents)
-      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: 'talk', summary: 'chatting' } }))
-      expect(store.getAgent('a1')!.status).toBe('talking')
+      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', agent_name: 'Alice', action: 'talk', summary: 'chatting' } }))
+      // First turn is immediately active (not in queue)
+      expect(turnStore.activeTurn).not.toBeNull()
+      expect(turnStore.activeTurn.agentName).toBe('Alice')
+      expect(turnStore.activeTurn.actionType).toBe('talk')
     })
 
-    it('maps gather to working', () => {
+    it('enqueues with target location when action includes one', () => {
       const store = useAgentStore()
+      const turnStore = useTurnStore()
       store.setAgents(sampleAgents)
-      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: 'gather', summary: '' } }))
-      expect(store.getAgent('a1')!.status).toBe('working')
+      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'gather', location: 'farm' }, summary: '' } }))
+      expect(turnStore.activeTurn).not.toBeNull()
+      expect(turnStore.activeTurn.actionType).toBe('gather')
+      expect(turnStore.activeTurn.targetLocation).toBe('farm')
     })
 
-    it('maps sabotage to sneaking', () => {
-      const store = useAgentStore()
-      store.setAgents(sampleAgents)
-      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: 'sabotage', summary: '' } }))
-      expect(store.getAgent('a1')!.status).toBe('sneaking')
-    })
-
-    it('defaults unknown actions to idle', () => {
-      const store = useAgentStore()
-      store.setAgents(sampleAgents)
-      store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: 'unknown_thing', summary: '' } }))
-      expect(store.getAgent('a1')!.status).toBe('idle')
-    })
-
-    it('does nothing for unknown agent_id', () => {
+    it('does not throw for unknown agent_id', () => {
       const store = useAgentStore()
       store.setAgents(sampleAgents)
       // Should not throw
@@ -808,6 +802,14 @@ describe('uiStore', () => {
       store.setPanel('log')
       store.togglePanel('meeting')
       expect(store.activePanel).toBe('meeting')
+    })
+
+    it('opens and closes relationship-web panel', () => {
+      const store = useUIStore()
+      store.togglePanel('relationship-web')
+      expect(store.activePanel).toBe('relationship-web')
+      store.togglePanel('relationship-web')
+      expect(store.activePanel).toBe('none')
     })
   })
 

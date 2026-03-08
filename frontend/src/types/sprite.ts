@@ -48,57 +48,6 @@ export type SpriteAnimation =
   | 'injured'
   | 'sneak'
 
-/** Maps game action types to sprite animations */
-export const ACTION_TO_ANIMATION: Record<string, SpriteAnimation> = {
-  // Cooperative
-  move: 'walk',
-  gather: 'gather',
-  repair: 'build',
-  trade: 'talk',
-  talk: 'talk',
-  vote: 'talk',
-  rest: 'idle',
-  observe: 'think',
-  heal: 'heal',
-
-  // Selfish
-  hoard: 'sneak',
-  sabotage: 'sneak',
-  explore: 'walk',
-  accuse: 'argue',
-  steal: 'sneak',
-  scheme: 'think',
-
-  // Aggressive
-  attack: 'punch',
-  threaten: 'threaten',
-  stab: 'stab',
-  shoot: 'shoot',
-  poison: 'sneak',
-
-  // Social / expressive
-  dance: 'dance',
-  pray: 'pray',
-  rally: 'rally',
-  mourn: 'mourn',
-  celebrate: 'celebrate',
-  argue: 'argue',
-
-  // Biological
-  pee: 'pee',
-  poop: 'poop',
-  vomit: 'vomit',
-  sleep: 'sleep',
-  eat: 'eat',
-  drink: 'drink',
-
-  // Meta
-  investigate: 'suspicious',
-  monologue: 'monologue',
-  panic: 'panic',
-  breakdown: 'breakdown',
-}
-
 /** Sprite sheet frame definition for a single animation */
 export interface SpriteFrameDef {
   animation: SpriteAnimation

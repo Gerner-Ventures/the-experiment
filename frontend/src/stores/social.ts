@@ -38,13 +38,17 @@ export const useSocialStore = defineStore('social', () => {
       target: string
       message: string
     }
+    addConversation(data.agent_id, data.agent_name, data.message, data.target, msg.timestamp)
+  }
+
+  function addConversation(agentId: string, agentName: string, message: string, target = '', timestamp?: string) {
     conversations.value.push({
       id: ++msgCounter,
-      agentId: data.agent_id,
-      agentName: data.agent_name,
-      target: data.target,
-      message: data.message,
-      timestamp: msg.timestamp,
+      agentId,
+      agentName,
+      target,
+      message,
+      timestamp: timestamp ?? new Date().toISOString(),
     })
     if (conversations.value.length > 100) {
       conversations.value = conversations.value.slice(-100)
@@ -88,7 +92,7 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
-  // Faction, cult, and exile events — stored as events for now, UI in future tickets
+  // Faction, cult, and exile events
   const factionUpdates = ref<Array<Record<string, unknown>>>([])
   const exileEvents = ref<Array<Record<string, unknown>>>([])
 
@@ -97,7 +101,6 @@ export const useSocialStore = defineStore('social', () => {
   }
 
   function onCultActivity(msg: WSMessage) {
-    // Cult activity is a subset of faction events
     factionUpdates.value.push({ ...msg.data as Record<string, unknown>, type: 'cult_activity' })
   }
 
@@ -126,7 +129,8 @@ export const useSocialStore = defineStore('social', () => {
   return {
     conversations, meeting, recentConversations, isMeetingActive,
     factionUpdates, exileEvents,
-    onSpeak, onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
+    onSpeak, addConversation,
+    onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
     onFactionUpdate, onCultActivity, onExileVote, onExileResult,
     dismissMeeting, $reset,
   }
