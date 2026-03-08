@@ -73,6 +73,7 @@ jobs:
           # POSTHOG_KEY may be empty on first deploy before terraform apply.
           # Both frontend and backend handle an empty key gracefully (PostHog is disabled).
           POSTHOG_KEY: ${{ steps.secrets.outputs.POSTHOG_KEY }}
+          PLATFORM_URL: ${{ steps.secrets.outputs.PLATFORM_URL }}
         run: |
           REGISTRY="registry.digitalocean.com/${{ steps.secrets.outputs.DOCR_REGISTRY_NAME }}"
           TAG="sha-${GITHUB_SHA::7}"
@@ -81,7 +82,7 @@ jobs:
           docker push "${REGISTRY}/the-experiment-backend:${TAG}"
           docker push "${REGISTRY}/the-experiment-backend:latest"
 
-          docker build --build-arg VITE_POSTHOG_KEY="${POSTHOG_KEY}" -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
+          docker build --build-arg VITE_POSTHOG_KEY="${POSTHOG_KEY}" --build-arg VITE_API_URL="${PLATFORM_URL}/api" -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
           docker push "${REGISTRY}/the-experiment-frontend:${TAG}"
           docker push "${REGISTRY}/the-experiment-frontend:latest"
 
