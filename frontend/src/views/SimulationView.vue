@@ -89,6 +89,26 @@ async function initExperiment() {
     const wsUrl = api.getWebSocketUrl(detail.experiment_id)
     ws.connect(wsUrl)
 
+    // Hydrate narration state if a GM plan already exists (reconnect / refresh)
+    if (detail.gm_plan) {
+      const planData = detail.gm_plan as { plan?: Record<string, unknown>; applied?: boolean }
+      const planNarration = (planData.plan?.narration as string) ?? ''
+      if (planNarration) {
+        try {
+          const meta = await api.getRoundNarration(detail.experiment_id, detail.current_round)
+          gmStore.hydrateNarration(
+            planNarration,
+            detail.current_round,
+            meta.status === 'ready' ? 'ready' : meta.status === 'pending' ? 'pending' : 'unavailable',
+            meta.status === 'ready' ? meta.audio_url : null,
+          )
+        } catch {
+          // Backend narration endpoint unavailable — show text only
+          gmStore.hydrateNarration(planNarration, detail.current_round, 'unavailable', null)
+        }
+      }
+    }
+
     experimentCreated.value = true
     ready.value = true
   } catch (err) {
@@ -347,7 +367,12 @@ function goBack() {
     <NarrationOverlay
       :text="gmStore.narrationText"
       :visible="gmStore.showNarration"
+      :audio-status="gmStore.narrationAudioStatus"
+      :audio-url="gmStore.narrationAudioUrl"
+      :autoplay-blocked="gmStore.audioAutoplayBlocked"
       @dismiss="gmStore.dismissNarration()"
+      @update:playing="gmStore.isNarrationPlaying = $event"
+      @update:autoplay-blocked="gmStore.audioAutoplayBlocked = $event"
     />
 
     <!-- Agent Dossier Drawer -->
