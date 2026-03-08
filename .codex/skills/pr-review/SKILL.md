@@ -31,17 +31,11 @@ If the user provides the skill name without a PR number, stop and ask for the PR
 Read only the docs relevant to the changed area:
 
 - `README.md` for repo context
-- `CLAUDE.md` for repo-wide review and workflow guidance
 - `docs/BACKEND.md` for backend layout and workflows
 - `docs/GAME_RUNTIME.md` for round loop, persistence, and websocket behavior
 - `docs/API.md` and `shared/schemas/` for contract changes
 - `docs/GAME_DESIGN.md` for intentional mechanic changes
 - `docs/INFRASTRUCTURE.md` for deployment or persistence implications
-
-Also read the nearest stack-specific `CLAUDE.md` when the diff is concentrated there:
-
-- `backend/CLAUDE.md` for backend-heavy changes
-- `frontend/CLAUDE.md` for frontend-heavy changes
 
 ## Workflow
 
@@ -77,12 +71,15 @@ Every substantive finding should include:
 Recommended format inside the review body:
 
 ```text
-Blocking
-- [High] Round state is persisted before GM plan approval
+## Verdict
+**Request changes** 🚫
+
+## Blocking
+- **[High] Round state is persisted before GM plan approval**
   This can leave the experiment in an impossible partially-applied state after a restart.
 
-Non-blocking
-- [Low] Test names do not describe the failure mode
+## Non-blocking
+- **[Low] Test names do not describe the failure mode**
   Not a merge blocker, but it will make later regressions harder to diagnose.
 ```
 
@@ -98,6 +95,8 @@ Non-blocking
 - Keep the review concrete and useful.
 - Sprinkle in a little silliness where it fits naturally.
 - Do not let jokes obscure the technical point.
+- Use Markdown that renders cleanly on GitHub: short headers, bold labels, compact bullets, and short paragraphs.
+- Light emoji use is welcome when it helps scanning, not when it turns the review into a clown car.
 - If the PR introduces a truly catastrophic bug, you may be blunt and a bit mean, but still keep the review actionable and specific.
 
 ## Submission
@@ -112,8 +111,8 @@ gh pr review <number> --request-changes --body-file "$review_file"
 
 Before submitting:
 
-- Make sure the body clearly separates blocking from non-blocking findings.
-- Include the final verdict in the opening sentence.
+- Make sure the body is easy to scan on GitHub with Markdown sections such as `## Verdict`, `## Blocking`, `## Non-blocking`, and `## Checks`.
+- Include the final verdict at the top with clear wording and, if it fits, a small emoji like `✅`, `🚫`, `⚠️`, or `🧪`.
 - Mention tests/checks run when relevant.
 - Clean up the temp file after submission.
 - Do not leave the result as a local note; the review must be submitted to GitHub.
