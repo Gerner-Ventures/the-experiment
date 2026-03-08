@@ -50,7 +50,9 @@ class ElevenLabsNarrationProvider:
             self._owned_httpx_client = None
 
     async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
-        voice_settings = VoiceSettings(**request.voice_settings) if request.voice_settings else None
+        voice_settings = (
+            VoiceSettings.model_validate(request.voice_settings) if request.voice_settings else None
+        )
         stream_context = self._client.text_to_speech.with_raw_response.stream(
             request.voice_id,
             text=request.text,

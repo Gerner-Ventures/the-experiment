@@ -1325,17 +1325,18 @@ class ExperimentRuntime:
         await self._broadcast_narration_audio_status(experiment_id, request)
         if self.tts_service is None or not self.tts_service.configured:
             return
+        tts_service = self.tts_service
 
         async def _prewarm() -> None:
             try:
-                await self.tts_service.prewarm(request)
+                await tts_service.prewarm(request)
                 await self._broadcast_narration_audio_status(experiment_id, request)
             except NarrationAudioError as exc:
                 log.warning(
                     "narration_audio_prewarm_failed",
                     experiment_id=experiment_id,
                     round_number=request.round_number,
-                    narration_hash=self.tts_service.cache_key(request),
+                    narration_hash=tts_service.cache_key(request),
                     error=str(exc),
                 )
                 await self._broadcast_narration_audio_status(
