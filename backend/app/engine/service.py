@@ -862,7 +862,7 @@ class SimulationEngine:
         options = self.ACTION_CONSEQUENCE_TYPES.get(prepared.action_type)
         if not options or target is None:
             return None
-        consequence_type = cast(ConsequenceActionType, self.random.choice(options))
+        consequence_type = self.random.choice(options)
         consequence_location = target.location or location
         summary = self._consequence_summary(
             source=prepared.agent,

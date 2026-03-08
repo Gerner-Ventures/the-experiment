@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -75,7 +75,9 @@ CONSEQUENCE_ACTION_TYPES: tuple[ConsequenceActionType, ...] = (
     "crying",
     "fleeing",
 )
-ACTION_TYPES: tuple[ActionType, ...] = (*DECISION_ACTION_TYPES, *CONSEQUENCE_ACTION_TYPES)
+ACTION_TYPES: tuple[ActionType, ...] = cast(
+    tuple[ActionType, ...], (*DECISION_ACTION_TYPES, *CONSEQUENCE_ACTION_TYPES)
+)
 
 
 class AgentModel(BaseModel):
