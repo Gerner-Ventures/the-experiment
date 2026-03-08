@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { Drawer, Button, Tag, Space, Collapse } from 'ant-design-vue'
-import { CheckOutlined, DownOutlined, RightOutlined } from '@ant-design/icons-vue'
+import { CheckOutlined } from '@ant-design/icons-vue'
 import type { GMPlan } from '@/types/gm'
 import { useLocale } from '@/locales'
 
@@ -19,8 +19,11 @@ const emit = defineEmits<{
 
 const reasoningOpen = ref<string[]>([])
 
+const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical']
+
 function severityColor(severity: string): string {
-  return `var(--color-threat-${severity})`
+  const key = VALID_SEVERITIES.includes(severity) ? severity : 'low'
+  return `var(--color-threat-${key})`
 }
 
 function resourceColor(key: string): string {
@@ -60,7 +63,7 @@ function resourceColor(key: string): string {
             <Tag
               :style="{
                 background: severityColor(plan.crisisEvent.severity),
-                color: '#050507',
+                color: 'var(--color-void)',
                 border: 'none',
                 fontWeight: 700,
                 fontSize: '12px',
@@ -113,12 +116,6 @@ function resourceColor(key: string): string {
         <!-- Reasoning (collapsible) -->
         <Collapse v-model:activeKey="reasoningOpen" ghost>
           <Collapse.Panel key="reasoning" :header="locale.gm.reasoning">
-            <template #extra>
-              <component
-                :is="reasoningOpen.includes('reasoning') ? DownOutlined : RightOutlined"
-                class="gm-collapse-icon"
-              />
-            </template>
             <p class="gm-reasoning">{{ plan.reasoning }}</p>
           </Collapse.Panel>
         </Collapse>
@@ -251,11 +248,6 @@ function resourceColor(key: string): string {
   color: var(--ant-color-text-tertiary);
   font-size: 13px;
   line-height: 1.5;
-}
-
-.gm-collapse-icon {
-  color: var(--ant-color-text-tertiary);
-  font-size: 10px;
 }
 
 /* Meta hint */
