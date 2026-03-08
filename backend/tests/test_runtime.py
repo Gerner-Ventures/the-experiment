@@ -8,12 +8,21 @@ from unittest.mock import AsyncMock
 import pytest
 from starlette.websockets import WebSocketState
 
+from app.agents.models import AgentMemoryState, AgentTurnResult
 from app.api.models import CreateExperimentRequest, EventLogItem
-from app.api.runtime import ConnectionManager, ExperimentRuntime
+from app.api.runtime import ConnectionManager, ExperimentRuntime, _StreamingHook
 from app.api.store import InMemoryExperimentStore
 from app.core.config import Settings
-from app.engine.models import ActionResolution, RoundResult
+from app.engine.models import (
+    ActionResolution,
+    PhaseResult,
+    RoundEvent,
+    RoundResult,
+    SimulationState,
+)
+from app.gm import GMService
 from app.gm.models import CrisisEvent, GMPlanData, GMPlanRecord, ResourceDelta
+from app.schemas.agent_decision import AgentDecision, DecisionAction
 from app.tts import NarrationTTSService
 from app.tts.models import NarrationAudioRequest, ProviderAudioStream
 
@@ -26,6 +35,33 @@ class _CountingStore(InMemoryExperimentStore):
     async def list_logs(self, experiment_id: str) -> list[EventLogItem]:
         self.list_logs_calls += 1
         return await super().list_logs(experiment_id)
+
+
+class _TrackingStore(InMemoryExperimentStore):
+    def __init__(self) -> None:
+        super().__init__()
+        self.save_state_calls = 0
+        self.record_round_result_calls = 0
+
+    async def save_state(self, state: SimulationState) -> None:
+        self.save_state_calls += 1
+        await super().save_state(state)
+
+    async def record_round_result(self, experiment_id: str, round_result: RoundResult) -> None:
+        self.record_round_result_calls += 1
+        await super().record_round_result(experiment_id, round_result)
+
+
+class _FailingEngine:
+    def __init__(self, gm_service: GMService) -> None:
+        self.gm_service = gm_service
+
+    async def run_round(self, state, hook=None) -> RoundResult:
+        # These mutations intentionally happen before the failure so the test can
+        # verify that failed streaming rounds do not leak partial state changes.
+        state.current_round = 99
+        state.world_state.threat_level = 99
+        raise RuntimeError("streaming step exploded")
 
 
 def _request() -> CreateExperimentRequest:
@@ -99,6 +135,22 @@ def _gm_plan(round_number: int) -> GMPlanRecord:
     )
 
 
+def _agent_turn_result(*, location: str | None) -> AgentTurnResult:
+    return AgentTurnResult(
+        decision=AgentDecision(
+            inner_thought="I should move before anyone notices.",
+            suspicion=None,
+            action=DecisionAction(type="observe", location=location, target=location),
+            dialogue=None,
+            goal_progress="Holding position for now.",
+            cooperation_intent="medium",
+        ),
+        updated_memory=AgentMemoryState(),
+        suspicion_level=0,
+        prompt="test-prompt",
+    )
+
+
 class _FakeNarrationProvider:
     async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
         async def iterate() -> AsyncIterator[bytes]:
@@ -126,6 +178,132 @@ def runtime_instance() -> ExperimentRuntime:
             ),
             provider=_FakeNarrationProvider(),
         ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_step_cleans_up_after_streaming_failure_without_persisting_partial_state() -> (
+    None
+):
+    store = _TrackingStore()
+    gm_service = GMService()
+    runtime = ExperimentRuntime(
+        store=store,
+        gm_service=gm_service,
+        engine=_FailingEngine(gm_service),
+    )
+    runtime.connection_manager.broadcast = AsyncMock()
+
+    state = await runtime.create_experiment(_request().model_copy(update={"auto_approve": True}))
+    store.save_state_calls = 0
+
+    runtime.start_step(state.experiment_id)
+    assert state.experiment_id in runtime._steps_in_progress
+    task = runtime._current_tasks[state.experiment_id]
+    await task
+    await asyncio.sleep(0)
+
+    stored = await runtime.get_state(state.experiment_id)
+    logs, total = await runtime.get_log(state.experiment_id, limit=10, offset=0)
+
+    assert state.experiment_id not in runtime._steps_in_progress
+    assert state.experiment_id not in runtime._current_tasks
+    assert stored.current_round == 0
+    assert stored.status == "setup"
+    assert stored.world_state.threat_level != 99
+    assert store.save_state_calls == 0
+    assert store.record_round_result_calls == 0
+    assert total == 1
+    assert logs[0].type == "experiment_created"
+
+    assert len(runtime.connection_manager.broadcast.await_args_list) == 1
+    broadcast_call = runtime.connection_manager.broadcast.await_args_list[0]
+    assert broadcast_call.args[0] == state.experiment_id
+    assert broadcast_call.args[1]["type"] == "step_error"
+    assert broadcast_call.args[1]["round"] == 1
+    assert broadcast_call.args[1]["data"] == {"error": "Round execution failed. Check server logs."}
+
+
+@pytest.mark.asyncio
+async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
+    runtime_instance: ExperimentRuntime,
+) -> None:
+    runtime_instance.connection_manager.broadcast = AsyncMock()
+    runtime_instance._broadcast_narration_audio_status_for_plan = AsyncMock()
+
+    state = await runtime_instance.create_experiment(_request())
+    hook = _StreamingHook(experiment_id=state.experiment_id, runtime=runtime_instance)
+    phase_result = PhaseResult(
+        phase="morning",
+        events=[
+            RoundEvent(
+                phase="morning",
+                summary="The meeting begins.",
+                data={"kind": "meeting_start", "location": "town_square"},
+            ),
+            RoundEvent(
+                phase="morning",
+                summary="Mara speaks up.",
+                data={"kind": "agent_speak", "agent_id": state.agents[0].agent_id},
+            ),
+        ],
+    )
+    turn = _agent_turn_result(location="forest")
+
+    await hook.on_round_start(1, _gm_plan(1))
+    await hook.on_phase_start(1, "morning")
+    await hook.on_phase_complete(1, phase_result)
+    await hook.on_agent_action(1, "morning", state.agents[0], turn)
+
+    payloads = [
+        call.args[1] for call in runtime_instance.connection_manager.broadcast.await_args_list
+    ]
+    assert [payload["type"] for payload in payloads] == [
+        "round_start",
+        "gm_plan",
+        "crisis_event",
+        "phase_change",
+        "phase_change",
+        "meeting_start",
+        "agent_speak",
+        "agent_action",
+        "agent_move",
+    ]
+
+    round_start = payloads[0]
+    assert round_start["round"] == 1
+    assert round_start["phase"] is None
+    assert round_start["data"] == {"theme": "Test pressure"}
+
+    phase_start = payloads[3]
+    assert phase_start["phase"] == "morning"
+    assert phase_start["data"] == {"status": "starting"}
+
+    phase_complete = payloads[4]
+    assert phase_complete["phase"] == "morning"
+    assert phase_complete["data"]["events"] == [
+        event.model_dump(mode="json") for event in phase_result.events
+    ]
+
+    agent_action = payloads[7]
+    assert agent_action["phase"] == "morning"
+    assert agent_action["data"]["agent_id"] == state.agents[0].agent_id
+    assert agent_action["data"]["agent_name"] == state.agents[0].name
+    assert agent_action["data"]["action"] == turn.decision.action.model_dump(mode="json")
+    assert agent_action["data"]["inner_thought"] == turn.decision.inner_thought
+    assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
+    assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
+
+    agent_move = payloads[8]
+    assert agent_move["phase"] == "morning"
+    assert agent_move["data"] == {
+        "agent_id": state.agents[0].agent_id,
+        "location": "forest",
+    }
+
+    runtime_instance._broadcast_narration_audio_status_for_plan.assert_awaited_once_with(
+        state.experiment_id,
+        _gm_plan(1),
     )
 
 

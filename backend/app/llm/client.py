@@ -67,11 +67,14 @@ class LLMClient:
                 messages.insert(0, {"role": "system", "content": schema_instruction.strip()})
             api_response_format = {"type": "json_object"}
 
-        metadata = {
-            **request.metadata,
-            **get_trace_context(),
-            "generation_name": request.role,
-        }
+        metadata = self._build_metadata(request)
+        log.debug(
+            "langfuse_context",
+            trace_id=metadata.get("trace_id"),
+            parent_observation_id=metadata.get("parent_observation_id"),
+            generation_name=metadata.get("generation_name"),
+            has_context=bool(get_trace_context()),
+        )
         response = await self.router.acompletion(
             model=request.model_override or model_config.primary_model,
             messages=cast(Any, messages),
@@ -79,6 +82,7 @@ class LLMClient:
             temperature=request.temperature
             if request.temperature is not None
             else model_config.temperature,
+            max_tokens=request.max_tokens,
             timeout=model_config.timeout_seconds,
             metadata=metadata,
         )
@@ -118,6 +122,30 @@ class LLMClient:
 
         self._track_usage(request, result)
         return result
+
+    def _build_metadata(
+        self,
+        request: LLMRequest,
+        *,
+        generation_name_override: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Build enriched metadata for Langfuse from an LLMRequest.
+
+        Note: request.metadata may contain a "tags" key — litellm's Langfuse
+        callback reads metadata["tags"] and forwards them as generation tags.
+        """
+        metadata = {
+            **request.metadata,
+            **get_trace_context(),
+            "generation_name": generation_name_override or request.generation_name or request.role,
+            # Convert "" to None so Langfuse doesn't create a phantom empty-string session
+            "session_id": request.metadata.get("experiment_id") or None,
+            "trace_user_id": request.metadata.get("agent_name", request.role),
+        }
+        if extra:
+            metadata.update(extra)
+        return metadata
 
     def _resolve_model_config(self, request: LLMRequest) -> LLMModelConfig:
         return self.model_configs[request.role]
@@ -234,12 +262,11 @@ class LLMClient:
             messages=cast(Any, repair_messages),
             temperature=0,
             timeout=model_config.timeout_seconds,
-            metadata={
-                **request.metadata,
-                **get_trace_context(),
-                "generation_name": f"{request.role}:repair",
-                "repair_pass": True,
-            },
+            metadata=self._build_metadata(
+                request,
+                generation_name_override=f"{request.generation_name or request.role}:repair",
+                extra={"repair_pass": True},
+            ),
         )
         repaired_result = self._build_result(repair_response)
         response_format = request.response_format

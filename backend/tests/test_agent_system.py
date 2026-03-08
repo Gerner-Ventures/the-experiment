@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
-from app.agents.brain import build_agent_prompt
+from app.agents.brain import AgentBrain, build_agent_prompt
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
@@ -35,10 +36,14 @@ from app.llm.models import (
     RelationshipConsolidationDecision,
 )
 from app.llm.service import LLMService
+from app.schemas.agent_decision import AGENT_DECISION_MAX_TOKENS
 from app.world import build_default_world_state
 
 
 class _StubLLMService(LLMService):
+    def __init__(self) -> None:
+        self.last_max_tokens: int | None = None
+
     async def generate_agent_decision(
         self,
         *,
@@ -46,7 +51,10 @@ class _StubLLMService(LLMService):
         response_format: dict[str, object] | type[Any],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        generation_name: str | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResult:
+        self.last_max_tokens = max_tokens
         return LLMResult(
             model="openai/gpt-4o-mini",
             content="",
@@ -102,6 +110,9 @@ class _StubMemoryLLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryPromotionDecision:
         self.classify_calls += 1
         return self._decision
@@ -113,6 +124,9 @@ class _StubMemoryLLMService:
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         return self._consolidation
 
@@ -123,6 +137,10 @@ class _StubMemoryLLMService:
         relationship: RelationshipMemory,
         goal: SecretGoal | None,
         suspicion_level: float,
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
+        round_number: int | None = None,
     ) -> RelationshipConsolidationDecision:
         self.relationship_consolidation_calls += 1
         return self._relationship_consolidation
@@ -136,8 +154,24 @@ class _FailingMemoryConsolidationLLMService(_StubMemoryLLMService):
         goal: SecretGoal | None,
         suspicion_level: float,
         recent_key_memories: list[KeyMemory],
+        experiment_id: str | None = None,
+        agent_id: str | None = None,
+        agent_name: str | None = None,
     ) -> MemoryConsolidationDecision:
         raise RuntimeError("memory consolidation unavailable")
+
+
+class _FailingDecisionLLMService(LLMService):
+    async def generate_agent_decision(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        response_format: dict[str, object] | type[Any],
+        metadata: dict[str, object] | None = None,
+        model_override: str | None = None,
+        max_tokens: int | None = None,
+    ):
+        raise RuntimeError("llm unavailable")
 
 
 def _context() -> AgentContext:
@@ -264,6 +298,40 @@ def test_prompt_renders_plain_none_for_empty_relationships() -> None:
 
     assert "Relationships: None" in prompt
     assert "Relationships: ['None']" not in prompt
+
+
+def test_prompt_instructs_concise_inner_thoughts() -> None:
+    prompt = build_agent_prompt(_context())
+
+    assert "Keep `inner_thought` to 1-2 short sentences" in prompt
+    assert "Good `inner_thought`" in prompt
+
+
+@pytest.mark.asyncio
+async def test_decide_uses_agent_decision_token_cap() -> None:
+    service = _StubLLMService()
+    brain = AgentBrain(llm_service=service)
+
+    await brain.decide(_context())
+
+    assert service.last_max_tokens == AGENT_DECISION_MAX_TOKENS
+
+
+@pytest.mark.asyncio
+async def test_agent_brain_returns_observe_fallback_and_logs_warning_on_llm_failure() -> None:
+    brain = AgentBrain(llm_service=_FailingDecisionLLMService())
+
+    with patch("app.agents.brain.logger.warning") as warning:
+        result = await brain.decide(_context())
+
+    assert result.decision.action.type == "observe"
+    assert result.decision.action.location == "bar"
+    assert result.decision.inner_thought == "I need a moment to read the room."
+    assert result.decision.goal_progress == "No clear progress this turn."
+    assert result.decision.cooperation_intent == "medium"
+    warning.assert_called_once()
+    assert warning.call_args.kwargs["exc_info"] is True
+    assert "fallback observe action" in warning.call_args.args[0]
 
 
 @pytest.mark.asyncio

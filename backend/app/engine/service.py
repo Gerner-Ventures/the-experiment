@@ -128,11 +128,23 @@ class SimulationEngine:
 
         trace = lf.trace(
             name=f"round-{round_number}",
-            session_id=state.experiment_id,
+            session_id=state.experiment_id or None,
+            input={
+                "round": round_number,
+                "arc": state.arc.name,
+                # TODO: include current act name (spec Req 7)
+                "resources": state.world_state.resources.model_dump(),
+                "threat_level": state.world_state.threat_level,
+                "agent_count": len(state.agents),
+            },
+            tags=[
+                f"arc:{state.arc.name}",
+            ],
             metadata={
                 "experiment_id": state.experiment_id,
                 "round_number": round_number,
                 "total_rounds": state.total_rounds,
+                "status": state.status,
             },
         )
 
@@ -234,14 +246,37 @@ class SimulationEngine:
         if trace is not None:
             try:
                 trace.update(
-                    metadata={
+                    output={
                         "status": state.status,
-                        "cooperation_ratio": cooperation_ratio,
-                        "threat_level": state.world_state.threat_level,
-                    }
+                        "cooperation_ratio": round(cooperation_ratio, 3),
+                        "threat_level": round(state.world_state.threat_level, 2),
+                        "event_count": sum(
+                            len(pr.events)
+                            for pr in [
+                                gm_result,
+                                dawn_result,
+                                morning_result,
+                                midday_result,
+                                afternoon_result,
+                                night_result,
+                            ]
+                        ),
+                    },
+                    metadata={"status": state.status},
                 )
             except Exception:
                 log.warning("langfuse trace.update failed", exc_info=True)
+
+            trace_id = self._obj_id(trace)
+            if trace_id:
+                lf.record_scores(
+                    trace_id=trace_id,
+                    scores={
+                        "cooperation_ratio": round(cooperation_ratio, 3),
+                        "threat_level": round(state.world_state.threat_level, 2),
+                        # TODO: add total_cost_usd and llm_call_count scores (spec Req 5)
+                    },
+                )
         state.recent_events.extend(
             event.summary
             for phase_result in [
@@ -482,6 +517,7 @@ class SimulationEngine:
                     cooperation_ratio=cooperation_ratio,
                     trace=trace,
                     night_span=night_span,
+                    experiment_id=state.experiment_id,
                 )
                 for agent in active_agents
             ]
@@ -511,6 +547,7 @@ class SimulationEngine:
         cooperation_ratio: float,
         trace: object = None,
         night_span: object = None,
+        experiment_id: str | None = None,
     ) -> tuple[str, AgentMemoryState]:
         memory_span = lf.span(
             name=f"memory:{agent.name}",
@@ -532,16 +569,26 @@ class SimulationEngine:
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
             classify=False,
+            experiment_id=experiment_id,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
         )
         updated_memory = await self.agent_service.consolidate_memory(
             updated_memory,
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
+            experiment_id=experiment_id,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
         )
         updated_memory = await self.agent_service.consolidate_relationship_memory(
             updated_memory,
             goal=agent.goal,
             suspicion_level=agent.suspicion_level,
+            experiment_id=experiment_id,
+            agent_id=agent.agent_id,
+            agent_name=agent.name,
+            round_number=round_number,
         )
         return reflection, updated_memory
 
