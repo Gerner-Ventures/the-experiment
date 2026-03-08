@@ -101,10 +101,6 @@ export function usePixiWorld(): UsePixiWorld {
     // Camera
     camera = new CameraController(worldContainer, canvasEl, w, h)
     camera.setZoom(1.2)
-
-    // Center on map middle immediately after load
-    const center = tileToScreen(mapData.width / 2, mapData.height / 2)
-    camera.centerOn(center.x, center.y)
   }
 
   function spawnAgent(id: string, name: string, sprite: CharacterSprite, tile: { x: number; y: number }) {

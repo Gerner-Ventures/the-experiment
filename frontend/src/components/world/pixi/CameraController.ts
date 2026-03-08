@@ -44,7 +44,7 @@ export class CameraController {
       // Normalize deltaY across browsers/devices. Mouse wheel fires ~100-120px
       // per tick while trackpad fires many small events. Dividing by 100 before
       // clamping preserves per-event magnitude differences.
-      const raw = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      const raw = e.deltaMode === 2 ? e.deltaY * 400 : e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
       const normalized = Math.max(-1, Math.min(1, raw / 100))
       const factor = 1 - normalized * ZOOM_STEP
       this.setTargetZoom(this.targetZoom * factor)
@@ -83,8 +83,10 @@ export class CameraController {
     if (this.keys.has('ArrowUp') || this.keys.has('w')) this.world.y += PAN_SPEED
     if (this.keys.has('ArrowDown') || this.keys.has('s')) this.world.y -= PAN_SPEED
 
-    if (this.keys.has('=') || this.keys.has('+')) this.setTargetZoom(this.targetZoom * 1.02)
-    if (this.keys.has('-')) this.setTargetZoom(this.targetZoom * 0.98)
+    // Advance from current zoom (not target) so the target only ever leads
+    // by one step — prevents the target racing ahead while the lerp lags.
+    if (this.keys.has('=') || this.keys.has('+')) this.setTargetZoom(this.zoom * 1.02)
+    if (this.keys.has('-')) this.setTargetZoom(this.zoom * 0.98)
 
     // Lerp current zoom toward target for smooth transitions
     if (Math.abs(this.zoom - this.targetZoom) > 0.001) {
