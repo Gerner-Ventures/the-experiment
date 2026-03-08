@@ -30,8 +30,13 @@ The engine's action resolution in `backend/app/engine/service.py` already proces
   - `poisoned` — result of poison action
   - `crying` — emotional reaction to mourn, accuse, or threat
   - `fleeing` — panic response to aggressive actions
-- [ ] Mark consequence types as non-decisional (agents cannot choose these — engine generates them)
-- [ ] Update `ACTION_TYPES` tuple and `DecisionActionType` to distinguish decisions from consequences
+- [x] Mark consequence types as non-decisional (agents cannot choose these — engine generates them)
+<!-- canon:realized-in:PR#157 file:backend/app/actions/models.py -->
+<!-- canon:realized-in:PR#157 file:backend/app/actions/catalog.py -->
+- [x] Update `ACTION_TYPES` tuple and `DecisionActionType` to distinguish decisions from consequences
+<!-- canon:realized-in:PR#157 file:backend/app/agents/models.py -->
+<!-- canon:realized-in:PR#157 file:backend/app/schemas/agent_decision.py -->
+- [x] Action catalog provides `DECISION_ACTION_IDS` and `CONSEQUENCE_ACTION_IDS` partitions
 - [ ] Update `shared/schemas/agent_decision.json` with new enum values and a `consequence_types` subset
 
 ### Engine Resolution (Backend)
@@ -66,7 +71,7 @@ The engine's action resolution in `backend/app/engine/service.py` already proces
 
 ### Schema Updates
 
-- [ ] `shared/schemas/agent_decision.json` — add consequence enum values
+- [x] `shared/schemas/agent_decision.json` — add consequence enum values (via backend/app/schemas/agent_decision.py)
 - [ ] `shared/schemas/ws_message.json` — add `is_consequence` field to `agent_action` payload
 - [ ] `frontend/src/types/agent-decision.ts` — sync with schema changes
 - [ ] `backend/app/db/models.py` — consider adding `INJURED`, `POISONED` to `AgentStatus` enum
