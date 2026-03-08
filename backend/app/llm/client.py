@@ -79,7 +79,9 @@ class LLMClient:
             metadata=metadata,
         )
         result = self._build_result(response)
-        finish_reason = getattr(response.choices[0], "finish_reason", None) if response.choices else None
+        finish_reason = (
+            getattr(response.choices[0], "finish_reason", None) if response.choices else None
+        )
 
         if request.response_format is not None:
             parsed = self._parse_structured_content(result.content, request.response_format)
