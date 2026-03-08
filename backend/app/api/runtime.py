@@ -1350,6 +1350,8 @@ class ExperimentRuntime:
     async def _broadcast_narration_audio_status_for_plan(
         self, experiment_id: str, gm_plan: GMPlanRecord
     ) -> None:
+        if self.tts_service is None or not self.tts_service.configured:
+            return
         if gm_plan.status != "applied" or not gm_plan.plan.narration.strip():
             return
         request = await self._narration_audio_request(

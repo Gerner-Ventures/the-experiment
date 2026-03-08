@@ -335,3 +335,13 @@ async def test_approve_gm_plan_emits_audio_status(runtime_instance: ExperimentRu
     ]
     assert applied.status == "applied"
     assert "gm_audio_status" in sent_types
+
+
+@pytest.mark.asyncio
+async def test_broadcast_narration_audio_status_is_noop_without_tts_service() -> None:
+    runtime = ExperimentRuntime(store=InMemoryExperimentStore())
+    runtime.connection_manager = AsyncMock()
+
+    await runtime._broadcast_narration_audio_status_for_plan("exp-1", _gm_plan(1))
+
+    runtime.connection_manager.broadcast.assert_not_awaited()
