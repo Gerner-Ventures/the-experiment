@@ -14,12 +14,15 @@ playable in the live simulation UI.
 
 ## Backend Status
 
-PR #101 adds:
+Backend implementation complete (PR #101):
 
-- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
-- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
-- websocket `gm_audio_status`
-- backend-generated ElevenLabs audio streamed as `audio/mpeg`
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration` — narration metadata
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio` — audio stream
+- websocket `gm_audio_status` — readiness events
+- ElevenLabs TTS with in-memory caching
+- Per-map voice selection scaffolding
+- OS trust store for TLS
+- Full test coverage in `test_tts_service.py`
 
 Important contract note:
 
