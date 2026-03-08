@@ -10,7 +10,7 @@ import {
   CHARACTER_SPRITES,
   getSpriteById,
   type CharacterSprite,
-} from '@/config/character-sprites'
+} from '@/config/sprites'
 
 // jsdom does not support canvas getContext('2d') — mock it
 const mockCtx = {

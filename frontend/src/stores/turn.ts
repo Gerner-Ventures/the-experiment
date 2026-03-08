@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
-import { ACTION_TO_ANIMATION } from '@/types/sprite'
+import { ACTION_TO_ANIMATION } from '@/config/sprites/animations'
 import { SKIP_ACTION_PHASE } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 

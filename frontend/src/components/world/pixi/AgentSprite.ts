@@ -1,15 +1,12 @@
 import { Container, Graphics, Text, Texture, Sprite } from 'pixi.js'
 import type { CharacterSprite, PoseName } from '@/config/character-sprites'
 import { SILLY_ANIMATIONS, WALK_ANIMATION, renderSpriteToCanvas } from '@/config/character-sprites'
+import { getAnimation } from '@/config/sprites/animations'
+import type { AnimationDef } from '@/config/sprites/types'
 import { tileToScreen } from './isometric-utils'
 
 /** Tile-to-tile movement speed: higher = faster. 4 = ~0.25s per tile (Pokemon-style). */
 const MOVE_SPEED = 4
-
-/** Find a SILLY_ANIMATIONS entry by name */
-function findAnimation(name: string) {
-  return SILLY_ANIMATIONS.find(a => a.name === name) ?? null
-}
 
 export class AgentSpriteObject {
   container: Container
@@ -28,7 +25,7 @@ export class AgentSpriteObject {
   private actionTimer: ReturnType<typeof setTimeout> | null = null
   private walkTimer: ReturnType<typeof setInterval> | null = null
   private walkFrame = 0
-  private currentAnimation: typeof SILLY_ANIMATIONS[number] | null = null
+  private currentAnimation: AnimationDef | null = null
   private currentFrame = 0
   private animCompleteCallback: (() => void) | null = null
 
@@ -195,19 +192,16 @@ export class AgentSpriteObject {
   }
 
   /**
-   * Play a named animation (looks up from SILLY_ANIMATIONS by name).
+   * Play a named animation (looks up from animation registry by name).
+   * Always returns a valid animation (falls back to wave if not found).
    * Calls onComplete when the animation finishes.
    */
   playAnimationByName(animName: string, onComplete?: () => void) {
-    const anim = findAnimation(animName)
-    if (!anim) {
-      onComplete?.()
-      return
-    }
+    const anim = getAnimation(animName)
     this.playAnimation(anim, onComplete)
   }
 
-  playAnimation(anim: typeof SILLY_ANIMATIONS[number], onComplete?: () => void) {
+  playAnimation(anim: AnimationDef, onComplete?: () => void) {
     this.stopAnimation()
     this.currentAnimation = anim
     this.currentFrame = 0
