@@ -198,7 +198,7 @@ Outputs:
 - crisis event
 - resource modifiers
 - environmental flavor
-- narration
+- narration, kept brief enough for roughly 15-20 seconds of spoken delivery
 
 ### 2. Dawn
 
