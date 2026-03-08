@@ -633,6 +633,314 @@ class TestRepairAndStatusMetadata:
             lf_module.trace = original_trace  # type: ignore[assignment]
 
 
+class TestGenerationNameInMetadata:
+    @pytest.mark.asyncio
+    async def test_generation_name_used_over_role_when_provided(self) -> None:
+        """When LLMRequest has generation_name set, it should appear in metadata instead of role."""
+        import json
+        from typing import Any
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.model = "openai/gpt-4o-mini"
+                self.choices = [
+                    type("C", (), {"message": type("M", (), {"content": json.dumps({
+                        "inner_thought": "ok", "suspicion": None,
+                        "action": {"type": "observe", "target": "well", "location": "well"},
+                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
+                    })})()})()
+                ]
+                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+            def model_dump(self) -> dict[str, Any]:
+                return {}
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.last_metadata: dict[str, Any] = {}
+            async def acompletion(self, **kwargs: Any) -> FakeResponse:
+                self.last_metadata = kwargs.get("metadata", {})
+                return FakeResponse()
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="agent",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={"experiment_id": "exp-1"},
+                generation_name="agent:The Intern",
+            )
+        )
+        assert fake_router.last_metadata["generation_name"] == "agent:The Intern"
+
+    @pytest.mark.asyncio
+    async def test_generation_name_falls_back_to_role(self) -> None:
+        """When generation_name is None, metadata should use the role string."""
+        import json
+        from typing import Any
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.model = "openai/gpt-4o-mini"
+                self.choices = [
+                    type("C", (), {"message": type("M", (), {"content": json.dumps({
+                        "inner_thought": "ok", "suspicion": None,
+                        "action": {"type": "observe", "target": "well", "location": "well"},
+                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
+                    })})()})()
+                ]
+                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+            def model_dump(self) -> dict[str, Any]:
+                return {}
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.last_metadata: dict[str, Any] = {}
+            async def acompletion(self, **kwargs: Any) -> FakeResponse:
+                self.last_metadata = kwargs.get("metadata", {})
+                return FakeResponse()
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="agent",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={},
+            )
+        )
+        assert fake_router.last_metadata["generation_name"] == "agent"
+
+
+class TestSessionAndUserMetadata:
+    @pytest.mark.asyncio
+    async def test_session_id_from_experiment_id(self) -> None:
+        import json
+        from typing import Any
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.model = "openai/gpt-4o-mini"
+                self.choices = [
+                    type("C", (), {"message": type("M", (), {"content": json.dumps({
+                        "inner_thought": "ok", "suspicion": None,
+                        "action": {"type": "observe", "target": "well", "location": "well"},
+                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
+                    })})()})()
+                ]
+                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+            def model_dump(self) -> dict[str, Any]:
+                return {}
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.last_metadata: dict[str, Any] = {}
+            async def acompletion(self, **kwargs: Any) -> FakeResponse:
+                self.last_metadata = kwargs.get("metadata", {})
+                return FakeResponse()
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="agent",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={"experiment_id": "exp-42", "agent_name": "The Intern"},
+            )
+        )
+        assert fake_router.last_metadata["session_id"] == "exp-42"
+        assert fake_router.last_metadata["trace_user_id"] == "The Intern"
+
+    @pytest.mark.asyncio
+    async def test_trace_user_id_falls_back_to_role(self) -> None:
+        import json
+        from typing import Any
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        class FakeResponse:
+            def __init__(self) -> None:
+                self.model = "openai/gpt-4o-mini"
+                self.choices = [
+                    type("C", (), {"message": type("M", (), {"content": json.dumps({
+                        "inner_thought": "ok", "suspicion": None,
+                        "action": {"type": "observe", "target": "well", "location": "well"},
+                        "dialogue": None, "goal_progress": "none", "cooperation_intent": "medium",
+                    })})()})()
+                ]
+                self.usage = type("U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})()
+            def model_dump(self) -> dict[str, Any]:
+                return {}
+
+        class FakeRouter:
+            def __init__(self) -> None:
+                self.last_metadata: dict[str, Any] = {}
+            async def acompletion(self, **kwargs: Any) -> FakeResponse:
+                self.last_metadata = kwargs.get("metadata", {})
+                return FakeResponse()
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="gm",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={"experiment_id": "exp-42"},
+            )
+        )
+        assert fake_router.last_metadata["session_id"] == "exp-42"
+        assert fake_router.last_metadata["trace_user_id"] == "gm"
+
+
+class TestRecordScores:
+    def test_record_scores_noop_when_no_client(self) -> None:
+        from app.core import langfuse
+        langfuse._client = None
+        # Should not raise
+        langfuse.record_scores(trace_id="t-1", scores={"cooperation": 0.5})
+
+    def test_record_scores_calls_score_api(self) -> None:
+        from app.core import langfuse
+        mock_client = MagicMock()
+        langfuse._client = mock_client
+        try:
+            langfuse.record_scores(
+                trace_id="t-1",
+                scores={"cooperation_ratio": 0.6, "threat_level": 80.0},
+            )
+            assert mock_client.score.call_count == 2
+            calls = mock_client.score.call_args_list
+            score_names = {c.kwargs["name"] for c in calls}
+            assert score_names == {"cooperation_ratio", "threat_level"}
+            for c in calls:
+                assert c.kwargs["trace_id"] == "t-1"
+        finally:
+            langfuse._client = None
+
+    def test_record_scores_swallows_exceptions(self) -> None:
+        from app.core import langfuse
+        mock_client = MagicMock()
+        mock_client.score.side_effect = RuntimeError("boom")
+        langfuse._client = mock_client
+        try:
+            # Should not raise
+            langfuse.record_scores(trace_id="t-1", scores={"test": 1.0})
+        finally:
+            langfuse._client = None
+
+
+class TestRoundScoresAndTraceIO:
+    @pytest.mark.asyncio
+    async def test_round_trace_includes_input(self) -> None:
+        from app.core import langfuse as lf_module
+
+        trace_calls: list[dict] = []
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-io"
+        mock_trace_obj.span.return_value = MagicMock(id="span-io")
+
+        original_trace = lf_module.trace
+
+        def fake_trace(*, name, session_id, **kwargs):
+            trace_calls.append({"name": name, "session_id": session_id, **kwargs})
+            return mock_trace_obj
+
+        lf_module.trace = fake_trace  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(trace_calls) == 1
+            call = trace_calls[0]
+            assert "input" in call
+            assert call["input"]["round"] == 1
+            assert "arc" in call["input"]
+            assert "resources" in call["input"]
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+    @pytest.mark.asyncio
+    async def test_round_scores_recorded(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-scores"
+        mock_trace_obj.span.return_value = MagicMock(id="span-scores")
+
+        original_trace = lf_module.trace
+        original_record = getattr(lf_module, "record_scores", None)
+        score_calls: list[dict] = []
+
+        def fake_record(*, trace_id, scores):
+            score_calls.append({"trace_id": trace_id, "scores": scores})
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        lf_module.record_scores = fake_record  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(score_calls) == 1
+            assert score_calls[0]["trace_id"] == "trace-scores"
+            scores = score_calls[0]["scores"]
+            assert "cooperation_ratio" in scores
+            assert "threat_level" in scores
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+            if original_record is not None:
+                lf_module.record_scores = original_record  # type: ignore[assignment]
+
+    @pytest.mark.asyncio
+    async def test_trace_update_includes_output(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-output"
+        mock_trace_obj.span.return_value = MagicMock(id="span-output")
+        update_calls: list[dict] = []
+
+        def capture_update(**kwargs):
+            update_calls.append(kwargs)
+
+        mock_trace_obj.update = capture_update
+        original_trace = lf_module.trace
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(update_calls) >= 1
+            last_update = update_calls[-1]
+            assert "output" in last_update
+            assert "cooperation_ratio" in last_update["output"]
+            assert "event_count" in last_update["output"]
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+
 def _build_engine_and_state() -> tuple[object, object]:
     from app.agents.models import (
         AgentMemoryState,

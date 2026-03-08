@@ -129,10 +129,21 @@ class SimulationEngine:
         trace = lf.trace(
             name=f"round-{round_number}",
             session_id=state.experiment_id,
+            input={
+                "round": round_number,
+                "arc": state.arc.name,
+                "resources": state.world_state.resources.model_dump(),
+                "threat_level": state.world_state.threat_level,
+                "agent_count": len(state.agents),
+            },
             metadata={
                 "experiment_id": state.experiment_id,
                 "round_number": round_number,
                 "total_rounds": state.total_rounds,
+                "status": state.status,
+                "tags": [
+                    f"arc:{state.arc.name}",
+                ],
             },
         )
 
@@ -234,14 +245,34 @@ class SimulationEngine:
         if trace is not None:
             try:
                 trace.update(
+                    output={
+                        "status": state.status,
+                        "cooperation_ratio": round(cooperation_ratio, 3),
+                        "threat_level": round(state.world_state.threat_level, 2),
+                        "event_count": sum(
+                            len(pr.events)
+                            for pr in [
+                                gm_result, dawn_result, morning_result,
+                                midday_result, afternoon_result, night_result,
+                            ]
+                        ),
+                    },
                     metadata={
                         "status": state.status,
                         "cooperation_ratio": cooperation_ratio,
                         "threat_level": state.world_state.threat_level,
-                    }
+                    },
                 )
             except Exception:
                 log.warning("langfuse trace.update failed", exc_info=True)
+
+            lf.record_scores(
+                trace_id=self._obj_id(trace),
+                scores={
+                    "cooperation_ratio": round(cooperation_ratio, 3),
+                    "threat_level": round(state.world_state.threat_level, 2),
+                },
+            )
         state.recent_events.extend(
             event.summary
             for phase_result in [

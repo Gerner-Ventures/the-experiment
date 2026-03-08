@@ -70,6 +70,20 @@ def span(*, name: str, parent: Any = None, **kwargs: Any) -> Any:
         return None
 
 
+def record_scores(*, trace_id: str, scores: dict[str, float]) -> None:
+    if _client is None:
+        return
+    for name, value in scores.items():
+        try:
+            _client.score(
+                trace_id=trace_id,
+                name=name,
+                value=value,
+            )
+        except Exception:
+            logger.warning("langfuse score failed for %s", name, exc_info=True)
+
+
 def log_event(*, name: str, metadata: dict[str, Any] | None = None) -> None:
     ctx = get_trace_context()
     if not ctx or _client is None:
