@@ -63,25 +63,46 @@ Every substantive finding should include:
 
 - `Blocking` or `Non-blocking`
 - Severity: `Critical`, `High`, `Medium`, or `Low`
+- Classification: a short label such as `Bug`, `Regression`, `Duplication`, `Schema drift`, `Test gap`, `Performance`, `Reliability`, or `Maintainability`
 - A short title
 - Why it matters
 - Concrete evidence from the diff or impacted code path
 - The smallest reasonable fix or mitigation
 
+Write each finding as a short item header followed by 2-4 tiny paragraphs. Do not cram the entire point into one dense bullet. Use blank lines between the sections so each item is easy to scan on GitHub.
+
 Recommended format inside the review body:
 
 ```text
-## Verdict
-**Request changes** 🚫
+Verdict: Request changes 🚫🧱💀💩
 
 ## Blocking
-- **[High] Round state is persisted before GM plan approval**
-  This can leave the experiment in an impossible partially-applied state after a restart.
+- **[High][Regression 🧨] Round state is persisted before GM plan approval**
+
+  Why it matters: this is how you end up with a save file that wakes back up in a state the runtime never meant to support.
+
+  Evidence: the new write happens before the approval gate, so one crash and now the database is proudly preserving nonsense.
+
+  Fix: move persistence behind the approval boundary or persist an explicit intermediate state that recovery understands.
 
 ## Non-blocking
-- **[Low] Test names do not describe the failure mode**
-  Not a merge blocker, but it will make later regressions harder to diagnose.
+- **[Low][Test gap 🧪] Test names do not describe the failure mode**
+
+  Why it matters: not a merge blocker, but future-you should not need a séance to figure out what the failing test was supposed to prove.
+
+  Fix: rename the cases so the broken behavior is obvious from the failing test output.
 ```
+
+Classification labels do not need to be fancy, but they should be concrete. Emojis are welcome when they improve scanning:
+
+- `Bug 🐛`
+- `Regression 🧨`
+- `Duplication 🪞`
+- `Schema drift 🧬`
+- `Test gap 🧪`
+- `Performance 🐢`
+- `Reliability 💥`
+- `Maintainability 🧹`
 
 ## Verdict Rules
 
@@ -93,10 +114,14 @@ Recommended format inside the review body:
 ## Tone
 
 - Keep the review concrete and useful.
-- Sprinkle in a little silliness where it fits naturally.
+- Be a little sassy on purpose so the review is more fun to read than a slab of drywall.
 - Do not let jokes obscure the technical point.
-- Use Markdown that renders cleanly on GitHub: short headers, bold labels, compact bullets, and short paragraphs.
-- Light emoji use is welcome when it helps scanning, not when it turns the review into a clown car.
+- Use Markdown that renders cleanly on GitHub: short headers, bold labels, compact bullets, and short paragraphs with breathing room.
+- Lean into emoji for scanning, especially on `REQUEST_CHANGES` reviews. A little troll energy is fine, including the occasional `💩` when the code path truly earned it.
+- Dry sarcasm, mild mockery, and "this code is being weird" energy are all welcome.
+- On `APPROVE` reviews, positive sarcasm and silly praise are welcome too. Lines like `Awesome job!!!` or `I'm proud of you, great work!!` are fair game when the PR actually earned it.
+- Keep the humor pointed at the bad code path, not the human who wrote it.
+- Prefer lines that sound like a sharp reviewer with taste, not a generic assistant trying to be quirky.
 - If the PR introduces a truly catastrophic bug, you may be blunt and a bit mean, but still keep the review actionable and specific.
 
 ## Submission
@@ -117,8 +142,10 @@ fi
 
 Before submitting:
 
-- Make sure the body is easy to scan on GitHub with Markdown sections such as `## Verdict`, `## Blocking`, `## Non-blocking`, and `## Checks`.
-- Include the final verdict at the top with clear wording and, if it fits, a small emoji like `✅`, `🚫`, `⚠️`, or `🧪`.
+- Make sure the body is easy to scan on GitHub with a top line like `Verdict: Request changes 🚫🧱💀💩`, then sections such as `## Blocking`, `## Non-blocking`, and `## Checks`.
+- Put the verdict on one line. Do not render a `## Verdict` header with the decision stranded beneath it.
+- For `REQUEST_CHANGES`, feel free to be louder with negative emoji, including `💩` when it helps sell the disaster.
+- For approvals, keep the emoji lighter, but feel free to sound theatrically pleased when the work is genuinely strong.
 - Mention tests/checks run when relevant.
 - Set a local `verdict` variable first (`APPROVE` or `REQUEST_CHANGES`) so the submission path is unambiguous.
 - If the submit command errors after the network request may already have reached GitHub, do not blindly retry. First inspect the PR's latest review from your account, confirm whether the review was created, and only resubmit if it definitely was not.
