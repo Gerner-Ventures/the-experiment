@@ -534,7 +534,6 @@ class TestRepairAndStatusMetadata:
     async def test_repair_attempt_logged_as_span_event(self) -> None:
         """When JSON repair occurs, a span event should be recorded."""
         import json
-        from typing import Any
         from app.core.langfuse import set_trace_context, _trace_context
 
         calls: list[dict[str, object]] = []
