@@ -62,7 +62,7 @@ class InMemoryExperimentStore:
         self.snapshots: defaultdict[str, dict[int, dict[str, object]]] = defaultdict(dict)
 
     async def load_state(self, experiment_id: str) -> SimulationState:
-        return self.states[experiment_id]
+        return self.states[experiment_id].model_copy(deep=True)
 
     async def save_state(self, state: SimulationState) -> None:
         self.states[state.experiment_id] = state.model_copy(deep=True)
