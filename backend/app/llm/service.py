@@ -48,6 +48,7 @@ class LLMService:
         response_format: dict[str, object] | type[BaseModel],
         metadata: dict[str, object] | None = None,
         model_override: str | None = None,
+        max_tokens: int | None = None,
     ) -> LLMResult:
         return await self.client.generate_structured(
             LLMRequest(
@@ -56,6 +57,7 @@ class LLMService:
                 response_format=response_format,
                 metadata=metadata or {},
                 model_override=model_override,
+                max_tokens=max_tokens,
             )
         )
 
