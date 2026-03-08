@@ -18,6 +18,7 @@ export const MAP_THEMES: MapTheme[] = [
       fogOpacity: 0.05,
       tint: '#fff5e0',
     },
+    dayNight: { enabled: true, showCelestialBodies: true },
     preview: ['#5a8a3c', '#d4b896', '#8b7355', '#a0d8ef'],
   },
   {
@@ -40,6 +41,7 @@ export const MAP_THEMES: MapTheme[] = [
       tint: '#00ff41',
       scanlines: true,
     },
+    dayNight: { enabled: true, showCelestialBodies: true, celestialVariant: 'digital' },
     preview: ['#0a0a0a', '#00ff41', '#003300', '#001a00'],
   },
   {
@@ -61,6 +63,7 @@ export const MAP_THEMES: MapTheme[] = [
       overlayOpacity: 0.1,
       tint: '#ffe0b0',
     },
+    dayNight: { enabled: true, showCelestialBodies: true },
     preview: ['#c4a55a', '#d4c4a0', '#a08050', '#ffcc80'],
   },
   {
@@ -83,6 +86,7 @@ export const MAP_THEMES: MapTheme[] = [
       tint: '#ff8844',
       scanlines: true,
     },
+    dayNight: { enabled: true, showCelestialBodies: true },
     preview: ['#2a2a2a', '#ff6600', '#4a4540', '#5a3a2a'],
   },
 ]

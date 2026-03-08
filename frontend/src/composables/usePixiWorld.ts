@@ -1,10 +1,13 @@
 import { Application, Container } from 'pixi.js'
 import type { MapTheme, MapData } from '@/types/world'
 import type { CharacterSprite } from '@/config/character-sprites'
+import type { RoundPhase } from '@/types/websocket'
 import { IsometricMap, tileToScreen } from '@/components/world/pixi/IsometricMap'
 import { CameraController } from '@/components/world/pixi/CameraController'
 import { AgentSpriteObject } from '@/components/world/pixi/AgentSprite'
 import { AmbientOverlay } from '@/components/world/pixi/AmbientOverlay'
+import { DayNightCycle } from '@/components/world/pixi/DayNightCycle'
+import { getThemePalette } from '@/config/day-night-palettes'
 
 export interface UsePixiWorld {
   mount(container: HTMLElement): Promise<void>
@@ -22,6 +25,8 @@ export interface UsePixiWorld {
   clearHighlight(id: string): void
   onAgentClick(callback: (agentId: string) => void): void
   getAgentScreenPosition(id: string): { x: number; y: number } | null
+  setPhase(phase: RoundPhase): void
+  startDemoCycle(): void
 }
 
 export function usePixiWorld(): UsePixiWorld {
@@ -29,6 +34,7 @@ export function usePixiWorld(): UsePixiWorld {
   let camera: CameraController | null = null
   let isoMap: IsometricMap | null = null
   let ambientOverlay: AmbientOverlay | null = null
+  let dayNightCycle: DayNightCycle | null = null
   let worldContainer: Container | null = null
   const agents = new Map<string, AgentSpriteObject>()
   let canvasEl: HTMLCanvasElement | null = null
@@ -55,6 +61,7 @@ export function usePixiWorld(): UsePixiWorld {
         const h = app.screen.height
         camera.resize(w, h)
         ambientOverlay?.resize(w, h)
+        dayNightCycle?.resize(w, h)
       }
     })
     resizeObserver.observe(container)
@@ -71,6 +78,7 @@ export function usePixiWorld(): UsePixiWorld {
         agent.update(dt)
       }
       ambientOverlay?.update(dt)
+      dayNightCycle?.update(dt)
     })
   }
 
@@ -85,6 +93,12 @@ export function usePixiWorld(): UsePixiWorld {
     if (ambientOverlay) {
       worldContainer.removeChild(ambientOverlay.container)
       ambientOverlay.destroy()
+    }
+    if (dayNightCycle) {
+      app.stage.removeChild(dayNightCycle.skyGraphics)
+      app.stage.removeChild(dayNightCycle.celestialContainer)
+      dayNightCycle.destroy()
+      dayNightCycle = null
     }
     if (camera) {
       camera.destroy(canvasEl)
@@ -105,6 +119,17 @@ export function usePixiWorld(): UsePixiWorld {
     // Camera
     camera = new CameraController(worldContainer, canvasEl, w, h)
     camera.setZoom(1.0)
+
+    // Day/night cycle
+    if (theme.dayNight?.enabled) {
+      const palette = getThemePalette(theme.id)
+      if (palette) {
+        dayNightCycle = new DayNightCycle(w, h, palette, worldContainer)
+        app.stage.addChildAt(dayNightCycle.skyGraphics, 0)
+        app.stage.addChild(dayNightCycle.celestialContainer)
+        app.stage.sortableChildren = true
+      }
+    }
   }
 
   function spawnAgent(id: string, name: string, sprite: CharacterSprite, tile: { x: number; y: number }) {
@@ -179,6 +204,14 @@ export function usePixiWorld(): UsePixiWorld {
   }
 
 
+  function setPhase(phase: RoundPhase) {
+    dayNightCycle?.setPhase(phase)
+  }
+
+  function startDemoCycle() {
+    dayNightCycle?.startDemoCycle()
+  }
+
   function onAgentClick(callback: (agentId: string) => void) {
     agentClickCallback = callback
   }
@@ -204,6 +237,11 @@ export function usePixiWorld(): UsePixiWorld {
     if (ambientOverlay) {
       ambientOverlay.destroy()
       ambientOverlay = null
+    }
+
+    if (dayNightCycle) {
+      dayNightCycle.destroy()
+      dayNightCycle = null
     }
 
     if (isoMap) {
@@ -241,5 +279,7 @@ export function usePixiWorld(): UsePixiWorld {
     clearHighlight,
     onAgentClick,
     getAgentScreenPosition,
+    setPhase,
+    startDemoCycle,
   }
 }

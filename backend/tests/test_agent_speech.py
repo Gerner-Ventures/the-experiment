@@ -9,7 +9,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from app.api.models import CreateExperimentRequest
-from app.api.runtime import AgentSpeechEntry, ExperimentRuntime, _StreamingHook
+from app.api.runtime import ExperimentRuntime
+from app.api.services import AgentSpeechEntry
 from app.api.store import InMemoryExperimentStore
 from app.core.config import Settings
 from app.engine.models import PhaseResult, RoundEvent
@@ -288,13 +289,13 @@ async def test_on_phase_complete_records_speech_entries_and_triggers_pregenerati
         tts_service=_tts_service(provider),
     )
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
     agent = state.agents[0]
 
-    hook = _StreamingHook(experiment_id=eid, runtime=runtime)
+    hook = runtime.streaming.build_hook(eid)
     phase_result = PhaseResult(
         phase="morning",
         events=[
@@ -345,14 +346,14 @@ async def test_pregeneration_handles_multiple_agents_concurrently() -> None:
         tts_service=_tts_service(provider),
     )
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
     agent1 = state.agents[0]
     agent2 = state.agents[1]
 
-    hook = _StreamingHook(experiment_id=eid, runtime=runtime)
+    hook = runtime.streaming.build_hook(eid)
     phase_result = PhaseResult(
         phase="morning",
         events=[
@@ -403,13 +404,13 @@ async def test_pregeneration_failure_does_not_block_round() -> None:
         tts_service=_tts_service(provider),
     )
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
     agent = state.agents[0]
 
-    hook = _StreamingHook(experiment_id=eid, runtime=runtime)
+    hook = runtime.streaming.build_hook(eid)
     phase_result = PhaseResult(
         phase="morning",
         events=[
@@ -447,13 +448,13 @@ async def test_unavailable_status_when_tts_not_configured() -> None:
         tts_service=None,
     )
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
     agent = state.agents[0]
 
-    hook = _StreamingHook(experiment_id=eid, runtime=runtime)
+    hook = runtime.streaming.build_hook(eid)
     phase_result = PhaseResult(
         phase="morning",
         events=[
@@ -491,13 +492,13 @@ async def test_agent_speech_audio_ws_message_includes_audio_url_on_ready() -> No
         tts_service=_tts_service(),
     )
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
     agent = state.agents[0]
 
-    hook = _StreamingHook(experiment_id=eid, runtime=runtime)
+    hook = runtime.streaming.build_hook(eid)
     phase_result = PhaseResult(
         phase="morning",
         events=[
@@ -536,13 +537,13 @@ async def test_multiple_utterances_per_round_get_distinct_indices() -> None:
         tts_service=_tts_service(),
     )
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
     agent = state.agents[0]
 
-    hook = _StreamingHook(experiment_id=eid, runtime=runtime)
+    hook = runtime.streaming.build_hook(eid)
 
     # First phase with agent speaking
     phase1 = PhaseResult(
@@ -598,7 +599,7 @@ async def test_multiple_utterances_per_round_get_distinct_indices() -> None:
 async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> None:
     """After a process restart the in-memory speech log is empty.
 
-    _find_agent_speech_entry should fall back to the persisted event log
+    RuntimeAudioService._find_agent_speech_entry should fall back to the persisted event log
     and reconstruct the entry so /agents/{id}/speech* endpoints still work.
     """
     from app.api.models import EventLogItem
@@ -606,7 +607,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     store = InMemoryExperimentStore()
     runtime = ExperimentRuntime(store=store, tts_service=_tts_service())
     runtime.connection_manager.broadcast = AsyncMock()
-    runtime._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime.create_experiment(_request())
     eid = state.experiment_id
@@ -654,7 +655,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     assert len(runtime._agent_speech_log.get(eid, [])) == 0
 
     # Should reconstruct from persisted logs
-    entry = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 0)
+    entry = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 0)
     assert entry is not None
     assert entry["text"] == "First line."
     assert entry["agent_id"] == agent.agent_id
@@ -662,7 +663,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     assert entry["character_id"] == agent.character_id
 
     # Second utterance
-    entry2 = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 1)
+    entry2 = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 1)
     assert entry2 is not None
     assert entry2["text"] == "Second line."
     assert entry2["index"] == 1
@@ -671,5 +672,5 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     assert len(runtime._agent_speech_log[eid]) == 2
 
     # Non-existent index returns None
-    entry_missing = await runtime._find_agent_speech_entry(eid, agent.agent_id, 1, 5)
+    entry_missing = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 5)
     assert entry_missing is None

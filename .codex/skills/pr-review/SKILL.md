@@ -101,12 +101,18 @@ Recommended format inside the review body:
 
 ## Submission
 
- Draft the full review body in a unique temp file, then submit it with GitHub CLI:
+Draft the full review body in a unique temp file, then submit it with GitHub CLI.
+
+Submit exactly one review per invocation. Choose the command that matches the verdict and never run both review commands.
 
 ```bash
 review_file="$(mktemp -t pr-review.XXXXXX)"
-gh pr review <number> --approve --body-file "$review_file"
-gh pr review <number> --request-changes --body-file "$review_file"
+
+if [ "$verdict" = "APPROVE" ]; then
+  gh pr review <number> --approve --body-file "$review_file"
+else
+  gh pr review <number> --request-changes --body-file "$review_file"
+fi
 ```
 
 Before submitting:
@@ -114,5 +120,8 @@ Before submitting:
 - Make sure the body is easy to scan on GitHub with Markdown sections such as `## Verdict`, `## Blocking`, `## Non-blocking`, and `## Checks`.
 - Include the final verdict at the top with clear wording and, if it fits, a small emoji like `✅`, `🚫`, `⚠️`, or `🧪`.
 - Mention tests/checks run when relevant.
+- Set a local `verdict` variable first (`APPROVE` or `REQUEST_CHANGES`) so the submission path is unambiguous.
+- If the submit command errors after the network request may already have reached GitHub, do not blindly retry. First inspect the PR's latest review from your account, confirm whether the review was created, and only resubmit if it definitely was not.
+- After submitting, verify that exactly one new review was created before reporting completion.
 - Clean up the temp file after submission.
 - Do not leave the result as a local note; the review must be submitted to GitHub.
