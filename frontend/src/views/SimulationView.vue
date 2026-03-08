@@ -315,8 +315,9 @@ function goBack() {
           />
         </div>
 
-        <!-- Left side: Resource bars + Threat -->
-        <div class="absolute top-3 left-3 space-y-2 pointer-events-auto">
+        <!-- Left side: Resource bars + Threat (display-only, no pointer-events
+             so canvas panning works through these regions) -->
+        <div class="absolute top-3 left-3 space-y-2">
           <ThreatMeter :value="worldStore.threatLevel" />
           <ResourceBars :resources="worldStore.resources" />
         </div>

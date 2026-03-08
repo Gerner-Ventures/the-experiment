@@ -43,9 +43,6 @@ export function usePixiWorld(): UsePixiWorld {
 
     container.appendChild(app.canvas as HTMLCanvasElement)
     canvasEl = app.canvas as HTMLCanvasElement
-    // Pin canvas to z-index 0 so the WebGL compositing layer stays below the HUD
-    canvasEl.style.position = 'relative'
-    canvasEl.style.zIndex = '0'
 
     // Resize handling
     resizeObserver = new ResizeObserver(() => {

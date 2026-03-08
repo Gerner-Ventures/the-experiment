@@ -41,9 +41,11 @@ export class CameraController {
 
     this.onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      // Normalize deltaY across browsers/devices: clamp to [-1, 1] so trackpad
-      // pinch and mouse wheel produce comparable input magnitude.
-      const normalized = Math.sign(e.deltaY) * Math.min(Math.abs(e.deltaY), 1)
+      // Normalize deltaY across browsers/devices. Mouse wheel fires ~100-120px
+      // per tick while trackpad fires many small events. Dividing by 100 before
+      // clamping preserves per-event magnitude differences.
+      const raw = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY
+      const normalized = Math.max(-1, Math.min(1, raw / 100))
       const factor = 1 - normalized * ZOOM_STEP
       this.setTargetZoom(this.targetZoom * factor)
     }
@@ -72,6 +74,7 @@ export class CameraController {
     canvas.addEventListener('pointerdown', this.onPointerDown)
     window.addEventListener('pointermove', this.onPointerMove)
     window.addEventListener('pointerup', this.onPointerUp)
+    window.addEventListener('pointercancel', this.onPointerUp)
   }
 
   update() {
@@ -99,7 +102,7 @@ export class CameraController {
     }
   }
 
-  /** Immediately snap to a zoom level (no lerp). Used during initialization. */
+  /** Immediately snap to a zoom level, bypassing smooth lerp transition. */
   setZoom(level: number) {
     this.zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, level))
     this.targetZoom = this.zoom
@@ -137,5 +140,6 @@ export class CameraController {
     canvas.removeEventListener('pointerdown', this.onPointerDown)
     window.removeEventListener('pointermove', this.onPointerMove)
     window.removeEventListener('pointerup', this.onPointerUp)
+    window.removeEventListener('pointercancel', this.onPointerUp)
   }
 }
