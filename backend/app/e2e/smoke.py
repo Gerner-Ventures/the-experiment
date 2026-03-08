@@ -207,13 +207,6 @@ def _require(condition: bool, message: str) -> None:
         raise SmokeFailure(message)
 
 
-def _require_mapping(body: dict[str, Any], key: str) -> dict[str, Any]:
-    value = body.get(key)
-    if not isinstance(value, dict):
-        raise SmokeFailure(f"Expected '{key}' to be an object.")
-    return value
-
-
 def _require_string(body: dict[str, Any], key: str) -> str:
     value = body.get(key)
     if not isinstance(value, str) or not value:

@@ -467,13 +467,15 @@ async def _get_state(runtime: ExperimentRuntime, experiment_id: str) -> Simulati
 
 def _runtime_from_request(request: Request) -> ExperimentRuntime:
     runtime = getattr(request.app.state, "runtime", None)
-    assert isinstance(runtime, ExperimentRuntime), "app.state.runtime not configured"
+    if not isinstance(runtime, ExperimentRuntime):
+        raise RuntimeError("app.state.runtime not configured")
     return runtime
 
 
 def _runtime_from_websocket(websocket: WebSocket) -> ExperimentRuntime:
     runtime = getattr(websocket.app.state, "runtime", None)
-    assert isinstance(runtime, ExperimentRuntime), "app.state.runtime not configured"
+    if not isinstance(runtime, ExperimentRuntime):
+        raise RuntimeError("app.state.runtime not configured")
     return runtime
 
 

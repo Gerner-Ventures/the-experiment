@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
-from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import WebSocket
 from fastapi.encoders import jsonable_encoder
 from starlette.websockets import WebSocketState
 
-from app.schemas.ws_message import WSMessage, WSMessageType
+from app.schemas.ws_message import WSMessage
 
 logger = logging.getLogger(__name__)
 
@@ -67,23 +66,3 @@ class ConnectionManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(experiment_id, ws)
-
-    async def send_event(
-        self,
-        experiment_id: str,
-        msg_type: WSMessageType,
-        round_number: int,
-        data: dict[str, Any],
-        phase: str | None = None,
-    ) -> None:
-        msg = WSMessage(
-            type=msg_type,
-            round=round_number,
-            phase=phase,
-            timestamp=datetime.now(UTC),
-            data=data,
-        )
-        await self.broadcast(experiment_id, msg)
-
-    def has_connections(self, experiment_id: str) -> bool:
-        return bool(self.connections.get(experiment_id))
