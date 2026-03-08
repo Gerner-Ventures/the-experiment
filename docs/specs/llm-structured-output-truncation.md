@@ -1,14 +1,18 @@
 ---
-title: "Fix LLM Structured Output Truncation"
-type: spec
-status: in_progress
-owner: ""
-team: backend
-review_status: draft
-tags: [agents, llm, reliability, parsing]
+created: '2026-03-08'
 depends_on: []
-created: "2026-03-08"
-updated: "2026-03-08"
+owner: ''
+review_status: approved
+status: in_progress
+tags:
+- agents
+- llm
+- reliability
+- parsing
+team: backend
+title: Fix LLM Structured Output Truncation
+type: spec
+updated: '2026-03-08'
 ---
 
 # Fix LLM Structured Output Truncation
