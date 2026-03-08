@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Button, Typography } from 'ant-design-vue'
 import { ArrowLeftOutlined } from '@ant-design/icons-vue'
@@ -15,6 +15,7 @@ import RoundCounter from '@/components/hud/RoundCounter.vue'
 import ArcTimeline from '@/components/hud/ArcTimeline.vue'
 import GMPlanPanel from '@/components/hud/GMPlanPanel.vue'
 import NarrationOverlay from '@/components/hud/NarrationOverlay.vue'
+import ActionLabel from '@/components/hud/ActionLabel.vue'
 import AgentDossier from '@/components/dossier/AgentDossier.vue'
 import ExperimentLog from '@/components/log/ExperimentLog.vue'
 import ConversationBubble from '@/components/social/ConversationBubble.vue'
@@ -26,8 +27,9 @@ import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useUIStore, PANELS } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
-import { useWebSocket } from '@/composables/useWebSocket'
 import { useTurnStore } from '@/stores/turn'
+import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
+import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
 import type { AgentStatus } from '@/types/agent'
@@ -45,6 +47,13 @@ const socialStore = useSocialStore()
 const turnStore = useTurnStore()
 const ws = useWebSocket()
 
+const pixiWorldRef = ref<InstanceType<typeof PixiWorld> | null>(null)
+
+// Reactive state for the action label overlay
+const actionLabelPosition = ref<{ x: number; y: number } | null>(null)
+const actionLabelType = ref('')
+const highlightedTargetId = ref<string | null>(null)
+
 // Theme and arc from sessionStorage (set by SetupView) or defaults
 const themeId = sessionStorage.getItem('experiment-theme') || 'lord-of-the-flies'
 const arcId = sessionStorage.getItem('experiment-arc') || 'lord_of_the_flies'
@@ -52,7 +61,6 @@ const theme = computed<MapTheme>(() => getThemeById(themeId) ?? MAP_THEMES[0])
 
 const ready = ref(false)
 const experimentCreated = ref(false)
-const pixiWorldRef = ref<InstanceType<typeof PixiWorld> | null>(null)
 const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
 
@@ -220,28 +228,70 @@ function handleAgentClick(agentId: string) {
   uiStore.selectAgent(agentId)
 }
 
-// Wire turn store handlers once PixiWorld is mounted
-watch(pixiWorldRef, (pw) => {
+// ─── Turn store handler wiring ───
+
+function wireTurnHandlers() {
+  const pw = pixiWorldRef.value
   if (!pw) return
+
   turnStore.setHandlers({
-    move: (agentId: string, location: string, onComplete: () => void) => {
+    move(agentId: string, location: string, onComplete: () => void) {
       pw.moveAgentToLocation(agentId, location, onComplete)
     },
-    updateAgent: (agentId: string, status: AgentStatus, location?: string) => {
+    playAction(agentId: string, animationName: string, onComplete: () => void) {
+      pw.playAction(agentId, animationName, onComplete)
+    },
+    updateAgent(agentId: string, status: AgentStatus, location?: string) {
       agentStore.updateAgentStatus(agentId, status, location)
     },
-    addConversation: (agentId: string, agentName: string, message: string) => {
+    addConversation(agentId: string, agentName: string, message: string) {
       socialStore.addConversation(agentId, agentName, message)
     },
-    getAgentLocation: (agentId: string) => {
+    getAgentLocation(agentId: string) {
       const agent = agentStore.agentList.find(a => a.id === agentId)
       return agent?.location
     },
   })
+}
+
+// ─── Action label + target highlight reactivity ───
+
+watch(() => turnStore.phase, (newPhase, oldPhase) => {
+  const pw = pixiWorldRef.value
+  if (!pw) return
+
+  if (newPhase === 'acting' && turnStore.activeTurn) {
+    const turn = turnStore.activeTurn
+    // Show action label
+    const pos = pw.getAgentScreenPosition(turn.agentId)
+    if (pos) {
+      actionLabelPosition.value = pos
+      actionLabelType.value = turn.actionType
+    }
+    // Highlight target
+    if (turn.targetAgentId) {
+      const color = AGGRESSIVE_ACTIONS.has(turn.actionType) ? '#ff4444' : '#ffffff'
+      pw.highlightAgent(turn.targetAgentId, color)
+      highlightedTargetId.value = turn.targetAgentId
+    }
+  }
+
+  if (oldPhase === 'acting') {
+    // Clear action label
+    actionLabelPosition.value = null
+    actionLabelType.value = ''
+    // Clear target highlight
+    if (highlightedTargetId.value) {
+      pw.clearHighlight(highlightedTargetId.value)
+      highlightedTargetId.value = null
+    }
+  }
 })
 
 onMounted(async () => {
   await initExperiment()
+  await nextTick()
+  wireTurnHandlers()
 })
 
 onUnmounted(() => {
@@ -386,6 +436,14 @@ function goBack() {
             :total-rounds="experimentStore.totalRounds"
           />
         </div>
+
+        <!-- Action label overlay (during acting phase) -->
+        <ActionLabel
+          v-if="actionLabelPosition && actionLabelType"
+          class="pointer-events-none"
+          :action-type="actionLabelType"
+          :position="actionLabelPosition"
+        />
 
         <!-- Turn-driven conversation bubble -->
         <ConversationBubble

@@ -267,7 +267,6 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
         "meeting_start",
         "agent_speak",
         "agent_action",
-        "agent_move",
     ]
 
     round_start = payloads[0]
@@ -293,13 +292,6 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert agent_action["data"]["inner_thought"] == turn.decision.inner_thought
     assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
     assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
-
-    agent_move = payloads[8]
-    assert agent_move["phase"] == "morning"
-    assert agent_move["data"] == {
-        "agent_id": state.agents[0].agent_id,
-        "location": "forest",
-    }
 
     runtime_instance._broadcast_narration_audio_status_for_plan.assert_awaited_once_with(
         state.experiment_id,
@@ -582,3 +574,197 @@ async def test_broadcast_narration_audio_status_is_noop_without_tts_service() ->
     await runtime._broadcast_narration_audio_status_for_plan("exp-1", _gm_plan(1))
 
     runtime.connection_manager.broadcast.assert_not_awaited()
+
+
+def _broadcast_sequence(runtime: ExperimentRuntime) -> list[tuple[str, str | None]]:
+    return [
+        (call.args[1]["type"], call.args[1].get("phase"))
+        for call in runtime.connection_manager.broadcast.await_args_list
+    ]
+
+
+def _normalize_round_end_agents(payload: dict[str, object]) -> list[dict[str, object]]:
+    agents = payload["agents"]
+    assert isinstance(agents, list)
+    # The two runtimes create separate experiments, so generated agent_ids differ.
+    return [
+        {
+            "name": agent["name"],
+            "character_id": agent["character_id"],
+            "status": agent["status"],
+            "location": agent["location"],
+            "suspicion_level": agent["suspicion_level"],
+            "faction_id": agent["faction_id"],
+            "faction_role": agent["faction_role"],
+            "influence": agent["influence"],
+        }
+        for agent in agents
+        if isinstance(agent, dict)
+    ]
+
+
+async def _prepare_runtime_for_step_broadcasts() -> tuple[ExperimentRuntime, str]:
+    runtime = ExperimentRuntime(store=InMemoryExperimentStore())
+    runtime.connection_manager = AsyncMock()
+    state = await runtime.create_experiment(_request())
+    state.auto_approve = True
+    await runtime.store.save_state(state)
+    return runtime, state.experiment_id
+
+
+def _build_hook_round_result(state, *, round_number: int) -> RoundResult:
+    action = DecisionAction(type="move", location="workshop")
+    turn = AgentTurnResult(
+        decision=AgentDecision(
+            inner_thought="I should reposition before the town notices.",
+            action=action,
+            goal_progress="I am closer to the workshop.",
+            cooperation_intent="low",
+        ),
+        updated_memory=state.agents[0].memory,
+        suspicion_level=12.0,
+        prompt="Prompt",
+    )
+    phases = [
+        PhaseResult(
+            phase="gm_plan",
+            events=[
+                RoundEvent(
+                    phase="gm_plan",
+                    summary="Approved GM plan is applied.",
+                    data={"status": "applied", "theme": "Test pressure"},
+                )
+            ],
+        ),
+        PhaseResult(
+            phase="dawn",
+            events=[
+                RoundEvent(
+                    phase="dawn",
+                    summary="The square feels watched.",
+                    data={
+                        "crisis_event": _gm_plan(round_number).plan.crisis_event.model_dump(
+                            mode="json"
+                        )
+                    },
+                )
+            ],
+        ),
+        PhaseResult(
+            phase="morning",
+            events=[
+                RoundEvent(
+                    phase="morning",
+                    summary="Mara quietly warns Jon.",
+                    data={
+                        "kind": "agent_speak",
+                        "speaker_id": state.agents[0].agent_id,
+                        "speaker_name": state.agents[0].name,
+                        "listener_id": state.agents[1].agent_id,
+                        "listener_name": state.agents[1].name,
+                        "tone": "guarded",
+                        "location": "workshop",
+                        "trust_delta": 1.0,
+                    },
+                )
+            ],
+        ),
+        PhaseResult(phase="midday", events=[]),
+        PhaseResult(phase="afternoon", events=[]),
+        PhaseResult(phase="night", events=[]),
+    ]
+    return RoundResult(
+        round_number=round_number,
+        gm_plan=_gm_plan(round_number),
+        phases=phases,
+        cooperation_ratio=0.5,
+        threat_level=23.0,
+        world_state=state.world_state,
+        agent_turns={state.agents[0].agent_id: [turn]},
+        action_resolutions=[
+            ActionResolution(
+                phase="morning",
+                agent_id=state.agents[0].agent_id,
+                agent_name=state.agents[0].name,
+                location="workshop",
+                requested_action_type="move",
+                resolved_action_type="move",
+                cooperation_intent="low",
+                goal_progress="I am closer to the workshop.",
+                summary="Mara slips toward the workshop.",
+                suspicion_level=12.0,
+            )
+        ],
+        created_at=datetime.now(UTC),
+    )
+
+
+async def _fake_run_round(state, *, hook) -> RoundResult:
+    # This helper only simulates hook ordering and final payload parity; it is
+    # not intended to exercise the full experiment lifecycle/status machine.
+    round_number = state.current_round + 1
+    round_result = _build_hook_round_result(state, round_number=round_number)
+
+    state.gm_plan = round_result.gm_plan
+    state.current_round = round_number
+    state.status = "running"
+    state.world_state.round_number = round_number
+    state.world_state.threat_level = round_result.threat_level
+    state.world_state.resources.food -= 1
+    state.agents[0].location = "workshop"
+    state.agents[0].suspicion_level = 12.0
+
+    await hook.on_round_start(round_number, round_result.gm_plan)
+    for phase_result in round_result.phases:
+        await hook.on_phase_start(round_number, phase_result.phase)
+        if phase_result.phase == "morning":
+            await hook.on_agent_action(
+                round_number,
+                "morning",
+                state.agents[0],
+                round_result.agent_turns[state.agents[0].agent_id][0],
+            )
+        await hook.on_phase_complete(round_number, phase_result)
+
+    return round_result
+
+
+@pytest.mark.asyncio
+async def test_step_and_streaming_step_share_ws_sequence() -> None:
+    sync_runtime, sync_experiment_id = await _prepare_runtime_for_step_broadcasts()
+    sync_runtime.engine.run_round = AsyncMock(side_effect=_fake_run_round)
+
+    _, sync_state = await sync_runtime.step(sync_experiment_id)
+
+    streaming_runtime, streaming_experiment_id = await _prepare_runtime_for_step_broadcasts()
+    streaming_runtime.engine.run_round = AsyncMock(side_effect=_fake_run_round)
+
+    await streaming_runtime._step_streaming(streaming_experiment_id)
+    streaming_state = await streaming_runtime.get_state(streaming_experiment_id)
+
+    sync_messages = [
+        call.args[1] for call in sync_runtime.connection_manager.broadcast.await_args_list
+    ]
+    streaming_messages = [
+        call.args[1] for call in streaming_runtime.connection_manager.broadcast.await_args_list
+    ]
+
+    assert sync_runtime.engine.run_round.await_args.kwargs["hook"] is not None
+    assert _broadcast_sequence(sync_runtime) == _broadcast_sequence(streaming_runtime)
+    assert sync_messages[-1]["type"] == "round_end"
+    assert sync_messages[-1]["data"]["status"] == streaming_messages[-1]["data"]["status"]
+    assert (
+        sync_messages[-1]["data"]["current_round"]
+        == streaming_messages[-1]["data"]["current_round"]
+    )
+    assert (
+        sync_messages[-1]["data"]["total_rounds"] == streaming_messages[-1]["data"]["total_rounds"]
+    )
+    assert (
+        sync_messages[-1]["data"]["threat_level"] == streaming_messages[-1]["data"]["threat_level"]
+    )
+    assert sync_messages[-1]["data"]["resources"] == streaming_messages[-1]["data"]["resources"]
+    assert _normalize_round_end_agents(sync_messages[-1]["data"]) == _normalize_round_end_agents(
+        streaming_messages[-1]["data"]
+    )
+    assert sync_state.current_round == streaming_state.current_round == 1

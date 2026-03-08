@@ -46,7 +46,9 @@ Once gone, only a hard refresh recovers them — and even that is inconsistent.
 
 ### Acceptance Criteria
 
-- [ ] HUD controls remain visible at all times during simulation regardless of camera state
-- [ ] HUD survives page refresh without requiring multiple reloads
-- [ ] HUD does not flicker or briefly disappear during pan/zoom interactions
-- [ ] PixiJS canvas events do not interfere with HUD overlay pointer events
+- [x] HUD controls remain visible at all times during simulation regardless of camera state
+<!-- canon:realized-in:PR#112 file:frontend/src/views/SimulationView.vue -->
+<!-- canon:realized-in:PR#112 file:frontend/src/components/world/PixiWorld.vue -->
+- [x] HUD survives page refresh without requiring multiple reloads
+- [x] HUD does not flicker or briefly disappear during pan/zoom interactions
+- [x] PixiJS canvas events do not interfere with HUD overlay pointer events

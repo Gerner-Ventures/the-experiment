@@ -60,6 +60,15 @@ export const useAgentStore = defineStore('agent', () => {
     const actionType = typeof data.action === 'string'
       ? data.action
       : (data.action?.type as string) ?? 'observe'
+    const actionLocation = typeof data.action === 'string'
+      ? undefined
+      : (data.action?.location as string | undefined)
+    if (agent) {
+      if (actionLocation) {
+        agent.location = actionLocation
+      }
+      agent.status = actionToStatus(actionType)
+    }
     const agentName = data.agent_name ?? agent?.name ?? 'Agent'
 
     // Extract target location from action (turn store decides if movement is needed at processing time)
@@ -77,15 +86,6 @@ export const useAgentStore = defineStore('agent', () => {
       targetLocation,
       thought: data.inner_thought,
     })
-  }
-
-  function onMove(msg: WSMessage) {
-    const data = msg.data as { agent_id: string; location: string }
-    const agent = agents.value.get(data.agent_id)
-    if (agent) {
-      agent.location = data.location
-      agent.status = 'moving'
-    }
   }
 
   function onAgentUpdate(agentId: string, updates: Partial<Agent>) {
@@ -115,7 +115,7 @@ export const useAgentStore = defineStore('agent', () => {
 
   return {
     agents, agentList, agentConfigs, agentCount,
-    setAgents, getAgent, onAction, onMove, onAgentUpdate, updateAgentFromDossier,
+    setAgents, getAgent, onAction, onAgentUpdate, updateAgentFromDossier,
     updateAgentStatus, resetStatuses,
     $reset,
   }
@@ -148,5 +148,15 @@ function parseAgent(a: Record<string, unknown>): Agent {
     suspicionLevel: ((a.suspicion_level ?? a.suspicionLevel) as number) || 0,
     inventory: (a.inventory as string[]) || [],
     relationships: (a.relationships as Record<string, Agent['relationships'][string]>) || {},
+  }
+}
+
+function actionToStatus(action: string): AgentStatus {
+  switch (action) {
+    case 'talk': case 'trade': case 'accuse': return 'talking'
+    case 'move': case 'explore': return 'moving'
+    case 'gather': case 'repair': return 'working'
+    case 'hoard': case 'sabotage': return 'sneaking'
+    default: return 'idle'
   }
 }

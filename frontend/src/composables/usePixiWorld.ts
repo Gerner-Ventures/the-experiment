@@ -17,6 +17,9 @@ export interface UsePixiWorld {
   getAgents(): Map<string, AgentSpriteObject>
   moveAgentTo(id: string, tileX: number, tileY: number): void
   moveAgentAlongPath(id: string, path: { x: number; y: number }[], onComplete?: () => void): void
+  playAction(id: string, animationName: string, onComplete: () => void): void
+  highlightAgent(id: string, color: string): void
+  clearHighlight(id: string): void
   onAgentClick(callback: (agentId: string) => void): void
   getAgentScreenPosition(id: string): { x: number; y: number } | null
 }
@@ -101,7 +104,7 @@ export function usePixiWorld(): UsePixiWorld {
 
     // Camera
     camera = new CameraController(worldContainer, canvasEl, w, h)
-    camera.setZoom(1.2)
+    camera.setZoom(1.0)
   }
 
   function spawnAgent(id: string, name: string, sprite: CharacterSprite, tile: { x: number; y: number }) {
@@ -157,6 +160,24 @@ export function usePixiWorld(): UsePixiWorld {
       onComplete?.()
     }
   }
+
+  function playAction(id: string, animationName: string, onComplete: () => void) {
+    const agent = agents.get(id)
+    if (agent) {
+      agent.playAnimationByName(animationName, onComplete)
+    } else {
+      onComplete()
+    }
+  }
+
+  function highlightAgent(id: string, color: string) {
+    agents.get(id)?.setHighlight(color)
+  }
+
+  function clearHighlight(id: string) {
+    agents.get(id)?.clearHighlight()
+  }
+
 
   function onAgentClick(callback: (agentId: string) => void) {
     agentClickCallback = callback
@@ -215,6 +236,9 @@ export function usePixiWorld(): UsePixiWorld {
     getAgents,
     moveAgentTo,
     moveAgentAlongPath,
+    playAction,
+    highlightAgent,
+    clearHighlight,
     onAgentClick,
     getAgentScreenPosition,
   }

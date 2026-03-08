@@ -6,6 +6,11 @@ import { tileToScreen } from './isometric-utils'
 /** Tile-to-tile movement speed: higher = faster. 4 = ~0.25s per tile (Pokemon-style). */
 const MOVE_SPEED = 4
 
+/** Find a SILLY_ANIMATIONS entry by name */
+function findAnimation(name: string) {
+  return SILLY_ANIMATIONS.find(a => a.name === name) ?? null
+}
+
 export class AgentSpriteObject {
   container: Container
   private pixiSprite: Sprite
@@ -25,6 +30,7 @@ export class AgentSpriteObject {
   private walkFrame = 0
   private currentAnimation: typeof SILLY_ANIMATIONS[number] | null = null
   private currentFrame = 0
+  private animCompleteCallback: (() => void) | null = null
 
   // Path following (tile-by-tile)
   private pathQueue: { x: number; y: number }[] = []
@@ -53,12 +59,12 @@ export class AgentSpriteObject {
     this.pixiSprite.zIndex = 1
     this.container.addChild(this.pixiSprite)
 
-    // Name label
+    // Name label (scaled proportionally)
     this.nameLabel = new Text({
       text: name,
       style: {
         fontFamily: 'JetBrains Mono Variable, monospace',
-        fontSize: 8,
+        fontSize: 9,
         fill: '#ffffff',
         align: 'center',
       },
@@ -188,18 +194,35 @@ export class AgentSpriteObject {
     return this.moveProgress < 1 || this.pathQueue.length > 0
   }
 
-  playAnimation(anim: typeof SILLY_ANIMATIONS[number]) {
+  /**
+   * Play a named animation (looks up from SILLY_ANIMATIONS by name).
+   * Calls onComplete when the animation finishes.
+   */
+  playAnimationByName(animName: string, onComplete?: () => void) {
+    const anim = findAnimation(animName)
+    if (!anim) {
+      onComplete?.()
+      return
+    }
+    this.playAnimation(anim, onComplete)
+  }
+
+  playAnimation(anim: typeof SILLY_ANIMATIONS[number], onComplete?: () => void) {
     this.stopAnimation()
     this.currentAnimation = anim
     this.currentFrame = 0
+    this.animCompleteCallback = onComplete ?? null
     this.advanceFrame()
   }
 
   private advanceFrame() {
     if (!this.currentAnimation) return
     if (this.currentFrame >= this.currentAnimation.frames.length) {
+      const cb = this.animCompleteCallback
       this.currentAnimation = null
+      this.animCompleteCallback = null
       this.setPose('idle')
+      cb?.()
       return
     }
     this.setPose(this.currentAnimation.frames[this.currentFrame])
@@ -250,6 +273,7 @@ export class AgentSpriteObject {
     }
     this.currentAnimation = null
     this.currentFrame = 0
+    this.animCompleteCallback = null
   }
 
   stopAllBehavior() {
@@ -265,9 +289,11 @@ export class AgentSpriteObject {
     }
   }
 
+  // ─── Selection ring ───
+
   addSelectionRing() {
     const ring = new Graphics()
-    ring.ellipse(0, 0, 20, 10)
+    ring.ellipse(0, 0, 28, 14)
     ring.stroke({ color: '#00e5a0', width: 2, alpha: 0.8 })
     ring.label = 'selection-ring'
     this.container.addChildAt(ring, 0)
@@ -275,6 +301,22 @@ export class AgentSpriteObject {
 
   removeSelectionRing() {
     const ring = this.container.children.find(c => c.label === 'selection-ring')
+    if (ring) this.container.removeChild(ring)
+  }
+
+  // ─── Target highlight ring ───
+
+  setHighlight(color: string) {
+    this.clearHighlight()
+    const ring = new Graphics()
+    ring.ellipse(0, 0, 30, 15)
+    ring.stroke({ color, width: 3, alpha: 0.9 })
+    ring.label = 'highlight-ring'
+    this.container.addChildAt(ring, 0)
+  }
+
+  clearHighlight() {
+    const ring = this.container.children.find(c => c.label === 'highlight-ring')
     if (ring) this.container.removeChild(ring)
   }
 

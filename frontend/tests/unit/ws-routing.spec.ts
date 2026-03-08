@@ -32,7 +32,6 @@ function routeMessage(msg: WSMessage) {
     gm_plan: (m) => gmStore.onPlan(m),
     gm_narration: (m) => gmStore.onNarration(m),
     agent_action: (m) => agentStore.onAction(m),
-    agent_move: (m) => agentStore.onMove(m),
     agent_speak: (m) => socialStore.onSpeak(m),
     crisis_event: (m) => worldStore.onCrisis(m),
     threat_update: (m) => worldStore.onThreatUpdate(m),
@@ -128,10 +127,10 @@ describe('WebSocket message routing', () => {
     expect(turnStore.activeTurn.actionType).toBe('gather')
   })
 
-  it('routes agent_move to agentStore', () => {
+  it('routes movement updates through agent_action', () => {
     const agentStore = useAgentStore()
     agentStore.setAgents([{ id: 'a1', name: 'Alice', personality: { axes: {}, traitTags: [] }, goal: { archetype: 'communal_survival', text: '', progressSignals: [] }, llmModel: 'openai/gpt-4o-mini' }])
-    routeMessage(makeMsg('agent_move', { agent_id: 'a1', location: 'forest' }))
+    routeMessage(makeMsg('agent_action', { agent_id: 'a1', action: { type: 'move', location: 'forest' } }))
     expect(agentStore.getAgent('a1')!.location).toBe('forest')
     expect(agentStore.getAgent('a1')!.status).toBe('moving')
   })

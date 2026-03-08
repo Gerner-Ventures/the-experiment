@@ -2,6 +2,8 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
+import { ACTION_TO_ANIMATION } from '@/types/sprite'
+import { SKIP_ACTION_PHASE } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 
 export interface Turn {
@@ -9,18 +11,28 @@ export interface Turn {
   agentId: string
   agentName: string
   actionType: string
+  targetAgentId?: string
   targetLocation?: string
   thought?: string
 }
 
-export type TurnPhase = 'idle' | 'moving' | 'talking' | 'hud-only'
+export type TurnPhase = 'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'
 
 export interface TurnHandlers {
   move: (agentId: string, location: string, onComplete: () => void) => void
+  playAction: (agentId: string, animationName: string, onComplete: () => void) => void
   updateAgent: (agentId: string, status: AgentStatus, location?: string) => void
   addConversation: (agentId: string, agentName: string, message: string) => void
   getAgentLocation: (agentId: string) => string | undefined
 }
+
+/** Minimum time the acting phase is visible so players can register the action,
+ *  even if the sprite animation completes sooner. Tuned for ~1s readability. */
+const MIN_ACTION_DURATION_MS = 800
+
+/** How long the HUD status is shown for actions with no speech bubble,
+ *  before advancing to the next agent in the queue. */
+const HUD_ONLY_DURATION_MS = 1500
 
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
@@ -34,12 +46,11 @@ export const useTurnStore = defineStore('turn', () => {
 
   let turnCounter = 0
   let hudTimer: ReturnType<typeof setTimeout> | null = null
+  let actionFloorTimer: ReturnType<typeof setTimeout> | null = null
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
   let handlers: TurnHandlers | null = null
   let drainedHandlers: (() => void)[] = []
-
-  const HUD_ONLY_DURATION_MS = 1500
 
   function setHandlers(h: TurnHandlers) {
     handlers = h
@@ -62,7 +73,7 @@ export const useTurnStore = defineStore('turn', () => {
   }
 
   function processNext() {
-    clearHudTimer()
+    clearTimers()
 
     if (queue.value.length === 0) {
       activeTurn.value = null
@@ -96,16 +107,54 @@ export const useTurnStore = defineStore('turn', () => {
       phase.value = 'moving'
       console.debug(`[Turn] Moving ${turn.agentName}: ${currentLocation} → ${turn.targetLocation}`)
       handlers.move(turn.agentId, turn.targetLocation!, () => {
-        // Movement complete — update agent location, proceed to speech
+        // Movement complete — update agent location, proceed to action phase
         handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
-        startSpeechPhase()
+        startActionPhase()
       })
     } else {
       if (turn.targetLocation) {
         console.debug(`[Turn] ${turn.agentName} already at ${turn.targetLocation}`)
+        handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
       }
-      startSpeechPhase()
+      startActionPhase()
     }
+  }
+
+  function startActionPhase() {
+    const turn = activeTurn.value
+    if (!turn) return
+
+    const animation = ACTION_TO_ANIMATION[turn.actionType]
+    if (!animation || SKIP_ACTION_PHASE.has(turn.actionType)) {
+      startSpeechPhase()
+      return
+    }
+
+    phase.value = 'acting'
+
+    // Dual gate: both animation and minimum duration must complete
+    let animDone = false
+    let floorDone = false
+
+    const proceed = () => {
+      if (animDone && floorDone) {
+        startSpeechPhase()
+      }
+    }
+
+    if (handlers) {
+      handlers.playAction(turn.agentId, animation, () => {
+        animDone = true
+        proceed()
+      })
+    } else {
+      animDone = true
+    }
+
+    actionFloorTimer = setTimeout(() => {
+      floorDone = true
+      proceed()
+    }, MIN_ACTION_DURATION_MS)
   }
 
   function startSpeechPhase() {
@@ -136,15 +185,19 @@ export const useTurnStore = defineStore('turn', () => {
     processNext()
   }
 
-  function clearHudTimer() {
+  function clearTimers() {
     if (hudTimer) {
       clearTimeout(hudTimer)
       hudTimer = null
     }
+    if (actionFloorTimer) {
+      clearTimeout(actionFloorTimer)
+      actionFloorTimer = null
+    }
   }
 
   function $reset() {
-    clearHudTimer()
+    clearTimers()
     queue.value = []
     activeTurn.value = null
     phase.value = 'idle'

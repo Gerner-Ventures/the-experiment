@@ -23,7 +23,7 @@ const searchText = ref('')
 const eventTypes = [
   'round_start', 'round_end', 'phase_change',
   'gm_plan', 'gm_narration',
-  'agent_action', 'agent_move', 'agent_speak',
+  'agent_action', 'agent_speak',
   'crisis_event',
   'meeting_start', 'meeting_vote', 'meeting_result',
   'threat_update', 'resource_update',

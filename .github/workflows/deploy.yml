@@ -110,6 +110,10 @@ jobs:
           LANGFUSE_PUBLIC_KEY: ${{ steps.secrets.outputs.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ steps.secrets.outputs.LANGFUSE_SECRET_KEY }}
           LANGFUSE_HOST: ${{ steps.secrets.outputs.LANGFUSE_HOST }}
+          ELEVENLABS_API_KEY: ${{ steps.secrets.outputs.ELEVENLABS_API_KEY }}
+          ELEVENLABS_VOICE_ID: ${{ steps.secrets.outputs.ELEVENLABS_VOICE_ID }}
+          ELEVENLABS_MODEL_ID: ${{ steps.secrets.outputs.ELEVENLABS_MODEL_ID }}
+          ELEVENLABS_OUTPUT_FORMAT: ${{ steps.secrets.outputs.ELEVENLABS_OUTPUT_FORMAT }}
         run: |
           kubectl create secret generic the-experiment-neon \
             --from-literal=DATABASE_URL="$DATABASE_URL" \
@@ -131,6 +135,12 @@ jobs:
             --from-literal=LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
             --from-literal=LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY" \
             --from-literal=LANGFUSE_HOST="$LANGFUSE_HOST" \
+            -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic the-experiment-elevenlabs \
+            --from-literal=ELEVENLABS_API_KEY="$ELEVENLABS_API_KEY" \
+            --from-literal=ELEVENLABS_VOICE_ID="$ELEVENLABS_VOICE_ID" \
+            --from-literal=ELEVENLABS_MODEL_ID="$ELEVENLABS_MODEL_ID" \
+            --from-literal=ELEVENLABS_OUTPUT_FORMAT="$ELEVENLABS_OUTPUT_FORMAT" \
             -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy with Helm

@@ -69,7 +69,15 @@ function getAgentScreenPosition(agentId: string): { x: number; y: number } | nul
   return world.getAgentScreenPosition(agentId)
 }
 
-defineExpose({ moveAgentToLocation, getAgentScreenPosition })
+defineExpose({
+  moveAgentToLocation,
+  getAgentScreenPosition,
+  playAction: world.playAction,
+  highlightAgent: world.highlightAgent,
+  clearHighlight: world.clearHighlight,
+  moveAgentTo: world.moveAgentTo,
+  getAgents: world.getAgents,
+})
 </script>
 
 <template>
