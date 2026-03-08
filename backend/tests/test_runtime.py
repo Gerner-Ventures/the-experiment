@@ -594,6 +594,7 @@ def _broadcast_sequence(runtime: ExperimentRuntime) -> list[tuple[str, str | Non
 def _normalize_round_end_agents(payload: dict[str, object]) -> list[dict[str, object]]:
     agents = payload["agents"]
     assert isinstance(agents, list)
+    # The two runtimes create separate experiments, so generated agent_ids differ.
     return [
         {
             "name": agent["name"],

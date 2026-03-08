@@ -1715,6 +1715,8 @@ class _StreamingHook:
         await self._runtime._broadcast_narration_audio_status_for_plan(eid, gm_plan)
 
     async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:
+        # We intentionally send a lightweight "starting" phase_change before the
+        # later event-bearing phase_change so clients can update in-progress UI.
         await self._runtime.connection_manager.broadcast(
             self._experiment_id,
             self._runtime._message(
