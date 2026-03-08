@@ -129,7 +129,11 @@ class LLMClient:
         generation_name_override: str | None = None,
         extra: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        """Build enriched metadata for Langfuse from an LLMRequest."""
+        """Build enriched metadata for Langfuse from an LLMRequest.
+
+        Note: request.metadata may contain a "tags" key — litellm's Langfuse
+        callback reads metadata["tags"] and forwards them as generation tags.
+        """
         metadata = {
             **request.metadata,
             **get_trace_context(),
@@ -259,7 +263,7 @@ class LLMClient:
             timeout=model_config.timeout_seconds,
             metadata=self._build_metadata(
                 request,
-                generation_name_override=f"{request.role}:repair",
+                generation_name_override=f"{request.generation_name or request.role}:repair",
                 extra={"repair_pass": True},
             ),
         )

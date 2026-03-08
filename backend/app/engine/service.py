@@ -262,11 +262,7 @@ class SimulationEngine:
                             ]
                         ),
                     },
-                    metadata={
-                        "status": state.status,
-                        "cooperation_ratio": cooperation_ratio,
-                        "threat_level": state.world_state.threat_level,
-                    },
+                    metadata={"status": state.status},
                 )
             except Exception:
                 log.warning("langfuse trace.update failed", exc_info=True)

@@ -225,7 +225,7 @@ class LLMService:
                 response_format=RelationshipConsolidationDecision,
                 metadata={
                     "relationship_consolidator": True,
-                    "round_number": round_number or 0,
+                    **({"round_number": round_number} if round_number is not None else {}),
                     **_optional(
                         experiment_id=experiment_id, agent_id=agent_id, agent_name=agent_name
                     ),
