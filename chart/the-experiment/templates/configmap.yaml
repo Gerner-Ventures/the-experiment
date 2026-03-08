@@ -8,8 +8,44 @@ data:
   PORT: {{ .Values.config.backendPort | quote }}
   LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   REDIS_URL: {{ include "the-experiment.redisUrl" . | quote }}
+  {{- if .Values.config.env }}
+  ENV: {{ .Values.config.env | quote }}
+  {{- end }}
   {{- if .Values.config.platformUrl }}
   PLATFORM_URL: {{ .Values.config.platformUrl | quote }}
+  {{- end }}
+  {{- if .Values.config.corsOrigins }}
+  CORS_ORIGINS: {{ .Values.config.corsOrigins | quote }}
+  {{- end }}
+  {{- if .Values.config.gmModel }}
+  GM_MODEL: {{ .Values.config.gmModel | quote }}
+  {{- end }}
+  {{- if .Values.config.gmFallbackModel }}
+  GM_FALLBACK_MODEL: {{ .Values.config.gmFallbackModel | quote }}
+  {{- end }}
+  {{- if .Values.config.agentModel }}
+  AGENT_MODEL: {{ .Values.config.agentModel | quote }}
+  {{- end }}
+  {{- if .Values.config.agentFallbackModel }}
+  AGENT_FALLBACK_MODEL: {{ .Values.config.agentFallbackModel | quote }}
+  {{- end }}
+  {{- if .Values.config.memoryModel }}
+  MEMORY_MODEL: {{ .Values.config.memoryModel | quote }}
+  {{- end }}
+  {{- if .Values.config.memoryFallbackModel }}
+  MEMORY_FALLBACK_MODEL: {{ .Values.config.memoryFallbackModel | quote }}
+  {{- end }}
+  {{- if .Values.config.llmTimeoutSeconds }}
+  LLM_TIMEOUT_SECONDS: {{ .Values.config.llmTimeoutSeconds | quote }}
+  {{- end }}
+  {{- if .Values.config.llmMaxRetries }}
+  LLM_MAX_RETRIES: {{ .Values.config.llmMaxRetries | quote }}
+  {{- end }}
+  {{- if .Values.config.llmMaxFallbacks }}
+  LLM_MAX_FALLBACKS: {{ .Values.config.llmMaxFallbacks | quote }}
+  {{- end }}
+  {{- if .Values.config.llmDefaultTemperature }}
+  LLM_DEFAULT_TEMPERATURE: {{ .Values.config.llmDefaultTemperature | quote }}
   {{- end }}
   {{- if .Values.postgres.enabled }}
   DATABASE_URL: {{ include "the-experiment.postgresUrl" . | quote }}

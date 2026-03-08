@@ -112,8 +112,21 @@ secrets:
 config:
   backendPort: 8000
   logLevel: "info"
+  env: ""
   redisUrl: ""
   platformUrl: ""
+  corsOrigins: ""
+  ## @section LLM model configuration
+  gmModel: ""
+  gmFallbackModel: ""
+  agentModel: ""
+  agentFallbackModel: ""
+  memoryModel: ""
+  memoryFallbackModel: ""
+  llmTimeoutSeconds: ""
+  llmMaxRetries: ""
+  llmMaxFallbacks: ""
+  llmDefaultTemperature: ""
 
 ## @section Service parameters
 service:
