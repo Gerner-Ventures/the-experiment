@@ -30,10 +30,11 @@ Add zoom dampening so scroll inputs produce proportional, smooth zoom changes.
 
 ### Acceptance Criteria
 
-- [ ] Zoom factor per scroll tick is reduced (e.g. 0.05 per tick instead of current value)
-- [ ] Zoom has min/max bounds to prevent zooming too far in or out
-- [ ] Zoom feels smooth and controllable with both scroll wheel and trackpad pinch
-- [ ] Optional: lerp/ease zoom transitions for smoother visual feedback
+- [x] Zoom factor per scroll tick is reduced (3% per tick with normalization)
+- [x] Zoom has min/max bounds (0.3–3.0)
+- [x] Zoom feels smooth and controllable with both scroll wheel and trackpad pinch
+<!-- canon:realized-in:PR#112 file:frontend/src/components/world/pixi/CameraController.ts -->
+- [x] Lerp/ease zoom transitions for smoother visual feedback (0.15 lerp speed)
 
 ## 2. Center Camera on Map at Startup
 <!-- status: todo -->
@@ -42,7 +43,7 @@ Calculate map bounds and center the camera on initialization.
 
 ### Acceptance Criteria
 
-- [ ] Camera initializes centered on the isometric map bounds
-- [ ] Centering accounts for the HUD overlay areas (doesn't center on the raw viewport)
-- [ ] Works correctly regardless of window size
-- [ ] Camera remains centered after window resize events
+- [x] Camera initializes centered on the isometric map bounds
+- [x] Centering accounts for the HUD overlay areas (doesn't center on the raw viewport)
+- [x] Works correctly regardless of window size
+- [x] Camera remains centered after window resize events
