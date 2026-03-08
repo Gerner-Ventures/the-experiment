@@ -101,6 +101,14 @@ secrets:
     apiKey: ""
     existingSecret: ""
 
+  ## @section ElevenLabs secrets (TTS / voice narration)
+  elevenlabs:
+    apiKey: ""
+    voiceId: ""
+    modelId: ""
+    outputFormat: "mp3_44100_128"
+    existingSecret: ""
+
   ## @section Langfuse secrets
   langfuse:
     publicKey: ""

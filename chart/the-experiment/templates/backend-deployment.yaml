@@ -87,6 +87,10 @@ spec:
             - secretRef:
                 name: {{ include "the-experiment.posthogSecretName" . }}
           {{- end }}
+          {{- if or .Values.secrets.elevenlabs.apiKey .Values.secrets.elevenlabs.existingSecret }}
+            - secretRef:
+                name: {{ include "the-experiment.elevenlabsSecretName" . }}
+          {{- end }}
           {{- if or .Values.secrets.langfuse.publicKey .Values.secrets.langfuse.existingSecret }}
             - secretRef:
                 name: {{ include "the-experiment.langfuseSecretName" . }}
