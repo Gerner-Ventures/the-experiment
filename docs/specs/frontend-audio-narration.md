@@ -133,11 +133,17 @@ Expected behavior:
 - [ ] `gm_plan.plan.narration` populates GM narration text
 - [ ] `GET /rounds/{round}/narration` is wired into the API client
 - [ ] the narration overlay can play audio from backend `audio_url`
-- [ ] text narration still appears immediately while audio is pending
-- [ ] autoplay-blocked browsers fall back to a manual play path
-- [ ] audio failure does not break the narration overlay
-- [ ] refresh or reconnect restores narration state from backend data
-- [ ] frontend tests cover websocket routing and GM store narration-audio transitions
+- [x] text narration still appears immediately while audio is pending
+<!-- canon:realized-in:PR#114 file:frontend/src/components/hud/NarrationOverlay.vue -->
+- [x] autoplay-blocked browsers fall back to a manual play path
+- [x] audio failure does not break the narration overlay
+- [x] refresh or reconnect restores narration state from backend data
+<!-- canon:realized-in:PR#114 file:frontend/src/views/SimulationView.vue -->
+<!-- canon:realized-in:PR#114 file:frontend/src/stores/gm.ts -->
+- [x] frontend tests cover websocket routing and GM store narration-audio transitions
+<!-- canon:realized-in:PR#114 file:frontend/tests/unit/composables/gm-audio-routing.spec.ts -->
+<!-- canon:realized-in:PR#114 file:frontend/tests/unit/stores/gm.spec.ts -->
+<!-- canon:realized-in:PR#114 file:frontend/tests/unit/components/NarrationOverlay.spec.ts -->
 
 ## Suggested Test Coverage
 

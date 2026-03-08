@@ -1,5 +1,9 @@
 """Tests for Langfuse configuration and lifecycle (S3.6 sections 1, 3 + 5)."""
 
+from __future__ import annotations
+
+import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,6 +11,45 @@ import pytest
 import app.llm.client as llm_client_module
 import app.llm.config as llm_config_module
 from app.core.config import Settings
+
+
+# --- Shared test helpers for LLM client fakes ---
+
+_VALID_AGENT_DECISION = json.dumps(
+    {
+        "inner_thought": "ok",
+        "suspicion": None,
+        "action": {"type": "observe", "target": "well", "location": "well"},
+        "dialogue": None,
+        "goal_progress": "none",
+        "cooperation_intent": "medium",
+    }
+)
+
+
+class FakeResponse:
+    """Minimal litellm response stub for testing LLMClient."""
+
+    def __init__(self, content: str = _VALID_AGENT_DECISION) -> None:
+        self.model = "openai/gpt-4o-mini"
+        self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
+        self.usage = type(
+            "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        )()
+
+    def model_dump(self) -> dict[str, Any]:
+        return {}
+
+
+class FakeRouter:
+    """Minimal litellm Router stub that captures metadata."""
+
+    def __init__(self) -> None:
+        self.last_metadata: dict[str, Any] = {}
+
+    async def acompletion(self, **kwargs: Any) -> FakeResponse:
+        self.last_metadata = kwargs.get("metadata", {})
+        return FakeResponse()
 
 
 # --- Section 3: Configuration ---
@@ -144,6 +187,24 @@ class TestLangfuseLifecycle:
             assert result is None
         finally:
             langfuse._client = None
+
+
+class TestLLMRequestGenerationName:
+    def test_generation_name_field_defaults_to_none(self) -> None:
+        from app.llm.models import LLMRequest
+
+        req = LLMRequest(role="agent", messages=[{"role": "system", "content": "test"}])
+        assert req.generation_name is None
+
+    def test_generation_name_field_accepts_string(self) -> None:
+        from app.llm.models import LLMRequest
+
+        req = LLMRequest(
+            role="agent",
+            messages=[{"role": "system", "content": "test"}],
+            generation_name="agent:The Intern",
+        )
+        assert req.generation_name == "agent:The Intern"
 
 
 # --- Section 1: litellm Callback Integration ---
@@ -325,64 +386,10 @@ class TestTraceContextPropagation:
     @pytest.mark.asyncio
     async def test_llm_client_merges_trace_context_into_metadata(self) -> None:
         """When trace context is set, generate_structured should include it in the litellm call."""
-        import json
-        from typing import Any
         from app.core.langfuse import set_trace_context, _trace_context
         from app.llm.client import LLMClient
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
-
-        class FakeResponse:
-            def __init__(self) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [
-                    type(
-                        "C",
-                        (),
-                        {
-                            "message": type(
-                                "M",
-                                (),
-                                {
-                                    "content": json.dumps(
-                                        {
-                                            "inner_thought": "ok",
-                                            "suspicion": None,
-                                            "action": {
-                                                "type": "observe",
-                                                "target": "well",
-                                                "location": "well",
-                                            },
-                                            "dialogue": None,
-                                            "goal_progress": "none",
-                                            "cooperation_intent": "medium",
-                                        }
-                                    )
-                                },
-                            )()
-                        },
-                    )
-                ]
-                self.usage = type(
-                    "U",
-                    (),
-                    {
-                        "prompt_tokens": 10,
-                        "completion_tokens": 5,
-                        "total_tokens": 15,
-                    },
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        class FakeRouter:
-            def __init__(self) -> None:
-                self.last_metadata: dict[str, Any] = {}
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.last_metadata = kwargs.get("metadata", {})
-                return FakeResponse()
 
         client = LLMClient()
         fake_router = FakeRouter()
@@ -526,8 +533,6 @@ class TestRepairAndStatusMetadata:
     @pytest.mark.asyncio
     async def test_repair_attempt_logged_as_span_event(self) -> None:
         """When JSON repair occurs, a span event should be recorded."""
-        import json
-        from typing import Any
         from app.core.langfuse import set_trace_context, _trace_context
 
         calls: list[dict[str, object]] = []
@@ -539,29 +544,7 @@ class TestRepairAndStatusMetadata:
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
 
-        class FakeResponse:
-            def __init__(self, content: str) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
-                self.usage = type(
-                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        good_json = json.dumps(
-            {
-                "inner_thought": "ok",
-                "suspicion": None,
-                "action": {"type": "observe", "target": "well", "location": "well"},
-                "dialogue": None,
-                "goal_progress": "none",
-                "cooperation_intent": "medium",
-            }
-        )
-
-        class FakeRouter:
+        class RepairFakeRouter:
             def __init__(self) -> None:
                 self.call_count = 0
 
@@ -569,10 +552,10 @@ class TestRepairAndStatusMetadata:
                 self.call_count += 1
                 if self.call_count == 1:
                     return FakeResponse("not-valid-json")
-                return FakeResponse(good_json)
+                return FakeResponse()
 
         client = LLMClient()
-        client.router = FakeRouter()  # type: ignore[assignment]
+        client.router = RepairFakeRouter()  # type: ignore[assignment]
         token = set_trace_context(trace_id="t-1", span_id="s-1")
         try:
             with patch("app.llm.client.log_event", side_effect=mock_log_event):
@@ -613,6 +596,225 @@ class TestRepairAndStatusMetadata:
             last_update = update_calls[-1]
             meta = last_update.get("metadata", {})
             assert "status" in meta  # type: ignore[operator]
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+
+class TestGenerationNameInMetadata:
+    @pytest.mark.asyncio
+    async def test_generation_name_used_over_role_when_provided(self) -> None:
+        """When LLMRequest has generation_name set, it should appear in metadata instead of role."""
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="agent",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={"experiment_id": "exp-1"},
+                generation_name="agent:The Intern",
+            )
+        )
+        assert fake_router.last_metadata["generation_name"] == "agent:The Intern"
+
+    @pytest.mark.asyncio
+    async def test_generation_name_falls_back_to_role(self) -> None:
+        """When generation_name is None, metadata should use the role string."""
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="agent",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={},
+            )
+        )
+        assert fake_router.last_metadata["generation_name"] == "agent"
+
+
+class TestSessionAndUserMetadata:
+    @pytest.mark.asyncio
+    async def test_session_id_from_experiment_id(self) -> None:
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="agent",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={"experiment_id": "exp-42", "agent_name": "The Intern"},
+            )
+        )
+        assert fake_router.last_metadata["session_id"] == "exp-42"
+        assert fake_router.last_metadata["trace_user_id"] == "The Intern"
+
+    @pytest.mark.asyncio
+    async def test_trace_user_id_falls_back_to_role(self) -> None:
+        from app.llm.client import LLMClient
+        from app.llm.models import LLMRequest
+        from app.schemas.agent_decision import AgentDecision
+
+        client = LLMClient()
+        fake_router = FakeRouter()
+        client.router = fake_router  # type: ignore[assignment]
+
+        await client.generate_structured(
+            LLMRequest(
+                role="gm",
+                messages=[{"role": "system", "content": "test"}],
+                response_format=AgentDecision,
+                metadata={"experiment_id": "exp-42"},
+            )
+        )
+        assert fake_router.last_metadata["session_id"] == "exp-42"
+        assert fake_router.last_metadata["trace_user_id"] == "gm"
+
+
+class TestRecordScores:
+    def test_record_scores_noop_when_no_client(self) -> None:
+        from app.core import langfuse
+
+        langfuse._client = None
+        # Should not raise
+        langfuse.record_scores(trace_id="t-1", scores={"cooperation": 0.5})
+
+    def test_record_scores_calls_score_api(self) -> None:
+        from app.core import langfuse
+
+        mock_client = MagicMock()
+        langfuse._client = mock_client
+        try:
+            langfuse.record_scores(
+                trace_id="t-1",
+                scores={"cooperation_ratio": 0.6, "threat_level": 80.0},
+            )
+            assert mock_client.score.call_count == 2
+            calls = mock_client.score.call_args_list
+            score_names = {c.kwargs["name"] for c in calls}
+            assert score_names == {"cooperation_ratio", "threat_level"}
+            for c in calls:
+                assert c.kwargs["trace_id"] == "t-1"
+        finally:
+            langfuse._client = None
+
+    def test_record_scores_swallows_exceptions(self) -> None:
+        from app.core import langfuse
+
+        mock_client = MagicMock()
+        mock_client.score.side_effect = RuntimeError("boom")
+        langfuse._client = mock_client
+        try:
+            # Should not raise
+            langfuse.record_scores(trace_id="t-1", scores={"test": 1.0})
+        finally:
+            langfuse._client = None
+
+
+class TestRoundScoresAndTraceIO:
+    @pytest.mark.asyncio
+    async def test_round_trace_includes_input(self) -> None:
+        from app.core import langfuse as lf_module
+
+        trace_calls: list[dict] = []
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-io"
+        mock_trace_obj.span.return_value = MagicMock(id="span-io")
+
+        original_trace = lf_module.trace
+
+        def fake_trace(*, name, session_id, **kwargs):
+            trace_calls.append({"name": name, "session_id": session_id, **kwargs})
+            return mock_trace_obj
+
+        lf_module.trace = fake_trace  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(trace_calls) == 1
+            call = trace_calls[0]
+            assert "input" in call
+            assert call["input"]["round"] == 1
+            assert "arc" in call["input"]
+            assert "resources" in call["input"]
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+
+    @pytest.mark.asyncio
+    async def test_round_scores_recorded(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-scores"
+        mock_trace_obj.span.return_value = MagicMock(id="span-scores")
+
+        original_trace = lf_module.trace
+        original_record = getattr(lf_module, "record_scores", None)
+        score_calls: list[dict] = []
+
+        def fake_record(*, trace_id, scores):
+            score_calls.append({"trace_id": trace_id, "scores": scores})
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        lf_module.record_scores = fake_record  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(score_calls) == 1
+            assert score_calls[0]["trace_id"] == "trace-scores"
+            scores = score_calls[0]["scores"]
+            assert "cooperation_ratio" in scores
+            assert "threat_level" in scores
+        finally:
+            lf_module.trace = original_trace  # type: ignore[assignment]
+            if original_record is not None:
+                lf_module.record_scores = original_record  # type: ignore[assignment]
+
+    @pytest.mark.asyncio
+    async def test_trace_update_includes_output(self) -> None:
+        from app.core import langfuse as lf_module
+
+        mock_trace_obj = MagicMock()
+        mock_trace_obj.id = "trace-output"
+        mock_trace_obj.span.return_value = MagicMock(id="span-output")
+        update_calls: list[dict] = []
+
+        def capture_update(**kwargs):
+            update_calls.append(kwargs)
+
+        mock_trace_obj.update = capture_update
+        original_trace = lf_module.trace
+
+        lf_module.trace = lambda **kw: mock_trace_obj  # type: ignore[assignment]
+        try:
+            engine, state = _build_engine_and_state()
+            await engine.run_round(state)
+
+            assert len(update_calls) >= 1
+            last_update = update_calls[-1]
+            assert "output" in last_update
+            assert "cooperation_ratio" in last_update["output"]
+            assert "event_count" in last_update["output"]
         finally:
             lf_module.trace = original_trace  # type: ignore[assignment]
 

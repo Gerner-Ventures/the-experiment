@@ -10,6 +10,7 @@ import {
   type SimulationLinkDatum,
 } from 'd3-force'
 import { useAgentStore } from '@/stores/agent'
+import { SPRITE_H } from '@/config/character-sprites'
 import type { GoalArchetype } from '@/types/agent'
 import {
   ARCHETYPE_COLORS,
@@ -125,7 +126,7 @@ export function useForceGraph(containerWidth: Ref<number>, containerHeight: Ref<
       .force('collide', forceCollide<ForceGraphNode>().radius(d => {
         // Sprite-based sizing: base 2x + 0.5 per relationship, sprite is 18px tall
         const scale = 2 + Math.min(3, d.relationshipCount * 0.5)
-        return 18 * scale / 2 + 8
+        return SPRITE_H * scale / 2 + 8
       }))
       .alphaDecay(FORCE_CONFIG.alphaDecay)
       .on('tick', () => {

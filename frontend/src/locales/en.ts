@@ -221,6 +221,10 @@ export default {
     approve: 'Approve Plan',
     dismiss: 'Dismiss',
     clickToContinue: 'Click to continue',
+    audioLoading: 'Loading narration audio…',
+    audioPlay: 'Play narration',
+    audioReplay: 'Replay narration',
+    audioError: 'Audio unavailable',
   },
 
   dossier: {

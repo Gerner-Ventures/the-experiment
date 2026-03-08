@@ -95,6 +95,8 @@ export class AgentSpriteObject {
 
   /** Move directly to a single adjacent tile (used by demo random walk) */
   moveTo(x: number, y: number) {
+    this.pathQueue = []
+    this.pathCallback = null
     this.targetTileX = x
     this.targetTileY = y
     this.moveProgress = 0

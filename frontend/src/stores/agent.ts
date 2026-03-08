@@ -95,6 +95,14 @@ export const useAgentStore = defineStore('agent', () => {
     }
   }
 
+  function updateAgentStatus(agentId: string, status: AgentStatus, location?: string) {
+    const agent = agents.value.get(agentId)
+    if (agent) {
+      agent.status = status
+      if (location) agent.location = location
+    }
+  }
+
   function resetStatuses() {
     for (const agent of agents.value.values()) {
       agent.status = 'idle'
@@ -107,7 +115,8 @@ export const useAgentStore = defineStore('agent', () => {
 
   return {
     agents, agentList, agentConfigs, agentCount,
-    setAgents, getAgent, onAction, onMove, onAgentUpdate, updateAgentFromDossier, resetStatuses,
+    setAgents, getAgent, onAction, onMove, onAgentUpdate, updateAgentFromDossier,
+    updateAgentStatus, resetStatuses,
     $reset,
   }
 })

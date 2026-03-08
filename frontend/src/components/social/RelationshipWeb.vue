@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch } from 'vue'
 import { Drawer } from 'ant-design-vue'
 import { useElementSize } from '@vueuse/core'
 import { useForceGraph, type ForceGraphNode, type ForceGraphLink } from '@/composables/useForceGraph'
@@ -93,14 +93,10 @@ function linkTarget(link: ForceGraphLink): ForceGraphNode {
   return link.target as ForceGraphNode
 }
 
-// Build graph when drawer opens
+// Build graph when drawer opens and container has width
 watch(() => width.value, (w) => {
   if (w > 0) buildGraph()
-}, { once: true })
-
-onMounted(() => {
-  if (width.value > 0) buildGraph()
-})
+}, { immediate: true, once: true })
 </script>
 
 <template>

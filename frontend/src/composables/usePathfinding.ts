@@ -6,19 +6,22 @@ import { findPath } from '@/components/world/pixi/pathfinding'
  * Composable that manages pathfinding, location indexing, and agent movement.
  * Extracts business logic from PixiWorld.vue so the component stays thin.
  */
+/**
+ * Backend location IDs that don't match map tile locationId values.
+ * Kept at module scope to avoid re-creation per composable call.
+ */
+const LOCATION_ALIASES: Record<string, string> = {
+  town_square: 'town_hall',
+  community_hall: 'town_hall',
+  meeting_hall: 'town_hall',
+}
+
 export function usePathfinding() {
   // Location → walkable tiles index for fast lookup
   const locationTilesMap = new Map<string, { x: number; y: number }[]>()
 
   // Walkability lookup for BFS pathfinding
   const walkableSet = new Set<string>()
-
-  // Backend sends location IDs that don't always match the map's tile locationId values.
-  const LOCATION_ALIASES: Record<string, string> = {
-    town_square: 'town_hall',
-    community_hall: 'town_hall',
-    meeting_hall: 'town_hall',
-  }
 
   let mapData: MapData | null = null
 
