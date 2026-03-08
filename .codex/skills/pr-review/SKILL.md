@@ -31,11 +31,17 @@ If the user provides the skill name without a PR number, stop and ask for the PR
 Read only the docs relevant to the changed area:
 
 - `README.md` for repo context
+- `CLAUDE.md` for repo-wide review and workflow guidance
 - `docs/BACKEND.md` for backend layout and workflows
 - `docs/GAME_RUNTIME.md` for round loop, persistence, and websocket behavior
 - `docs/API.md` and `shared/schemas/` for contract changes
 - `docs/GAME_DESIGN.md` for intentional mechanic changes
 - `docs/INFRASTRUCTURE.md` for deployment or persistence implications
+
+Also read the nearest stack-specific `CLAUDE.md` when the diff is concentrated there:
+
+- `backend/CLAUDE.md` for backend-heavy changes
+- `frontend/CLAUDE.md` for frontend-heavy changes
 
 ## Workflow
 
@@ -55,7 +61,7 @@ gh pr diff <number> --patch
 gh pr checkout <number>
 ```
 
-Use `gh pr checkout <number>` when local execution or deeper code navigation would help. Do not disturb unrelated local changes.
+Use `gh pr checkout <number>` when local execution or deeper code navigation would help, but only from a clean checkout or disposable worktree. If the current checkout has unrelated local changes, inspect the PR with `gh pr view` and `gh pr diff` instead of stomping around like a raccoon in the pantry.
 
 ## Findings Format
 
@@ -96,11 +102,12 @@ Non-blocking
 
 ## Submission
 
-Draft the full review body in a temp file, then submit it with GitHub CLI:
+ Draft the full review body in a unique temp file, then submit it with GitHub CLI:
 
 ```bash
-gh pr review <number> --approve --body-file /tmp/review.txt
-gh pr review <number> --request-changes --body-file /tmp/review.txt
+review_file="$(mktemp -t pr-review.XXXXXX)"
+gh pr review <number> --approve --body-file "$review_file"
+gh pr review <number> --request-changes --body-file "$review_file"
 ```
 
 Before submitting:
@@ -108,4 +115,5 @@ Before submitting:
 - Make sure the body clearly separates blocking from non-blocking findings.
 - Include the final verdict in the opening sentence.
 - Mention tests/checks run when relevant.
+- Clean up the temp file after submission.
 - Do not leave the result as a local note; the review must be submitted to GitHub.
