@@ -47,7 +47,10 @@ Test that when the LLM call raises an exception:
 
 ## Acceptance Criteria
 
-- [ ] All 4 test areas have at least one test each
-- [ ] Tests use mocked LLM/engine to avoid real API calls
-- [ ] Tests verify WS message shapes match frontend TypeScript types
+- [x] All 4 test areas have at least one test each
+<!-- canon:realized-in:PR#124 file:backend/tests/test_api_layer.py -->
+<!-- canon:realized-in:PR#124 file:backend/tests/test_runtime.py -->
+<!-- canon:realized-in:PR#124 file:backend/tests/test_agent_system.py -->
+- [x] Tests use mocked LLM/engine to avoid real API calls
+- [x] Tests verify WS message shapes match frontend TypeScript types
 - [ ] CI passes with new tests
