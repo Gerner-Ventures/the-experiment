@@ -89,6 +89,27 @@ async function initExperiment() {
     const wsUrl = api.getWebSocketUrl(detail.experiment_id)
     ws.connect(wsUrl)
 
+    // Hydrate narration state if an applied GM plan exists (reconnect / refresh)
+    if (detail.gm_plan) {
+      const planData = detail.gm_plan as { plan?: Record<string, unknown>; status?: string }
+      const planRound = (planData.plan?.round as number) ?? detail.current_round
+      const planNarration = (planData.plan?.narration as string) ?? ''
+      if (planData.status === 'applied' && planNarration) {
+        try {
+          const meta = await api.getRoundNarration(detail.experiment_id, planRound)
+          gmStore.hydrateNarration(
+            planNarration,
+            planRound,
+            meta.status === 'ready' ? 'ready' : 'unavailable',
+            meta.status === 'ready' ? meta.audio_url ?? null : null,
+          )
+        } catch {
+          // Backend narration endpoint unavailable — show text only
+          gmStore.hydrateNarration(planNarration, planRound, 'unavailable', null)
+        }
+      }
+    }
+
     experimentCreated.value = true
     ready.value = true
   } catch (err) {
@@ -298,13 +319,11 @@ function goBack() {
           :is-playing="uiStore.isPlaying"
           :is-stepping="uiStore.isStepping"
           :stepping-status="uiStore.steppingStatus"
-          :speed="uiStore.playbackSpeed"
           :is-complete="experimentStore.isComplete"
           :has-experiment="experimentCreated"
           @step="handleStep"
           @play="handleStart"
           @pause="handlePause"
-          @speed-change="uiStore.setPlaybackSpeed"
           @toggle-log="uiStore.togglePanel('log')"
         />
       </div>
@@ -347,7 +366,12 @@ function goBack() {
     <NarrationOverlay
       :text="gmStore.narrationText"
       :visible="gmStore.showNarration"
+      :audio-status="gmStore.narrationAudioStatus"
+      :audio-url="gmStore.narrationAudioUrl"
+      :autoplay-blocked="gmStore.audioAutoplayBlocked"
       @dismiss="gmStore.dismissNarration()"
+      @update:playing="gmStore.setNarrationPlaying($event)"
+      @update:autoplay-blocked="gmStore.setAutoplayBlocked($event)"
     />
 
     <!-- Agent Dossier Drawer -->
