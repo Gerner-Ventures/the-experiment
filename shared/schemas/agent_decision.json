@@ -4,7 +4,12 @@
   "description": "Structured output from an agent's LLM decision",
   "type": "object",
   "properties": {
-    "inner_thought": { "type": "string" },
+    "inner_thought": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "description": "A brief window into the agent's immediate reasoning. Keep it to 1-2 short sentences and avoid monologues."
+    },
     "suspicion": { "type": ["string", "null"] },
     "action": {
       "type": "object",
