@@ -1046,7 +1046,9 @@ class ExperimentRuntime:
         await self.get_state(experiment_id)  # raises KeyError if not found
         entry = self._find_agent_speech_entry(experiment_id, agent_id, round_number, index)
         if entry is None:
-            raise KeyError(f"No speech entry for agent {agent_id} round {round_number} index {index}")
+            raise KeyError(
+                f"No speech entry for agent {agent_id} round {round_number} index {index}"
+            )
         if self.tts_service is None:
             return AgentSpeechAudioMetadata(
                 experiment_id=experiment_id,
@@ -1094,7 +1096,9 @@ class ExperimentRuntime:
     ) -> tuple[str, AsyncIterator[bytes]]:
         entry = self._find_agent_speech_entry(experiment_id, agent_id, round_number, index)
         if entry is None:
-            raise KeyError(f"No speech entry for agent {agent_id} round {round_number} index {index}")
+            raise KeyError(
+                f"No speech entry for agent {agent_id} round {round_number} index {index}"
+            )
         if self.tts_service is None:
             raise NarrationAudioError("Narration audio is not configured.", status_code=503)
         request = self.tts_service.build_speech_request(
@@ -1130,7 +1134,8 @@ class ExperimentRuntime:
                     continue
                 agent_id = str(event.data.get("agent_id", ""))
                 entries = [
-                    e for e in self._agent_speech_log.get(experiment_id, [])
+                    e
+                    for e in self._agent_speech_log.get(experiment_id, [])
                     if e["agent_id"] == agent_id and e["round_number"] == round_number
                 ]
                 for entry in entries:
@@ -2029,7 +2034,8 @@ class _StreamingHook:
                 if agent_id and message_text.strip():
                     # Determine index: count existing entries for this agent+round
                     existing = [
-                        e for e in self._runtime._agent_speech_log.get(eid, [])
+                        e
+                        for e in self._runtime._agent_speech_log.get(eid, [])
                         if e["agent_id"] == agent_id and e["round_number"] == round_number
                     ]
                     index = len(existing)

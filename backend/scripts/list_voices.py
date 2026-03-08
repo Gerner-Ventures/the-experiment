@@ -20,7 +20,9 @@ def main() -> None:
     client = ElevenLabs(api_key=api_key)
     response = client.voices.get_all()
 
-    print(f"{'VOICE ID':<28} {'NAME':<30} {'GENDER':<8} {'ACCENT':<15} {'AGE':<12} {'USE CASE':<20}")
+    print(
+        f"{'VOICE ID':<28} {'NAME':<30} {'GENDER':<8} {'ACCENT':<15} {'AGE':<12} {'USE CASE':<20}"
+    )
     print("-" * 113)
 
     for voice in sorted(response.voices, key=lambda v: v.name or ""):

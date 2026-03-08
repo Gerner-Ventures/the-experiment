@@ -68,8 +68,12 @@ def _request() -> CreateExperimentRequest:
                     "character_id": "undertaker_01",
                     "personality": {
                         "axes": {
-                            "paranoia": 72, "empathy": 40, "dominance": 58,
-                            "impulsiveness": 61, "loyalty": 44, "ambition": 70,
+                            "paranoia": 72,
+                            "empathy": 40,
+                            "dominance": 58,
+                            "impulsiveness": 61,
+                            "loyalty": 44,
+                            "ambition": 70,
                         },
                         "trait_tags": ["guarded", "curious"],
                         "self_concept": "Asking the right questions.",
@@ -85,8 +89,12 @@ def _request() -> CreateExperimentRequest:
                     "character_id": "caretaker_01",
                     "personality": {
                         "axes": {
-                            "paranoia": 35, "empathy": 62, "dominance": 44,
-                            "impulsiveness": 39, "loyalty": 75, "ambition": 48,
+                            "paranoia": 35,
+                            "empathy": 62,
+                            "dominance": 44,
+                            "impulsiveness": 39,
+                            "loyalty": 75,
+                            "ambition": 48,
                         },
                         "trait_tags": ["dutiful", "protective"],
                         "self_concept": "Hold things together.",
@@ -226,9 +234,7 @@ async def test_get_agent_speech_audio_stream_returns_audio() -> None:
         )
     )
 
-    content_type, stream = await runtime.get_agent_speech_audio_stream(
-        eid, agent.agent_id, 1, 0
-    )
+    content_type, stream = await runtime.get_agent_speech_audio_stream(eid, agent.agent_id, 1, 0)
     audio_bytes = b"".join([chunk async for chunk in stream])
     assert content_type == "audio/mpeg"
     assert audio_bytes == b"agent-audio"
@@ -243,9 +249,7 @@ async def test_get_agent_speech_audio_stream_404_for_missing() -> None:
     )
     state = await runtime.create_experiment(_request())
     with pytest.raises(KeyError):
-        await runtime.get_agent_speech_audio_stream(
-            state.experiment_id, "nonexistent", 1, 0
-        )
+        await runtime.get_agent_speech_audio_stream(state.experiment_id, "nonexistent", 1, 0)
 
 
 @pytest.mark.asyncio
@@ -322,9 +326,7 @@ async def test_on_phase_complete_records_speech_entries_and_triggers_pregenerati
     await asyncio.sleep(0.1)
 
     # Check that agent_speech_audio WS messages were broadcast
-    payloads = [
-        call.args[1] for call in runtime.connection_manager.broadcast.await_args_list
-    ]
+    payloads = [call.args[1] for call in runtime.connection_manager.broadcast.await_args_list]
     speech_audio_msgs = [p for p in payloads if p.get("type") == "agent_speech_audio"]
     assert len(speech_audio_msgs) >= 1
 
@@ -429,9 +431,7 @@ async def test_pregeneration_failure_does_not_block_round() -> None:
     await asyncio.sleep(0.1)
 
     # Error status should be broadcast
-    payloads = [
-        call.args[1] for call in runtime.connection_manager.broadcast.await_args_list
-    ]
+    payloads = [call.args[1] for call in runtime.connection_manager.broadcast.await_args_list]
     speech_audio_msgs = [p for p in payloads if p.get("type") == "agent_speech_audio"]
     assert any(m["data"]["status"] == "error" for m in speech_audio_msgs)
 
@@ -473,9 +473,7 @@ async def test_unavailable_status_when_tts_not_configured() -> None:
     await hook.on_phase_complete(1, phase_result)
     await asyncio.sleep(0.1)
 
-    payloads = [
-        call.args[1] for call in runtime.connection_manager.broadcast.await_args_list
-    ]
+    payloads = [call.args[1] for call in runtime.connection_manager.broadcast.await_args_list]
     speech_audio_msgs = [p for p in payloads if p.get("type") == "agent_speech_audio"]
     assert len(speech_audio_msgs) >= 1
     assert speech_audio_msgs[0]["data"]["status"] == "unavailable"
@@ -519,11 +517,10 @@ async def test_agent_speech_audio_ws_message_includes_audio_url_on_ready() -> No
     await hook.on_phase_complete(1, phase_result)
     await asyncio.sleep(0.1)
 
-    payloads = [
-        call.args[1] for call in runtime.connection_manager.broadcast.await_args_list
-    ]
+    payloads = [call.args[1] for call in runtime.connection_manager.broadcast.await_args_list]
     ready_msgs = [
-        p for p in payloads
+        p
+        for p in payloads
         if p.get("type") == "agent_speech_audio" and p.get("data", {}).get("status") == "ready"
     ]
     assert len(ready_msgs) == 1
