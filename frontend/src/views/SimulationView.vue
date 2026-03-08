@@ -429,6 +429,7 @@ function goBack() {
             :is-complete="experimentStore.isComplete"
             :has-experiment="experimentCreated"
             :is-muted="isMuted"
+            :auto-start="experimentCreated && experimentStore.currentRound === 0"
             @step="handleStep"
             @play="handleStart"
             @pause="handlePause"

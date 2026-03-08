@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import { Button, Tooltip } from 'ant-design-vue'
 import {
   CaretRightOutlined,
@@ -10,18 +11,24 @@ import {
   StopOutlined,
   ShareAltOutlined,
 } from '@ant-design/icons-vue'
+import AutoCountdownButton from '@/components/ui/AutoCountdownButton.vue'
 import { useLocale } from '@/locales'
 
 const locale = useLocale()
 
-defineProps<{
+const props = defineProps<{
   isPlaying: boolean
   isStepping: boolean
   steppingStatus: string
   isComplete: boolean
   hasExperiment: boolean
   isMuted: boolean
+  autoStart?: boolean
 }>()
+
+const showAutoStart = computed(() =>
+  props.autoStart && props.hasExperiment && !props.isPlaying && !props.isComplete,
+)
 
 const emit = defineEmits<{
   step: []
@@ -86,7 +93,18 @@ const emit = defineEmits<{
       <div class="w-px h-5 bg-white/[0.08] mx-1" />
 
       <!-- Play/Pause -->
+      <AutoCountdownButton
+        v-if="showAutoStart"
+        :delay="5000"
+        :active="true"
+        type="primary"
+        size="large"
+        @fire="emit('play')"
+      >
+        <template #icon><CaretRightOutlined /></template>
+      </AutoCountdownButton>
       <Button
+        v-else
         :type="isPlaying ? 'default' : 'primary'"
         shape="circle"
         size="large"

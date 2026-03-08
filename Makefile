@@ -53,10 +53,12 @@ env: ## Copy .env.example to backend/.env if missing
 
 .PHONY: dev dev-detached stop restart restart-backend restart-frontend status
 
-dev: ## Start all services via docker compose
+dev: ## Start all services via docker compose (secrets from Doppler)
+	doppler secrets download -p the-experiment -c dev --no-file --format env-no-quotes > backend/.env.doppler
 	docker compose up --build
 
-dev-detached: ## Start all services in background
+dev-detached: ## Start all services in background (secrets from Doppler)
+	doppler secrets download -p the-experiment -c dev --no-file --format env-no-quotes > backend/.env.doppler
 	docker compose up --build -d
 
 stop: ## Stop all services

@@ -54,6 +54,7 @@ export const useAgentStore = defineStore('agent', () => {
       agent_name?: string
       action: Record<string, unknown> | string
       inner_thought?: string
+      dialogue?: string | null
       cooperation_intent?: string
     }
     const agent = agents.value.get(data.agent_id)
@@ -84,7 +85,7 @@ export const useAgentStore = defineStore('agent', () => {
       agentName,
       actionType,
       targetLocation,
-      thought: data.inner_thought,
+      thought: data.dialogue || data.inner_thought,
     })
   }
 

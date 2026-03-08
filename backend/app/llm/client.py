@@ -10,9 +10,9 @@ import structlog
 
 from app.core.config import get_settings
 from app.core import posthog as ph
-from app.core.langfuse import get_trace_context, log_event
+from app.core.langfuse import get_trace_context
 from app.llm.config import get_default_model_configs
-from app.llm.models import LLMModelConfig, LLMRequest, LLMResult, LLMUsage, RepairAttempt
+from app.llm.models import LLMModelConfig, LLMRequest, LLMResult, LLMUsage
 from app.llm.tracker import UsageTracker
 
 log = structlog.get_logger(__name__)
@@ -24,6 +24,10 @@ class LLMClient:
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
         self._register_langfuse_callbacks()
+        # Disable litellm's client-side JSON schema validation — it rejects responses
+        # that violate constraints like maxLength even though the structure is correct.
+        # We validate with Pydantic ourselves in _parse_structured_content.
+        litellm.enable_json_schema_validation = False
         router_cls = cast(Any, getattr(litellm, "Router"))
         self.router = router_cls(
             model_list=self._build_model_list(),
@@ -47,25 +51,13 @@ class LLMClient:
         messages = list(request.messages)
         api_response_format: dict[str, Any] | type[BaseModel] | None = request.response_format
 
-        # For Pydantic models, inject the JSON schema into the system prompt
-        # so Anthropic models know what structure to return
+        # Pass Pydantic BaseModel classes directly to litellm as response_format.
+        # LiteLLM handles provider-specific translation (e.g. Anthropic tool_use,
+        # OpenAI json_schema) automatically.
         if isinstance(request.response_format, type) and issubclass(
             request.response_format, BaseModel
         ):
-            schema = request.response_format.model_json_schema()
-            schema_instruction = (
-                f"\n\nYou MUST respond with valid JSON matching this schema:\n"
-                f"```json\n{json.dumps(schema, indent=2)}\n```\n"
-                f"Return ONLY the JSON object, no other text."
-            )
-            if messages and messages[0].get("role") == "system":
-                messages[0] = {
-                    **messages[0],
-                    "content": messages[0]["content"] + schema_instruction,
-                }
-            else:
-                messages.insert(0, {"role": "system", "content": schema_instruction.strip()})
-            api_response_format = {"type": "json_object"}
+            api_response_format = request.response_format
 
         metadata = self._build_metadata(request)
         log.debug(
@@ -87,36 +79,33 @@ class LLMClient:
             metadata=metadata,
         )
         result = self._build_result(response)
+        finish_reason = getattr(response.choices[0], "finish_reason", None) if response.choices else None
 
         if request.response_format is not None:
             parsed = self._parse_structured_content(result.content, request.response_format)
             if parsed is None:
-                log_event(
-                    name="json_repair_attempted",
-                    metadata={"role": request.role, "original_content": result.content[:500]},
+                log.error(
+                    "llm_structured_parse_failed",
+                    role=request.role,
+                    model=result.model,
+                    experiment_id=request.metadata.get("experiment_id"),
+                    content_preview=result.content[:300],
+                    finish_reason=finish_reason,
+                    completion_tokens=result.usage.completion_tokens,
+                    max_tokens_requested=request.max_tokens,
                 )
-                repaired = await self._repair_json(request, result)
-                if repaired is not None:
-                    result = repaired
-                else:
-                    log.error(
-                        "llm_structured_parse_failed",
-                        role=request.role,
-                        model=result.model,
-                        experiment_id=request.metadata.get("experiment_id"),
-                    )
-                    ph.capture(
-                        "llm_parse_failure",
-                        {
-                            "role": request.role,
-                            "model": result.model,
-                            "experiment_id": request.metadata.get("experiment_id"),
-                        },
-                    )
-                    raise ValueError(
-                        f"model response did not match expected structured format. "
-                        f"Raw content: {result.content[:300]}"
-                    )
+                ph.capture(
+                    "llm_parse_failure",
+                    {
+                        "role": request.role,
+                        "model": result.model,
+                        "experiment_id": request.metadata.get("experiment_id"),
+                    },
+                )
+                raise ValueError(
+                    f"model response did not match expected structured format. "
+                    f"Raw content: {result.content[:300]}"
+                )
             else:
                 result.parsed = parsed
 
@@ -229,55 +218,6 @@ class LLMClient:
                 return None
 
         return payload if isinstance(payload, dict) else None
-
-    async def _repair_json(self, request: LLMRequest, result: LLMResult) -> LLMResult | None:
-        repair_prompt = RepairAttempt(
-            original_text=result.content,
-            error="Response was not valid structured JSON for the requested schema.",
-        )
-        repair_messages = [
-            {
-                "role": "system",
-                "content": "Repair the user's text into valid JSON matching the requested schema. Return JSON only.",
-            },
-            {
-                "role": "user",
-                "content": json.dumps(
-                    {
-                        "schema": request.response_format
-                        if isinstance(request.response_format, dict)
-                        else request.response_format.model_json_schema()
-                        if isinstance(request.response_format, type)
-                        and issubclass(request.response_format, BaseModel)
-                        else "unknown",
-                        "failed_response": repair_prompt.original_text,
-                        "error": repair_prompt.error,
-                    }
-                ),
-            },
-        ]
-        model_config = self._resolve_model_config(request)
-        repair_response = await self.router.acompletion(
-            model=request.model_override or model_config.primary_model,
-            messages=cast(Any, repair_messages),
-            temperature=0,
-            timeout=model_config.timeout_seconds,
-            metadata=self._build_metadata(
-                request,
-                generation_name_override=f"{request.generation_name or request.role}:repair",
-                extra={"repair_pass": True},
-            ),
-        )
-        repaired_result = self._build_result(repair_response)
-        response_format = request.response_format
-        if response_format is None:
-            return None
-        parsed = self._parse_structured_content(repaired_result.content, response_format)
-        if parsed is None:
-            return None
-        repaired_result.parsed = parsed
-        repaired_result.repaired = True
-        return repaired_result
 
     def _track_usage(self, request: LLMRequest, result: LLMResult) -> None:
         metadata = request.metadata
