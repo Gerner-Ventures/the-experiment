@@ -5,6 +5,7 @@ import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
 import { useUIStore } from '@/stores/ui'
+import { useTurnStore } from '@/stores/turn'
 import type { WSMessage } from '@/types/websocket'
 
 /** Helper to create a WSMessage with minimal required fields */
@@ -218,7 +219,6 @@ describe('agentStore', () => {
   describe('onAction', () => {
     it('enqueues a turn in the turn store', () => {
       const store = useAgentStore()
-      const { useTurnStore } = require('@/stores/turn')
       const turnStore = useTurnStore()
       store.setAgents(sampleAgents)
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', agent_name: 'Alice', action: 'talk', summary: 'chatting' } }))
@@ -230,7 +230,6 @@ describe('agentStore', () => {
 
     it('enqueues with target location when action includes one', () => {
       const store = useAgentStore()
-      const { useTurnStore } = require('@/stores/turn')
       const turnStore = useTurnStore()
       store.setAgents(sampleAgents)
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'gather', location: 'farm' }, summary: '' } }))

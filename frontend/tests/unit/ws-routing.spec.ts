@@ -10,6 +10,7 @@ import { useAgentStore } from '@/stores/agent'
 import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
+import { useTurnStore } from '@/stores/turn'
 import type { WSMessage, WSMessageType } from '@/types/websocket'
 
 // We can't import useWebSocket directly (it creates a real WebSocket),
@@ -118,7 +119,6 @@ describe('WebSocket message routing', () => {
   })
 
   it('routes agent_action to agentStore (enqueues in turn store)', () => {
-    const { useTurnStore } = require('@/stores/turn')
     const agentStore = useAgentStore()
     const turnStore = useTurnStore()
     agentStore.setAgents([{ id: 'a1', name: 'Alice', personality: { axes: {}, traitTags: [] }, goal: { archetype: 'communal_survival', text: '', progressSignals: [] }, llmModel: 'openai/gpt-4o-mini' }])
@@ -261,7 +261,6 @@ describe('WebSocket message routing', () => {
     // Agent actions (now enqueued in turn store, not applied immediately)
     routeMessage(makeMsg('agent_action', { agent_id: 'a1', action: 'gather', summary: 'collecting' }))
     routeMessage(makeMsg('agent_speak', { agent_id: 'a2', agent_name: 'Bob', target: 'a1', message: 'Need help?' }))
-    const { useTurnStore } = require('@/stores/turn')
     const turnStore = useTurnStore()
     expect(turnStore.activeTurn).not.toBeNull()
     expect(socialStore.conversations).toHaveLength(1)

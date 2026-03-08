@@ -207,6 +207,7 @@ export default {
     steppingRunning: 'Running round…',
     steppingAgent: '{name}: {action}',
     steppingWaiting: 'Waiting for turns…',
+    steppingNextRound: 'Starting next round…',
   },
 
   gm: {

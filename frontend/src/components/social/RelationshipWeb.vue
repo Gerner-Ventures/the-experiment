@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, computed } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { Drawer } from 'ant-design-vue'
 import { useElementSize } from '@vueuse/core'
 import { useForceGraph, type ForceGraphNode, type ForceGraphLink } from '@/composables/useForceGraph'
@@ -18,7 +18,7 @@ const emit = defineEmits<{
 const locale = useLocale()
 const uiStore = useUIStore()
 
-const svgContainer = ref<HTMLDivElement | null>(null)
+const svgContainer = ref<HTMLElement | null>(null)
 const { width, height } = useElementSize(svgContainer)
 const { nodes, links, buildGraph, onDragStart, onDragMove, onDragEnd } = useForceGraph(width, height)
 

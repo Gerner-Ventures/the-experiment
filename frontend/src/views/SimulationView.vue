@@ -26,8 +26,10 @@ import { useGMStore } from '@/stores/gm'
 import { useUIStore } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useTurnStore } from '@/stores/turn'
 import { api } from '@/services/api'
 import type { ExperimentStatus } from '@/types/experiment'
+import type { AgentStatus } from '@/types/agent'
 
 const locale = useLocale()
 const route = useRoute()
@@ -39,6 +41,7 @@ const worldStore = useWorldStore()
 const gmStore = useGMStore()
 const uiStore = useUIStore()
 const socialStore = useSocialStore()
+const turnStore = useTurnStore()
 const ws = useWebSocket()
 
 // Theme and arc from sessionStorage (set by SetupView) or defaults
@@ -157,6 +160,7 @@ watch(() => uiStore.isPlaying, (playing) => {
       autoPlayTimer = null
     }
     waitingForRound = false
+    uiStore.clearStepping()
   }
 })
 
@@ -170,6 +174,9 @@ watch(() => experimentStore.completedRounds, () => {
     router.push({ name: 'report', params: { id: experimentStore.id! } })
     return
   }
+
+  // Keep status visible during delay between rounds
+  uiStore.setSteppingStatus(locale.hud.steppingNextRound)
 
   const delay = 3000 / uiStore.playbackSpeed
   autoPlayTimer = setTimeout(autoStep, delay)
@@ -188,6 +195,30 @@ function handleAgentClick(agentId: string) {
   uiStore.selectAgent(agentId)
 }
 
+// Wire turn store handlers once PixiWorld is mounted
+watch(pixiWorldRef, (pw) => {
+  if (!pw) return
+  turnStore.setHandlers({
+    move: (agentId: string, location: string, onComplete: () => void) => {
+      pw.moveAgentToLocation(agentId, location, onComplete)
+    },
+    updateAgent: (agentId: string, status: AgentStatus, location?: string) => {
+      const agent = agentStore.agentList.find(a => a.id === agentId)
+      if (agent) {
+        agent.status = status
+        if (location) agent.location = location
+      }
+    },
+    addConversation: (agentId: string, agentName: string, message: string) => {
+      socialStore.addConversation(agentId, agentName, message)
+    },
+    getAgentLocation: (agentId: string) => {
+      const agent = agentStore.agentList.find(a => a.id === agentId)
+      return agent?.location
+    },
+  })
+})
+
 onMounted(async () => {
   await initExperiment()
 })
@@ -201,6 +232,7 @@ onUnmounted(() => {
   gmStore.$reset()
   uiStore.$reset()
   socialStore.$reset()
+  turnStore.$reset()
 })
 
 // When stepping clears (from step_error, disconnect, etc.), reset waitingForRound
@@ -327,14 +359,15 @@ function goBack() {
         />
       </div>
 
-      <!-- Conversation bubbles -->
+      <!-- Turn-driven conversation bubble -->
       <ConversationBubble
-        v-for="conv in socialStore.recentConversations.slice(-3)"
-        :key="conv.id"
-        :agent-name="conv.agentName"
-        :message="conv.message"
-        :agent-id="conv.agentId"
+        v-if="turnStore.phase === 'talking' && turnStore.activeTurn?.thought"
+        :key="turnStore.activeTurn.id"
+        :agent-name="turnStore.activeTurn.agentName"
+        :message="turnStore.activeTurn.thought"
+        :agent-id="turnStore.activeTurn.agentId"
         :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
+        @dismiss="turnStore.onBubbleDismissed()"
       />
     </div>
 
