@@ -12,6 +12,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [str(member.value) for member in enum_cls]
+
+
 class ExperimentStatus(str, enum.Enum):
     SETUP = "setup"
     RUNNING = "running"
@@ -66,7 +70,7 @@ class Experiment(TimestampMixin, Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[ExperimentStatus] = mapped_column(
-        Enum(ExperimentStatus, name="experiment_status"),
+        Enum(ExperimentStatus, name="experiment_status", values_callable=_enum_values),
         default=ExperimentStatus.SETUP,
         nullable=False,
     )
@@ -143,7 +147,7 @@ class Act(TimestampMixin, Base):
     tone: Mapped[str] = mapped_column(String(255), nullable=False)
     gm_instructions: Mapped[str] = mapped_column(Text, nullable=False)
     resource_pressure: Mapped[ResourcePressure] = mapped_column(
-        Enum(ResourcePressure, name="resource_pressure"),
+        Enum(ResourcePressure, name="resource_pressure", values_callable=_enum_values),
         nullable=False,
     )
     director_notes: Mapped[str | None] = mapped_column(Text)
@@ -171,7 +175,7 @@ class Agent(TimestampMixin, Base):
     tile_x: Mapped[int | None] = mapped_column(Integer)
     tile_y: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[AgentStatus] = mapped_column(
-        Enum(AgentStatus, name="agent_status"),
+        Enum(AgentStatus, name="agent_status", values_callable=_enum_values),
         default=AgentStatus.IDLE,
         nullable=False,
     )
@@ -221,7 +225,10 @@ class Event(TimestampMixin, Base):
         UUID(as_uuid=True),
         ForeignKey("agents.id", ondelete="SET NULL"),
     )
-    type: Mapped[EventType] = mapped_column(Enum(EventType, name="event_type"), nullable=False)
+    type: Mapped[EventType] = mapped_column(
+        Enum(EventType, name="event_type", values_callable=_enum_values),
+        nullable=False,
+    )
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     experiment: Mapped[Experiment] = relationship(back_populates="events")

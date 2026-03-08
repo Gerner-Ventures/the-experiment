@@ -90,7 +90,6 @@ class ConnectionManager:
         )
 
     def disconnect(self, experiment_id: str, websocket: WebSocket) -> None:
-        # Use `.get()` here so disconnects for unknown experiments do not create empty buckets.
         sockets = self.connections.get(experiment_id)
         if sockets is None:
             return
@@ -114,15 +113,14 @@ class ConnectionManager:
                 if socket.client_state == WebSocketState.CONNECTED:
                     await socket.send_json(encoded_payload)
                 else:
-                    logger.warning(
-                        "Pruning websocket during broadcast: experiment=%s state=%s",
+                    logger.debug(
+                        "WS pruning disconnected socket before broadcast: experiment=%s",
                         experiment_id,
-                        socket.client_state,
                     )
                     dead_sockets.append(socket)
             except Exception:
                 logger.warning(
-                    "Pruning websocket after send failure: experiment=%s",
+                    "WS broadcast failed; pruning socket: experiment=%s",
                     experiment_id,
                     exc_info=True,
                 )
@@ -132,10 +130,18 @@ class ConnectionManager:
 
 
 class ExperimentRuntime:
-    def __init__(self, *, store: ExperimentStore | None = None) -> None:
-        self.engine = SimulationEngine()
-        self.gm_service = GMService()
-        self.connection_manager = ConnectionManager()
+    def __init__(
+        self,
+        *,
+        store: ExperimentStore | None = None,
+        engine: SimulationEngine | None = None,
+        gm_service: GMService | None = None,
+        connection_manager: ConnectionManager | None = None,
+    ) -> None:
+        self.gm_service = gm_service or (engine.gm_service if engine is not None else GMService())
+        self.engine = engine or SimulationEngine(gm_service=self.gm_service)
+        self.engine.gm_service = self.gm_service
+        self.connection_manager = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.lock = asyncio.Lock()
 
@@ -1288,7 +1294,6 @@ class ExperimentRuntime:
                 "cooperative_actions": cooperative_actions,
                 "total_actions": total_actions,
             },
-            # `sabotage_count` is a focused subset of these broader betrayal signals.
             "betrayal_count": betrayal_count,
             "sabotage_count": sabotage_count,
             "threat_level": round_result.threat_level,

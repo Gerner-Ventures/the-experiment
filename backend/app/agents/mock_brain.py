@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import random
-from typing import cast, get_args
+from typing import Any, cast, get_args
 
 from app.agents.brain import AgentBrain
 from app.agents.models import (
@@ -16,6 +17,11 @@ from app.agents.models import (
 from app.agents.memory import add_key_memory, append_recent_event
 from app.agents.suspicion import apply_suspicion_trigger
 from app.engine.models import TerminalActionType
+from app.llm.models import (
+    MemoryConsolidationDecision,
+    MemoryPromotionDecision,
+    RelationshipConsolidationDecision,
+)
 from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType, Dialogue
 
 # Weighted by personality
@@ -27,11 +33,12 @@ NON_TERMINAL_ACTIONS = tuple(action for action in ACTION_TYPES if action not in 
 LOCATIONS = (
     "town_square",
     "general_store",
-    "water_well",
+    "well",
     "workshop",
-    "farm_field",
-    "meeting_hall",
+    "farm",
+    "town_hall",
     "perimeter_fence",
+    "bar",
 )
 
 DIALOGUE_TEMPLATES = [
@@ -49,9 +56,13 @@ DIALOGUE_TEMPLATES = [
 class MockAgentBrain(AgentBrain):
     """Returns plausible decisions based on personality axes without calling any LLM."""
 
+    def __init__(self, *, seed: int = 0) -> None:
+        self.seed = seed
+        self.llm_service = cast(Any, NoOpMemoryLLMService())
+
     async def decide(self, context: AgentContext) -> AgentTurnResult:
         axes = context.personality.axes
-        rng = random.Random(hash((context.agent_id, context.world_state.round_number)))
+        rng = random.Random(self._seed_for_context(context))
 
         # Higher empathy/loyalty → cooperative, higher dominance/ambition → selfish
         coop_weight = (axes.empathy + axes.loyalty) / 200
@@ -143,3 +154,30 @@ class MockAgentBrain(AgentBrain):
             suspicion_level=next_suspicion,
             prompt=f"[MOCK] {context.name} at {location}: {action_type}",
         )
+
+    def _seed_for_context(self, context: AgentContext) -> int:
+        material = "|".join(
+            [
+                str(self.seed),
+                context.character_id or context.name,
+                str(context.world_state.round_number),
+                str(len(context.memory.recent_events)),
+                str(len(context.memory.key_memories)),
+                context.location or "",
+            ]
+        )
+        digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+        return int(digest[:16], 16)
+
+
+class NoOpMemoryLLMService:
+    async def classify_memory_event(self, **_: object) -> MemoryPromotionDecision:
+        return MemoryPromotionDecision(promote_to_key_memory=False)
+
+    async def consolidate_memory_events(self, **_: object) -> MemoryConsolidationDecision:
+        return MemoryConsolidationDecision(create_summary=False)
+
+    async def consolidate_relationship_memory(
+        self, **_: object
+    ) -> RelationshipConsolidationDecision:
+        return RelationshipConsolidationDecision(update_notes=False)

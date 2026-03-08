@@ -96,6 +96,28 @@ Notes:
 - `GET /api/health` is the only built-in health endpoint today.
 - If the backend restarts, experiment state should survive, but active WebSocket subscribers will need to reconnect.
 
+### Headless Simulation Runner
+
+If you want to inspect round-by-round backend behavior without FastAPI, Postgres, Redis, or
+websockets, run the headless runner from `backend/`:
+
+```bash
+make headless HEADLESS_ROUNDS=3 HEADLESS_SEED=11 HEADLESS_JSON_OUT=/tmp/headless-report.json
+```
+
+Behavior:
+
+- default mode is `mock`
+- `make help` lists both `headless` and `headless-live`
+- `mock` mode uses `ExperimentRuntime` with the in-memory store, a rule-based GM, seeded mock
+  agents, and disabled memory-LLM consolidation
+- `live` mode uses the LLM-backed GM and agent services against the same in-memory runtime path;
+  use it only when the provider API keys are available in your shell environment
+- the command always prints a readable terminal summary and can also write a structured JSON report
+
+This is the fastest way to sanity-check that the backend round loop, derived analytics, and
+persisted event logs match your mental model before you involve the HTTP API or real persistence.
+
 ## Configuration Reference
 
 The backend settings are defined in `backend/app/core/config.py` and sample values live in `backend/.env.example`.
@@ -157,6 +179,15 @@ Persisted today:
 - event log entries
 - per-round world snapshots
 - LLM usage records and prompt traces
+
+Analytics, replay, and the headless report now depend on both phase events and derived round log
+entries written at step time:
+
+- `crisis_event`
+- `agent_action`
+- `resource_update`
+- `threat_update`
+- `round_end`
 
 Still in-memory today:
 
