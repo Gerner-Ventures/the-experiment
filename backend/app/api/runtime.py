@@ -442,6 +442,23 @@ class ExperimentRuntime:
                             "total_rounds": state.total_rounds,
                         },
                     )
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "resource_update",
+                        round_number=round_result.round_number,
+                        data=state.world_state.resources.model_dump(mode="json"),
+                    ),
+                )
+                await self.connection_manager.broadcast(
+                    experiment_id,
+                    self._message(
+                        "threat_update",
+                        round_number=round_result.round_number,
+                        data={"threat_level": state.world_state.threat_level},
+                    ),
+                )
+
             # Broadcast round_end with full state so FE can do a final sync
             await self.connection_manager.broadcast(
                 experiment_id,
