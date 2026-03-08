@@ -537,8 +537,8 @@ export class DayNightCycle {
       this.starObjects[i].gfx.y = seed.ny * this.height
     }
 
-    // Reposition moon if visible
-    if (this.moonContainer.alpha > 0) {
+    // Reposition moon if night phase (not alpha — alpha may be mid-fade-in)
+    if (this.currentPhase === 'night') {
       this.moonContainer.x = this.width * 0.5
       this.moonContainer.y = this.height * 0.15
     }
