@@ -199,3 +199,58 @@ onMounted(() => {
   onUnmounted(() => tl.kill())
 })
 ```
+
+**GSAP + PixiJS hybrid pattern (day/night cycle):**
+
+The day/night cycle uses both GSAP and PixiJS Ticker together. GSAP drives finite-duration phase transitions (arc movement, brightness, sky color crossfade) while the ticker handles continuous per-frame effects (star twinkle, corona shimmer). All GSAP tweens are tracked in an `activeTweens[]` array and killed on phase change or destroy.
+
+```typescript
+// Pattern: track all tweens, kill on next transition
+private activeTweens: (gsap.core.Tween | gsap.core.Timeline)[] = []
+
+setPhase(phase) {
+  // Kill all in-progress tweens first
+  for (const tween of this.activeTweens) tween.kill()
+  this.activeTweens = []
+
+  // Create new tweens, push each to tracking array
+  this.activeTweens.push(gsap.to(target, { ... }))
+}
+
+destroy() {
+  for (const tween of this.activeTweens) tween.kill()
+  gsap.killTweensOf(this.sunContainer) // belt-and-suspenders
+}
+```
+
+---
+
+## 6. Day/Night Cycle — Phase-Driven Visual System
+
+**Decision:** Game phases drive visual changes through a dedicated `DayNightCycle` class that renders on `app.stage` (screen-space, camera-independent).
+
+**Data flow:**
+```
+WebSocket phase_change → experimentStore.currentPhase
+  → SimulationView watcher → pixiWorldRef.setPhase(phase)
+    → usePixiWorld.setPhase → DayNightCycle.setPhase(phase)
+```
+
+**Layer architecture:**
+```
+app.stage
+  ├─ skyGraphics (z=-1)         FillGradient rect, full viewport
+  ├─ worldContainer (z=0)       Camera-affected (map, agents, ambient)
+  │   └─ [ColorMatrixFilter]    Brightness tinting per phase
+  └─ celestialContainer (z=1)   Screen-space sun/moon/stars/shadow
+```
+
+**Key design choices:**
+- **Screen-space celestials.** Sun, moon, stars, and sky don't move with camera pan/zoom — they're on `app.stage`, not `worldContainer`.
+- **ColorMatrixFilter on worldContainer.** Night dims everything including agents and buildings. Filter is appended in constructor, removed in `destroy()`.
+- **Config-driven palettes.** `config/day-night-palettes.ts` is pure data — per-theme colors, brightness, and visibility for each phase. The renderer reads palettes, never hardcodes colors.
+- **`gm_plan` is a no-op.** It's a meta-phase (GM planning), not in-world time. Inherits the previous visual state.
+- **MotionPathPlugin for sun arc.** A paused tween defines the bezier path; GSAP tweens the `progress` property to jump to any arc position. Handles arbitrary phase jumps (e.g., dawn→afternoon) correctly.
+- **Demo mode.** Auto-cycles through dawn→morning→midday→afternoon→night every 10s via ticker timer.
+
+**Files:** `config/day-night-palettes.ts` (data), `pixi/DayNightCycle.ts` (renderer), `composables/usePixiWorld.ts` (bridge), `views/SimulationView.vue` (watcher).
