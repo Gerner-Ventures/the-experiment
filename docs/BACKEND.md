@@ -105,6 +105,13 @@ Useful commands:
 - `make backend-run`
 - `make backend-e2e`
 
+Git hooks:
+
+- run `pre-commit install` after cloning
+- the repo config installs both `pre-commit` and `pre-push` hooks by default
+- the `pre-push` hook runs backend-wide `poetry run ruff format --check .`, `poetry run mypy app`, and `poetry run pytest`
+- local hooks can still be bypassed with `git push --no-verify`, so CI is still the final enforcement layer
+
 Notes:
 
 - `docker compose up` does not run Alembic automatically in local dev, so `make migrate` is required before creating experiments.
