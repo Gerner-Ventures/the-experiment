@@ -40,6 +40,8 @@ secrets:
     existingSecret: the-experiment-litellm
   posthog:
     existingSecret: the-experiment-posthog
+  langfuse:
+    existingSecret: the-experiment-langfuse
 
 config:
   platformUrl: "https://the-experiment.gernerventures.com"

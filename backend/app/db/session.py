@@ -13,13 +13,17 @@ from app.core.config import get_settings
 def _async_url(url: str) -> str:
     """Ensure the DATABASE_URL uses the asyncpg driver."""
     if url.startswith("postgresql+asyncpg://"):
-        return url
-    if url.startswith("postgresql+"):
+        result = url
+    elif url.startswith("postgresql+"):
         # Replace any other driver with asyncpg
-        return "postgresql+asyncpg://" + url.split("://", 1)[1]
-    if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+asyncpg://", 1)
-    return url
+        result = "postgresql+asyncpg://" + url.split("://", 1)[1]
+    elif url.startswith("postgresql://"):
+        result = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    else:
+        result = url
+    # asyncpg uses 'ssl' not 'sslmode'
+    result = result.replace("sslmode=", "ssl=")
+    return result
 
 
 def create_engine_for_url(database_url: str) -> AsyncEngine:

@@ -106,6 +106,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ steps.secrets.outputs.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ steps.secrets.outputs.OPENAI_API_KEY }}
           POSTHOG_KEY: ${{ steps.secrets.outputs.POSTHOG_KEY }}
+          LANGFUSE_PUBLIC_KEY: ${{ steps.secrets.outputs.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ steps.secrets.outputs.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST: ${{ steps.secrets.outputs.LANGFUSE_HOST }}
         run: |
           kubectl create secret generic the-experiment-neon \
             --from-literal=DATABASE_URL="$DATABASE_URL" \
@@ -123,12 +126,42 @@ jobs:
           kubectl create secret generic the-experiment-posthog \
             --from-literal=POSTHOG_KEY="$POSTHOG_KEY" \
             -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
+          kubectl create secret generic the-experiment-langfuse \
+            --from-literal=LANGFUSE_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
+            --from-literal=LANGFUSE_SECRET_KEY="$LANGFUSE_SECRET_KEY" \
+            --from-literal=LANGFUSE_HOST="$LANGFUSE_HOST" \
+            -n the-experiment --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Deploy with Helm
+        env:
+          GM_MODEL: ${{ steps.secrets.outputs.GM_MODEL }}
+          GM_FALLBACK_MODEL: ${{ steps.secrets.outputs.GM_FALLBACK_MODEL }}
+          AGENT_MODEL: ${{ steps.secrets.outputs.AGENT_MODEL }}
+          AGENT_FALLBACK_MODEL: ${{ steps.secrets.outputs.AGENT_FALLBACK_MODEL }}
+          MEMORY_MODEL: ${{ steps.secrets.outputs.MEMORY_MODEL }}
+          MEMORY_FALLBACK_MODEL: ${{ steps.secrets.outputs.MEMORY_FALLBACK_MODEL }}
+          LLM_TIMEOUT_SECONDS: ${{ steps.secrets.outputs.LLM_TIMEOUT_SECONDS }}
+          LLM_MAX_RETRIES: ${{ steps.secrets.outputs.LLM_MAX_RETRIES }}
+          LLM_MAX_FALLBACKS: ${{ steps.secrets.outputs.LLM_MAX_FALLBACKS }}
+          LLM_DEFAULT_TEMPERATURE: ${{ steps.secrets.outputs.LLM_DEFAULT_TEMPERATURE }}
+          LOG_LEVEL: ${{ steps.secrets.outputs.LOG_LEVEL }}
+          ENV: ${{ steps.secrets.outputs.ENV }}
         run: |
           helm upgrade --install the-experiment chart/the-experiment/ \
             -f chart/the-experiment/values-production.yaml \
             --set backend.image.tag="${IMAGE_TAG}" \
             --set frontend.image.tag="${IMAGE_TAG}" \
+            --set config.env="${ENV}" \
+            --set config.logLevel="${LOG_LEVEL}" \
+            --set config.gmModel="${GM_MODEL}" \
+            --set config.gmFallbackModel="${GM_FALLBACK_MODEL}" \
+            --set config.agentModel="${AGENT_MODEL}" \
+            --set config.agentFallbackModel="${AGENT_FALLBACK_MODEL}" \
+            --set config.memoryModel="${MEMORY_MODEL}" \
+            --set config.memoryFallbackModel="${MEMORY_FALLBACK_MODEL}" \
+            --set config.llmTimeoutSeconds="${LLM_TIMEOUT_SECONDS}" \
+            --set config.llmMaxRetries="${LLM_MAX_RETRIES}" \
+            --set config.llmMaxFallbacks="${LLM_MAX_FALLBACKS}" \
+            --set config.llmDefaultTemperature="${LLM_DEFAULT_TEMPERATURE}" \
             -n the-experiment --create-namespace \
             --atomic --timeout 5m
