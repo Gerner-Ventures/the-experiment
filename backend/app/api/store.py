@@ -62,7 +62,9 @@ class InMemoryExperimentStore:
         self.snapshots: defaultdict[str, dict[int, dict[str, object]]] = defaultdict(dict)
 
     async def load_state(self, experiment_id: str) -> SimulationState:
-        return self.states[experiment_id]
+        # Mirror the SQLAlchemy store's copy-on-load behavior so tests do not observe
+        # in-place mutations from failed runtime paths at the cost of an O(n) deep copy.
+        return self.states[experiment_id].model_copy(deep=True)
 
     async def save_state(self, state: SimulationState) -> None:
         self.states[state.experiment_id] = state.model_copy(deep=True)

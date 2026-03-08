@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
 from collections.abc import Generator
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
+import asyncio
+import threading
 import time
 from types import SimpleNamespace
 from typing import Any
@@ -292,6 +294,54 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
                 break
 
         assert required <= seen_types
+
+
+def test_step_endpoint_returns_409_while_round_in_progress_for_same_experiment(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    first_experiment_id = created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{first_experiment_id}/gm/approve", json={})
+
+    second_created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    second_experiment_id = second_created.json()["experiment_id"]
+    client.post(f"{API_PREFIX}/experiments/{second_experiment_id}/gm/approve", json={})
+
+    release_first_step = threading.Event()
+    first_step_started = threading.Event()
+    original_step_streaming = runtime._step_streaming
+    blocked_first_step = True
+
+    async def blocking_step_streaming(experiment_id: str) -> None:
+        nonlocal blocked_first_step
+        if experiment_id == first_experiment_id and blocked_first_step:
+            blocked_first_step = False
+            first_step_started.set()
+            await asyncio.to_thread(release_first_step.wait)
+            return
+        await original_step_streaming(experiment_id)
+
+    runtime._step_streaming = blocking_step_streaming
+
+    started = client.post(f"{API_PREFIX}/experiments/{first_experiment_id}/step")
+    assert started.status_code == 200
+    assert started.json()["round_number"] == 1
+    assert first_step_started.wait(timeout=5)
+
+    duplicate = client.post(f"{API_PREFIX}/experiments/{first_experiment_id}/step")
+    assert duplicate.status_code == 409
+    assert duplicate.json()["detail"] == "A round is already in progress"
+
+    other_experiment = client.post(f"{API_PREFIX}/experiments/{second_experiment_id}/step")
+    assert other_experiment.status_code == 200
+    _wait_for_round_completion(client, second_experiment_id)
+
+    release_first_step.set()
+    _wait_for_step_cleanup(runtime, first_experiment_id)
+
+    after_completion = client.post(f"{API_PREFIX}/experiments/{first_experiment_id}/step")
+    assert after_completion.status_code == 200
+    _wait_for_round_completion(client, first_experiment_id)
 
 
 def test_analytics_and_replay_endpoints_return_round_data(client: TestClient) -> None:
@@ -766,6 +816,23 @@ def _wait_for_round_completion(
     raise AssertionError(
         f"Timed out waiting for experiment {experiment_id} to reach round {expected_round}."
     )
+
+
+def _wait_for_step_cleanup(
+    runtime: ExperimentRuntime,
+    experiment_id: str,
+    *,
+    attempts: int = 100,
+    delay_seconds: float = 0.05,
+) -> None:
+    for _ in range(attempts):
+        if (
+            experiment_id not in runtime._steps_in_progress
+            and experiment_id not in runtime._current_tasks
+        ):
+            return
+        time.sleep(delay_seconds)
+    raise AssertionError(f"Timed out waiting for step cleanup for experiment {experiment_id}.")
 
 
 def _seed_highlight_logs(runtime: ExperimentRuntime, experiment_id: str) -> None:
