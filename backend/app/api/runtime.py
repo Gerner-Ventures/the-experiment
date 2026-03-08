@@ -185,6 +185,15 @@ class ExperimentRuntime:
         await self._log(
             experiment_id, event_type="experiment_started", summary="Experiment started."
         )
+        log.info("experiment_started", experiment_id=experiment_id)
+        ph.capture(
+            "experiment_started",
+            {
+                "experiment_id": experiment_id,
+                "agent_count": len(state.agents),
+                "total_rounds": state.total_rounds,
+            },
+        )
         return state
 
     async def pause(self, experiment_id: str) -> SimulationState:
@@ -363,6 +372,15 @@ class ExperimentRuntime:
                 intended_round = state.current_round + 1
                 if state.status == "setup":
                     state.status = "running"
+                    log.info("experiment_started", experiment_id=experiment_id)
+                    ph.capture(
+                        "experiment_started",
+                        {
+                            "experiment_id": experiment_id,
+                            "agent_count": len(state.agents),
+                            "total_rounds": state.total_rounds,
+                        },
+                    )
 
                 # Pre-approve GM plan if needed (before engine runs)
                 if not state.auto_approve:
@@ -382,28 +400,48 @@ class ExperimentRuntime:
                     experiment_id=experiment_id,
                     runtime=self,
                 )
+                t0 = time.monotonic()
                 round_result = await self.engine.run_round(state, hook=hook)
+                round_duration = time.monotonic() - t0
 
                 await self.store.save_state(state)
                 await self.store.record_round_result(experiment_id, round_result)
                 await self._log_round_result(experiment_id, round_result, state)
 
-            await self.connection_manager.broadcast(
-                experiment_id,
-                self._message(
-                    "resource_update",
+                log.info(
+                    "round_completed",
+                    experiment_id=experiment_id,
                     round_number=round_result.round_number,
-                    data=state.world_state.resources.model_dump(mode="json"),
-                ),
-            )
-            await self.connection_manager.broadcast(
-                experiment_id,
-                self._message(
-                    "threat_update",
-                    round_number=round_result.round_number,
-                    data={"threat_level": state.world_state.threat_level},
-                ),
-            )
+                    total_rounds=state.total_rounds,
+                    threat_level=round_result.threat_level,
+                    duration_seconds=round(round_duration, 2),
+                )
+                ph.capture(
+                    "round_completed",
+                    {
+                        "experiment_id": experiment_id,
+                        "round_number": round_result.round_number,
+                        "total_rounds": state.total_rounds,
+                        "threat_level": round_result.threat_level,
+                        "duration_seconds": round(round_duration, 2),
+                    },
+                )
+
+                if state.status in ("completed", "collapsed"):
+                    log.info(
+                        "experiment_finished",
+                        experiment_id=experiment_id,
+                        status=state.status,
+                        total_rounds=state.total_rounds,
+                    )
+                    ph.capture(
+                        "experiment_finished",
+                        {
+                            "experiment_id": experiment_id,
+                            "status": state.status,
+                            "total_rounds": state.total_rounds,
+                        },
+                    )
             # Broadcast round_end with full state so FE can do a final sync
             await self.connection_manager.broadcast(
                 experiment_id,
