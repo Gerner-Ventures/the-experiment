@@ -3,7 +3,7 @@ export type WSMessageType =
   | 'connected'
   | 'round_start' | 'round_end'
   | 'phase_change'
-  | 'gm_plan' | 'gm_narration'
+  | 'gm_plan' | 'gm_narration' | 'gm_audio_status'
   | 'agent_action' | 'agent_move' | 'agent_speak'
   | 'crisis_event'
   | 'meeting_start' | 'meeting_speech' | 'meeting_vote' | 'meeting_result'
@@ -24,4 +24,14 @@ export interface WSMessage<T = Record<string, unknown>> {
   phase?: RoundPhase
   timestamp: string
   data: T
+}
+
+/** Narration audio status from backend TTS pipeline */
+export type NarrationAudioStatus = 'pending' | 'ready' | 'error' | 'unavailable'
+
+/** Payload for gm_audio_status WebSocket message */
+export interface GMAudioStatusData {
+  status: NarrationAudioStatus
+  audio_url?: string
+  error?: string
 }
