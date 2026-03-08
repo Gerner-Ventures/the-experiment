@@ -9,10 +9,13 @@ Revises: 20260307_000006
 Create Date: 2026-03-08 00:00:00.000000
 """
 
+import logging
 from typing import Sequence, Union
 
 from alembic import op
 from sqlalchemy import text
+
+log = logging.getLogger("alembic.runtime.migration")
 
 # revision identifiers, used by Alembic.
 revision: str = "20260308_000007"
@@ -74,7 +77,10 @@ def upgrade() -> None:
             if _has_enum_value(conn, enum_name, old_val) and not _has_enum_value(
                 conn, enum_name, new_val
             ):
+                log.info("Renaming %s value '%s' -> '%s'", enum_name, old_val, new_val)
                 op.execute(f"ALTER TYPE \"{enum_name}\" RENAME VALUE '{old_val}' TO '{new_val}'")
+            else:
+                log.info("Skipping %s value '%s' (already correct)", enum_name, old_val)
 
 
 def downgrade() -> None:
@@ -84,4 +90,5 @@ def downgrade() -> None:
             if _has_enum_value(conn, enum_name, new_val) and not _has_enum_value(
                 conn, enum_name, old_val
             ):
+                log.info("Renaming %s value '%s' -> '%s'", enum_name, new_val, old_val)
                 op.execute(f"ALTER TYPE \"{enum_name}\" RENAME VALUE '{new_val}' TO '{old_val}'")

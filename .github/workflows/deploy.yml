@@ -83,7 +83,7 @@ jobs:
           docker push "${REGISTRY}/the-experiment-backend:${TAG}"
           docker push "${REGISTRY}/the-experiment-backend:latest"
 
-          docker build --build-arg VITE_POSTHOG_KEY="${POSTHOG_KEY}" --build-arg VITE_API_URL="${PLATFORM_URL}/api" -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
+          docker build --build-arg VITE_POSTHOG_KEY="${POSTHOG_KEY}" --build-arg VITE_API_URL="${PLATFORM_URL}" -t "${REGISTRY}/the-experiment-frontend:${TAG}" -t "${REGISTRY}/the-experiment-frontend:latest" ./frontend
           docker push "${REGISTRY}/the-experiment-frontend:${TAG}"
           docker push "${REGISTRY}/the-experiment-frontend:latest"
 
