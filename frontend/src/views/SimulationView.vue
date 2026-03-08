@@ -41,8 +41,9 @@ const uiStore = useUIStore()
 const socialStore = useSocialStore()
 const ws = useWebSocket()
 
-// Theme from sessionStorage (set by SetupView) or default
+// Theme and arc from sessionStorage (set by SetupView) or defaults
 const themeId = sessionStorage.getItem('experiment-theme') || 'lord-of-the-flies'
+const arcId = sessionStorage.getItem('experiment-arc') || 'lord_of_the_flies'
 const theme = computed<MapTheme>(() => getThemeById(themeId) ?? MAP_THEMES[0])
 
 const ready = ref(false)
@@ -98,7 +99,7 @@ async function initExperiment() {
 }
 
 async function handleStep() {
-  if (!experimentStore.id) return
+  if (!experimentStore.id || uiStore.isStepping) return
   try {
     console.debug('[Step] Starting step, isStepping:', uiStore.isStepping)
     uiStore.startStepping(locale.hud.steppingRunning)
@@ -158,8 +159,8 @@ watch(() => uiStore.isPlaying, (playing) => {
   }
 })
 
-// When currentRound changes (from WS round_end), schedule next step if auto-playing
-watch(() => experimentStore.currentRound, () => {
+// When a round completes (from WS round_end), schedule next step if auto-playing
+watch(() => experimentStore.completedRounds, () => {
   if (!waitingForRound || !uiStore.isPlaying) return
   waitingForRound = false
 
@@ -310,7 +311,7 @@ function goBack() {
       <div class="absolute top-3 right-3 z-10 pointer-events-auto">
         <ArcTimeline
           v-if="experimentCreated"
-          :arc-name="themeId"
+          :arc-name="arcId"
           :current-round="experimentStore.currentRound"
           :total-rounds="experimentStore.totalRounds"
         />

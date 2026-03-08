@@ -27,6 +27,7 @@ export const useExperimentStore = defineStore('experiment', () => {
   const currentRound = ref(0)
   const totalRounds = ref(15)
   const currentPhase = ref<RoundPhase | null>(null)
+  const completedRounds = ref(0)
   const events = ref<ExperimentEvent[]>([])
 
   const isRunning = computed(() => status.value === 'running')
@@ -89,6 +90,7 @@ export const useExperimentStore = defineStore('experiment', () => {
     if (data.total_rounds != null) totalRounds.value = data.total_rounds
     if (data.status) status.value = data.status as ExperimentStatus
     currentPhase.value = null
+    completedRounds.value++
 
     // Sync world and agent stores from round_end payload
     const worldStore = useWorldStore()
@@ -149,12 +151,13 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = 0
     totalRounds.value = 15
     currentPhase.value = null
+    completedRounds.value = 0
     events.value = []
     eventCounter = 0
   }
 
   return {
-    id, name, status, currentRound, totalRounds, currentPhase,
+    id, name, status, currentRound, totalRounds, currentPhase, completedRounds,
     events,
     isRunning, isComplete, progress,
     setExperiment, addEvent, onRoundStart, onRoundEnd, onPhaseChange, onEnd,

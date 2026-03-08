@@ -125,8 +125,9 @@ async function beginExperiment() {
       totalRounds: experiment.total_rounds,
     })
 
-    // Store theme selection for SimulationView (not sent to backend)
+    // Store theme/arc selection for SimulationView (not sent to backend)
     sessionStorage.setItem('experiment-theme', selectedTheme.value)
+    sessionStorage.setItem('experiment-arc', selectedArc.value)
 
     router.push({ name: 'simulation', params: { id: experiment.experiment_id } })
   } catch (err) {

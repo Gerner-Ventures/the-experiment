@@ -153,8 +153,8 @@ class ExperimentRuntime:
         self.connection_manager = ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
         self.lock = asyncio.Lock()
-        self._step_in_progress = False
-        self._current_task: asyncio.Task[None] | None = None
+        self._steps_in_progress: dict[str, bool] = {}
+        self._current_tasks: dict[str, asyncio.Task[None]] = {}
 
     async def create_experiment(self, request: CreateExperimentRequest) -> SimulationState:
         async with self.lock:
@@ -321,11 +321,12 @@ class ExperimentRuntime:
 
     def start_step(self, experiment_id: str) -> None:
         """Start a round as a background task. Results stream via WS."""
-        if self._step_in_progress:
+        if self._steps_in_progress.get(experiment_id):
             raise RuntimeError("A round is already in progress")
-        self._step_in_progress = True
-        self._current_task = asyncio.create_task(self._step_streaming(experiment_id))
-        self._current_task.add_done_callback(lambda _: setattr(self, "_step_in_progress", False))
+        self._steps_in_progress[experiment_id] = True
+        task = asyncio.create_task(self._step_streaming(experiment_id))
+        self._current_tasks[experiment_id] = task
+        task.add_done_callback(lambda _: self._steps_in_progress.pop(experiment_id, None))
 
     async def _step_streaming(self, experiment_id: str) -> None:
         """Run a round using SimulationEngine.run_round() with a streaming hook."""
@@ -917,7 +918,7 @@ class ExperimentRuntime:
                 ),
             )
             for event in phase.events:
-                kind = event.data.get("kind")
+                kind = str(event.data.get("kind", ""))
                 msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
                 if msg_type:
                     await self.connection_manager.broadcast(
@@ -1190,7 +1191,7 @@ class ExperimentRuntime:
         }
         for phase in round_result.phases:
             for event in phase.events:
-                kind = event.data.get("kind")
+                kind = str(event.data.get("kind", ""))
                 if kind == "agent_action":
                     continue
                 event_type = kind_to_type.get(kind, event.phase) if kind else event.phase
@@ -1554,7 +1555,7 @@ class _StreamingHook:
         # meeting_start, etc.) are consumed by dedicated UI components that
         # subscribe to specific WS message types.  Both are intentional.
         for event in phase_result.events:
-            kind = event.data.get("kind")
+            kind = str(event.data.get("kind", ""))
             msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
             if msg_type:
                 await cm.broadcast(

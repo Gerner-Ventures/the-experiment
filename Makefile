@@ -196,14 +196,12 @@ db-shell: ## Open psql shell to the database
 
 neon-create: ## Create a Neon branch for current git branch (from prod, 7-day TTL)
 	@echo "Creating Neon branch '$(BRANCH_NAME)' from $(NEON_PARENT_BRANCH) (expires $(NEON_EXPIRES_AT))..."
-	@CONN=$$(npx neonctl branches create \
+	@npx neonctl branches create \
 		--project-id $(NEON_PROJECT_ID) \
 		--org-id $(NEON_ORG_ID) \
 		--name $(BRANCH_NAME) \
 		--parent $(NEON_PARENT_BRANCH) \
-		--expires-at $(NEON_EXPIRES_AT) \
-		--output json \
-		| python3 -c "import sys,json; d=json.load(sys.stdin); ep=d['endpoints'][0]; print(f\"postgresql+asyncpg://{ep['host']}/{d['branch']['name']}?sslmode=require\")") && \
+		--expires-at $(NEON_EXPIRES_AT) && \
 	FULL_URL=$$(npx neonctl connection-string \
 		--project-id $(NEON_PROJECT_ID) \
 		--org-id $(NEON_ORG_ID) \

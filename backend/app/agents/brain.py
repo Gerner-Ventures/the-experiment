@@ -78,6 +78,7 @@ class AgentBrain:
                 "LLM decision failed for agent %s (%s), using fallback observe action",
                 context.name,
                 context.agent_id,
+                exc_info=True,
             )
             decision = AgentDecision(
                 inner_thought="I need a moment to read the room.",
