@@ -56,9 +56,10 @@ function resourceColor(key: string): string {
 
         <!-- Crisis Event -->
         <div
-          class="rounded-lg border border-[var(--ant-color-border)] border-l-3 bg-white/[0.03] p-4"
+          class="rounded-lg border border-[var(--ant-color-border)] border-l-[3px] bg-white/[0.03] p-4"
           :style="{ borderLeftColor: severityColor(plan.crisisEvent.severity) }"
         >
+          <div class="mb-1 font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.crisis }}</div>
           <div class="mb-2.5 flex items-center gap-2">
             <Tag
               :style="{
@@ -75,7 +76,6 @@ function resourceColor(key: string): string {
             </Tag>
             <Tag class="capitalize">{{ plan.crisisEvent.type }}</Tag>
           </div>
-          <div class="mb-1 font-mono text-[11px] uppercase tracking-widest text-[var(--ant-color-text-tertiary)]">{{ locale.gm.crisis }}</div>
           <div class="text-[var(--ant-color-text)] leading-relaxed">{{ plan.crisisEvent.description }}</div>
         </div>
 
