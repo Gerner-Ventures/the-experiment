@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import func, select
 
 from app.db import engine
@@ -17,8 +17,10 @@ router = APIRouter(tags=["metrics"])
     summary="Application metrics",
     description="Returns runtime metrics: active experiments, rounds processed, WebSocket connections.",
 )
-async def metrics() -> dict[str, object]:
-    from app.api.runtime import runtime
+async def metrics(request: Request) -> dict[str, object]:
+    from app.api.runtime import ExperimentRuntime
+
+    runtime: ExperimentRuntime = request.app.state.runtime
 
     async with engine.connect() as conn:
         total_row = await conn.execute(select(func.count()).select_from(Experiment))

@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.api.router import api_router
+from app.api.runtime import runtime
 from app.core import langfuse as lf
 from app.core import posthog as ph
 from app.core.config import get_settings
@@ -19,7 +20,8 @@ settings = get_settings()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    app.state.runtime = runtime
     ph.init()
     lf.init()
     ph.capture("backend_started", {"version": settings.app_version})
