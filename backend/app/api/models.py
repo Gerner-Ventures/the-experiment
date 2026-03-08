@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.agents.models import PersonalityProfile, SecretGoal
 from app.db.models import AgentStatus
@@ -298,7 +298,7 @@ class HighlightItem(APIRequestModel):
     id: str
     round_number: int
     phase: str | None = None
-    score: float = 0.0
+    score: float = Field(ge=0)
     category: HighlightCategory
     event_type: str
     event_kind: str | None = None
@@ -381,3 +381,11 @@ class HighlightPage(APIRequestModel):
     scope: HighlightScope = "game"
     round_number: int | None = None
     items: list[HighlightItem] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_round_scope(self) -> "HighlightPage":
+        if self.scope == "round" and self.round_number is None:
+            raise ValueError("round_number is required when scope=round")
+        if self.scope == "game" and self.round_number is not None:
+            raise ValueError("round_number must be omitted when scope=game")
+        return self

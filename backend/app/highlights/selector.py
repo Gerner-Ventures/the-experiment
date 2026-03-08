@@ -4,12 +4,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.api.models import EventLogItem, HighlightCategory, HighlightItem, HighlightScope
-from app.world import build_default_world_state
 
 ROUND_HIGHLIGHT_LIMIT = 5
 GAME_HIGHLIGHT_LIMIT = 12
-SABOTAGE_ACTION_TYPES = {"sabotage"}
-HOSTILE_ACTION_TYPES = {"accuse", "attack", "threaten", "stab", "shoot", "poison"}
+SABOTAGE_ACTION_TYPES = frozenset({"sabotage"})
+HOSTILE_ACTION_TYPES = frozenset({"accuse", "attack", "threaten", "stab", "shoot", "poison"})
 CRISIS_SEVERITY_SCORES = {"critical": 9.5, "high": 8.5, "medium": 7.5, "low": 6.5}
 PHASE_ORDER = {"gm_plan": 0, "dawn": 1, "morning": 2, "midday": 3, "afternoon": 4, "night": 5}
 
@@ -17,14 +16,11 @@ PHASE_ORDER = {"gm_plan": 0, "dawn": 1, "morning": 2, "midday": 3, "afternoon": 
 @dataclass(slots=True)
 class HighlightCandidate:
     item: HighlightItem
-    variety_key: str
+    variety_key: HighlightCategory
     sort_key: tuple[float, int, int, int]
 
 
 class HighlightSelector:
-    def __init__(self) -> None:
-        self.initial_resources = build_default_world_state().resources.model_dump(mode="json")
-
     def select(
         self,
         logs: list[EventLogItem],
@@ -32,6 +28,8 @@ class HighlightSelector:
         scope: HighlightScope,
         round_number: int | None = None,
     ) -> list[HighlightItem]:
+        if scope == "round" and round_number is None:
+            raise ValueError("round_number is required when scope=round")
         candidates = self._build_candidates(logs)
         if scope == "round":
             candidates = [
@@ -49,12 +47,13 @@ class HighlightSelector:
     def _build_candidates(self, logs: list[EventLogItem]) -> list[HighlightCandidate]:
         candidates: list[HighlightCandidate] = []
         round_end_logs: dict[int, EventLogItem] = {}
+        initial_resources = self._initial_resources(logs)
         for index, item in enumerate(logs):
             candidates.extend(self._event_candidates(item, index))
             if item.type == "round_end" and item.round_number is not None:
                 round_end_logs[item.round_number] = item
 
-        previous_resources = self.initial_resources
+        previous_resources = initial_resources
         previous_factions: dict[str, dict[str, Any]] = {}
         previous_suspicion: dict[str, dict[str, Any]] = {}
         for round_number in sorted(round_end_logs):
@@ -324,7 +323,7 @@ class HighlightSelector:
             return ordered
 
         selected: list[HighlightCandidate] = []
-        seen_variety: set[str] = set()
+        seen_variety: set[HighlightCategory] = set()
         for candidate in ordered:
             if candidate.variety_key in seen_variety:
                 continue
@@ -351,11 +350,12 @@ class HighlightSelector:
         index: int,
         category: HighlightCategory,
         score: float,
-        variety_key: str,
+        variety_key: HighlightCategory,
         id_suffix: str | None = None,
         summary: str,
         data: dict[str, Any],
     ) -> HighlightCandidate:
+        assert item.round_number is not None
         event_kind = self._event_kind(item)
         highlight = HighlightItem(
             id=(
@@ -363,7 +363,7 @@ class HighlightSelector:
                 if id_suffix is not None
                 else f"{item.id}:{category}"
             ),
-            round_number=item.round_number or 0,
+            round_number=item.round_number,
             phase=item.phase,
             score=round(score, 2),
             category=category,
@@ -412,6 +412,20 @@ class HighlightSelector:
             if isinstance(resource, str) and isinstance(value, (int, float))
         }
 
+    def _initial_resources(self, logs: list[EventLogItem]) -> dict[str, float]:
+        for item in logs:
+            if item.type != "experiment_created":
+                continue
+            resources = self._resource_data(item.data)
+            if resources:
+                return resources
+            world_state = item.data.get("world_state")
+            if isinstance(world_state, dict):
+                resources = self._resource_data(world_state)
+                if resources:
+                    return resources
+        return {}
+
     def _faction_index(self, data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         factions = data.get("factions")
         if not isinstance(factions, list):
@@ -452,6 +466,7 @@ class HighlightSelector:
         return indexed
 
     def _resource_summary(self, round_number: int, deltas: dict[str, float]) -> str:
+        # Keep the reel copy compact by only naming the two largest shifts.
         major_changes = sorted(deltas.items(), key=lambda item: abs(item[1]), reverse=True)[:2]
         changes = ", ".join(
             f"{resource} {'+' if delta > 0 else ''}{delta:g}" for resource, delta in major_changes

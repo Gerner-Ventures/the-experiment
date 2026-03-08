@@ -942,9 +942,10 @@ class ExperimentRuntime:
         *,
         scope: HighlightScope = "game",
         round_number: int | None = None,
+        logs: list[EventLogItem] | None = None,
     ) -> list[HighlightItem]:
-        logs = await self.store.list_logs(experiment_id)
-        return self.highlight_selector.select(logs, scope=scope, round_number=round_number)
+        event_logs = logs if logs is not None else await self.store.list_logs(experiment_id)
+        return self.highlight_selector.select(event_logs, scope=scope, round_number=round_number)
 
     async def get_replay_index(self, experiment_id: str) -> ReplayIndex:
         logs = await self.store.list_logs(experiment_id)
@@ -980,7 +981,7 @@ class ExperimentRuntime:
             )
         return ReplayIndex(
             rounds=rounds,
-            highlights=await self.get_highlights(experiment_id, scope="game"),
+            highlights=await self.get_highlights(experiment_id, scope="game", logs=logs),
         )
 
     async def get_round_snapshot(
