@@ -93,7 +93,7 @@ Restructure the panel to create clear visual hierarchy that helps players quickl
 - [ ] Reasoning section is collapsible or visually de-emphasized (secondary info)
 - [ ] Meta hint (when present) has a subtle accent glow or border to signal its importance
 - [ ] Clear visual separation between sections (spacing, dividers, or card grouping)
-- [ ] Approve/Dismiss buttons are prominent with clear visual weight difference (primary vs ghost)
+- [ ] Approve button uses AutoCountdownButton with 5s countdown, auto-firing when panel is visible. Dismiss button remains standard ghost button.
 
 ## 5. Validate Across Themes
 <!-- canon:system:5 status:in_progress -->
