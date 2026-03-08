@@ -1,0 +1,7 @@
+interface:
+  display_name: "PR Review"
+  short_description: "Review a PR and submit a GitHub approval or change request"
+  default_prompt: "Use $pr-review followed by a PR number, for example `$pr-review 105`, to review that pull request and submit the GitHub review."
+
+policy:
+  allow_implicit_invocation: false

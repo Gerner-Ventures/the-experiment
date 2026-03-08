@@ -23,6 +23,10 @@ structlog = "^25.1"
 greenlet = "^3.1"
 posthog = "^3.0"
 langfuse = "^2.0"
+opentelemetry-sdk = "^1.20"
+opentelemetry-exporter-otlp-proto-http = "^1.20"
+elevenlabs = "^2.38.1"
+truststore = "^0.10.4"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
@@ -48,4 +52,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "langfuse"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "opentelemetry.*"
 ignore_missing_imports = true

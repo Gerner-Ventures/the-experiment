@@ -5,6 +5,13 @@ from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Map-specific narration voices live in code, not env. Leave values empty to
+# fall back to ELEVENLABS_VOICE_ID until a distinct voice is chosen.
+MAP_NARRATOR_VOICE_IDS: dict[str, str] = {
+    "Default Town": "",
+}
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -25,6 +32,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     posthog_key: str | None = None
     posthog_host: str = "https://us.posthog.com"
+    posthog_otlp_endpoint: str = "https://us.i.posthog.com/i/v1"
     anthropic_api_key: str | None = None
     gm_model: str = "anthropic/claude-sonnet-4-5-20250514"
     gm_fallback_model: str = "anthropic/claude-haiku-4-5-20251001"
@@ -36,6 +44,15 @@ class Settings(BaseSettings):
     llm_max_retries: int = 2
     llm_max_fallbacks: int = 2
     llm_default_temperature: float = 0.8
+    elevenlabs_api_key: str | None = None
+    elevenlabs_voice_id: str = ""
+    elevenlabs_model_id: str = ""
+    elevenlabs_output_format: str = "mp3_44100_128"
+    elevenlabs_timeout_seconds: float = 8.0
+    elevenlabs_stability: float | None = 0.6
+    elevenlabs_similarity_boost: float | None = 0.75
+    elevenlabs_style: float | None = 0.0
+    elevenlabs_speed: float | None = 0.95
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
@@ -55,6 +72,18 @@ class Settings(BaseSettings):
     def _derive_cors_origins(self) -> "Settings":
         if self.platform_url and self.cors_origins == ["http://localhost:5173"]:
             self.cors_origins = [self.platform_url]
+        if self.elevenlabs_api_key:
+            if not self.elevenlabs_voice_id.strip():
+                raise ValueError("ELEVENLABS_VOICE_ID must be set when ELEVENLABS_API_KEY is set.")
+            if not self.elevenlabs_model_id.strip():
+                raise ValueError("ELEVENLABS_MODEL_ID must be set when ELEVENLABS_API_KEY is set.")
+            if not self.elevenlabs_output_format.strip():
+                raise ValueError(
+                    "ELEVENLABS_OUTPUT_FORMAT must be set when ELEVENLABS_API_KEY is set."
+                )
+            for map_name, voice_id in MAP_NARRATOR_VOICE_IDS.items():
+                if not str(map_name).strip() or not str(voice_id).strip():
+                    continue
         return self
 
 

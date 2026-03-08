@@ -16,6 +16,7 @@ A **Layered Game Master** system controls the narrative:
 See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full game loop and mechanics.
 API usage and endpoint details live in [docs/API.md](docs/API.md).
 Backend architecture, setup, and configuration live in [docs/BACKEND.md](docs/BACKEND.md).
+Audio narration architecture lives in [docs/AUDIO_NARRATION.md](docs/AUDIO_NARRATION.md).
 Infrastructure and persistence notes live in [docs/INFRASTRUCTURE.md](docs/INFRASTRUCTURE.md).
 
 ## Architecture
@@ -71,6 +72,13 @@ To enable local Ruff autofixes before each commit, run `pre-commit install`.
 - Swagger UI: http://localhost:8000/docs
 - ReDoc: http://localhost:8000/redoc
 - Backend guide: [docs/BACKEND.md](docs/BACKEND.md)
+
+## Codex Skills
+
+This repo includes in-repo Codex skills under `.codex/skills/`.
+
+- Use `$backend` for backend-only implementation and review work.
+- Use `$pr-review <number>` to review a GitHub pull request and submit the actual review on GitHub.
 
 ### Headless Backend Simulation
 

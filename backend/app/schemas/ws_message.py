@@ -10,6 +10,7 @@ WSMessageType = Literal[
     "phase_change",
     "gm_plan",
     "gm_narration",
+    "gm_audio_status",
     "agent_action",
     "agent_move",
     "agent_speak",

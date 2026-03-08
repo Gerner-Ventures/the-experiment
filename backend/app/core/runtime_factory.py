@@ -16,6 +16,7 @@ from app.headless.factory import (
     sync_provider_credentials_to_env,
     validate_live_mode_configuration,
 )
+from app.tts import NarrationTTSService
 
 
 def build_runtime(
@@ -32,6 +33,7 @@ def build_runtime(
 
     runtime_mode = settings.backend_runtime_mode
     connection_manager = connection_manager or ConnectionManager()
+    tts_service = NarrationTTSService(settings)
     gm_service: GMService
 
     if runtime_mode == "default":
@@ -39,6 +41,7 @@ def build_runtime(
             ExperimentRuntime(
                 store=store,
                 connection_manager=connection_manager,
+                tts_service=tts_service,
             ),
             db_engine,
         )
@@ -60,6 +63,7 @@ def build_runtime(
                 engine=engine,
                 gm_service=gm_service,
                 connection_manager=connection_manager,
+                tts_service=tts_service,
             ),
             db_engine,
         )
@@ -78,6 +82,7 @@ def build_runtime(
                 engine=engine,
                 gm_service=gm_service,
                 connection_manager=connection_manager,
+                tts_service=tts_service,
             ),
             db_engine,
         )

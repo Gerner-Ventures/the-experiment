@@ -341,7 +341,7 @@ local-db-shell: ## Open psql shell to local k8s postgres
 
 CANON_REPO ?= Gerner-Ventures/gv-exp-specwright
 CANON_LOCAL ?= $(abspath ../gv-exp-specwright)
-CANON_URL ?= https://specwright.gernerventures.com
+CANON_URL ?= https://canonhq.co
 
 .PHONY: canon-setup canon-plugin canon-status
 
@@ -362,11 +362,10 @@ canon-plugin: ## Install Canon Claude plugin (requires clone of specwright repo)
 		echo "  git clone git@github.com:$(CANON_REPO).git $(CANON_LOCAL)"; \
 		exit 1; \
 	fi
-	@# TODO: remove branch fallback after feat/canon-rebrand is merged to main
 	@if [ ! -f "$(CANON_LOCAL)/.claude-plugin/marketplace.json" ]; then \
-		echo "Checking out Canon plugin branch..."; \
+		echo "Ensuring Canon repo is on main..."; \
 		git -C "$(CANON_LOCAL)" fetch origin 2>/dev/null; \
-		git -C "$(CANON_LOCAL)" checkout feat/canon-rebrand 2>/dev/null || git -C "$(CANON_LOCAL)" checkout main; \
+		git -C "$(CANON_LOCAL)" checkout main 2>/dev/null; \
 	fi
 	@echo "Registering Canon marketplace..."
 	@claude plugin marketplace add "$(CANON_LOCAL)"
