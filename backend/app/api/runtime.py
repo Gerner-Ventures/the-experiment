@@ -1063,7 +1063,7 @@ class ExperimentRuntime:
             count_key = ev_agent_id
             current_index = agent_round_counts.get(count_key, 0)
             if ev_agent_id == agent_id and current_index == index:
-                entry: AgentSpeechEntry = {
+                reconstructed: AgentSpeechEntry = {
                     "agent_id": ev_agent_id,
                     "character_id": character_map.get(ev_agent_id, ""),
                     "round_number": round_number,
@@ -1071,8 +1071,8 @@ class ExperimentRuntime:
                     "text": message_text,
                 }
                 # Backfill in-memory cache so subsequent lookups are fast
-                self._agent_speech_log[experiment_id].append(entry)
-                return entry
+                self._agent_speech_log[experiment_id].append(reconstructed)
+                return reconstructed
             agent_round_counts[count_key] = current_index + 1
 
         return None
