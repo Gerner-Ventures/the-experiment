@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import func, select
 
+from app.api.runtime import ExperimentRuntime
 from app.db import engine
 from app.db.models import Experiment, ExperimentStatus
 
@@ -17,8 +18,10 @@ router = APIRouter(tags=["metrics"])
     summary="Application metrics",
     description="Returns runtime metrics: active experiments, rounds processed, WebSocket connections.",
 )
-async def metrics() -> dict[str, object]:
-    from app.api.runtime import runtime
+async def metrics(request: Request) -> dict[str, object]:
+    runtime = getattr(request.app.state, "runtime", None)
+    if not isinstance(runtime, ExperimentRuntime):
+        raise RuntimeError("app.state.runtime not configured")
 
     async with engine.connect() as conn:
         total_row = await conn.execute(select(func.count()).select_from(Experiment))
