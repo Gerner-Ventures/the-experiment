@@ -41,7 +41,10 @@ class HighlightSelector:
         else:
             limit = GAME_HIGHLIGHT_LIMIT
         selected = self._select_diverse(candidates, limit=limit)
-        return [candidate.item for candidate in selected]
+        return [
+            candidate.item
+            for candidate in sorted(selected, key=lambda candidate: candidate.sort_key)
+        ]
 
     def _build_candidates(self, logs: list[EventLogItem]) -> list[HighlightCandidate]:
         candidates: list[HighlightCandidate] = []
@@ -157,7 +160,10 @@ class HighlightSelector:
         tally = item.data.get("tally")
         if not isinstance(tally, dict):
             return None
-        counts = sorted((int(value) for value in tally.values()), reverse=True)
+        try:
+            counts = sorted((int(value) for value in tally.values()), reverse=True)
+        except (TypeError, ValueError):
+            return None
         if len(counts) < 2:
             return None
         margin = counts[0] - counts[1]
@@ -191,18 +197,14 @@ class HighlightSelector:
     ) -> HighlightCandidate | None:
         if item.round_number is None or not current_resources:
             return None
-        deltas = {
+        resource_delta = {
             resource: round(
                 current_resources.get(resource, 0.0) - previous_resources.get(resource, 0.0),
                 2,
             )
             for resource in current_resources
-            if round(
-                current_resources.get(resource, 0.0) - previous_resources.get(resource, 0.0),
-                2,
-            )
-            != 0
         }
+        deltas = {resource: delta for resource, delta in resource_delta.items() if delta != 0}
         if not deltas:
             return None
         magnitude = sum(abs(delta) for delta in deltas.values())
@@ -298,6 +300,7 @@ class HighlightSelector:
                     category="suspicion_spike",
                     score=score,
                     variety_key="suspicion_spike",
+                    id_suffix=agent_id,
                     summary=(
                         f"{current['agent_name']} draws a surge of suspicion in round "
                         f"{item.round_number} (+{delta:.1f})."
@@ -349,12 +352,17 @@ class HighlightSelector:
         category: HighlightCategory,
         score: float,
         variety_key: str,
+        id_suffix: str | None = None,
         summary: str,
         data: dict[str, Any],
     ) -> HighlightCandidate:
         event_kind = self._event_kind(item)
         highlight = HighlightItem(
-            id=f"{item.id}:{category}",
+            id=(
+                f"{item.id}:{category}:{id_suffix}"
+                if id_suffix is not None
+                else f"{item.id}:{category}"
+            ),
             round_number=item.round_number or 0,
             phase=item.phase,
             score=round(score, 2),

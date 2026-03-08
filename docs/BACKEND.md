@@ -33,6 +33,7 @@ flowchart LR
 | `backend/app/api/routes/` | REST and WebSocket route definitions |
 | `backend/app/api/runtime.py` | High-level experiment orchestration, persistence boundary, broadcast fanout, analytics/replay assembly |
 | `backend/app/api/store.py` | Store interface plus in-memory and SQLAlchemy-backed implementations |
+| `backend/app/highlights/` | Highlight-reel scoring and variety-aware selection from persisted logs |
 | `backend/app/e2e/` | Real-server smoke client and checked-in smoke scenario payload |
 | `backend/app/engine/` | Core simulation loop and round-phase execution |
 | `backend/app/gm/` | Director arc models, preset arcs, GM planning/generation |

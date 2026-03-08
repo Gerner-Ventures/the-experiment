@@ -409,6 +409,8 @@ def test_highlights_endpoint_supports_round_and_game_scope(
     assert game_highlights.status_code == 200
     assert game_highlights.json()["scope"] == "game"
     assert len(game_highlights.json()["items"]) <= 12
+    scores = [item["score"] for item in game_highlights.json()["items"]]
+    assert scores == sorted(scores, reverse=True)
     game_categories = {item["category"] for item in game_highlights.json()["items"]}
     assert {
         "crisis",
@@ -417,6 +419,11 @@ def test_highlights_endpoint_supports_round_and_game_scope(
         "alliance_shift",
         "close_vote",
     } <= game_categories
+    suspicion_spikes = [
+        item for item in game_highlights.json()["items"] if item["category"] == "suspicion_spike"
+    ]
+    assert len(suspicion_spikes) == 2
+    assert len({item["id"] for item in suspicion_spikes}) == 2
 
     round_highlights = client.get(
         f"{API_PREFIX}/experiments/{experiment_id}/highlights",
@@ -453,6 +460,47 @@ def test_round_highlights_require_round_query(client: TestClient) -> None:
     )
     assert response.status_code == 422
     assert response.json()["detail"] == "round is required when scope=round"
+
+
+def test_round_highlights_return_404_for_future_round(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    response = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/highlights",
+        params={"scope": "round", "round": 1},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Round highlights not found"
+
+
+def test_highlights_ignore_invalid_vote_tally_payloads(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    _seed_highlight_logs(runtime, experiment_id)
+    runtime.store.logs[experiment_id].append(
+        EventLogItem(
+            id="highlight-invalid-vote-r2",
+            experiment_id=experiment_id,
+            round_number=2,
+            phase="midday",
+            type="midday",
+            summary="A malformed vote payload lands in the log.",
+            data={
+                "kind": "meeting_result",
+                "tally": {"support": "two", "oppose": 1},
+            },
+            timestamp=datetime(2026, 3, 7, 12, 7, tzinfo=UTC),
+        )
+    )
+
+    response = client.get(f"{API_PREFIX}/experiments/{experiment_id}/highlights")
+    assert response.status_code == 200
+    assert all(
+        item["id"] != "highlight-invalid-vote-r2:close_vote" for item in response.json()["items"]
+    )
 
 
 def test_report_grade_analytics_use_resolved_action_outcomes(
@@ -830,7 +878,7 @@ def _seed_highlight_logs(runtime: ExperimentRuntime, experiment_id: str) -> None
                 ],
                 "suspicion": [
                     {"agent_id": "mara", "agent_name": "Mara", "suspicion_level": 40.0},
-                    {"agent_id": "jon", "agent_name": "Jon", "suspicion_level": 15.0},
+                    {"agent_id": "jon", "agent_name": "Jon", "suspicion_level": 24.0},
                 ],
             },
             timestamp=timestamps[5],

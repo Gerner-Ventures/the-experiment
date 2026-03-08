@@ -266,6 +266,7 @@ Additional report-grade analytics endpoints expose persisted derived views for f
 - `GET /api/experiments/{experiment_id}/highlights`
   - `scope=round` requires `round`
   - items include the ranked category, source `event_type`, optional `event_kind`, round, phase, score, summary, and contextual data
+  - the hidden compatibility alias at `GET /api/experiments/{experiment_id}/analytics/highlights` now returns this normalized highlight schema too; it no longer returns raw event-type categories like `crisis_event`
 
 `GET /api/experiments/{experiment_id}/replay` returns a replay-friendly index:
 

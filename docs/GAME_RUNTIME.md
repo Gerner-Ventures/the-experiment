@@ -136,6 +136,14 @@ The event log also stores derived round entries that sit alongside the phase eve
 Those derived entries are what the analytics summary, highlight feed, replay index, and headless
 runner use when they compute cooperation, surface notable moments, or summarize a finished run.
 
+The highlight selector mixes direct log rows with `round_end` rollups:
+
+- direct signals: `crisis_event`, hostile or sabotage `agent_action`, and close-vote `midday` / `exile_vote` rows
+- round-summary signals: `resources`, `factions`, and `suspicion` embedded in `round_end.data`
+
+That is the data path behind `GET /api/experiments/{id}/highlights?scope=round&round=N` and the
+game-wide reel at `scope=game`.
+
 Code references:
 
 - `backend/app/api/store.py`
