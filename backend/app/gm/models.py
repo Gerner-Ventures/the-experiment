@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.models import ResourcePressure
 from app.world.models import WorldState
@@ -11,6 +11,19 @@ from app.world.models import WorldState
 CrisisType = Literal["resource", "structural", "social", "environmental", "discovery", "meta"]
 CrisisSeverity = Literal["low", "medium", "high", "critical"]
 GMPlanStatus = Literal["pending", "approved", "modified", "applied"]
+GM_NARRATION_MAX_WORDS = 45
+
+
+def _normalize_narration(text: str) -> str:
+    normalized = " ".join(text.split())
+    words = normalized.split()
+    if len(words) <= GM_NARRATION_MAX_WORDS:
+        return normalized
+
+    truncated = " ".join(words[:GM_NARRATION_MAX_WORDS]).rstrip(",;:-")
+    if truncated.endswith((".", "!", "?")):
+        return truncated
+    return f"{truncated}..."
 
 
 class GMModel(BaseModel):
@@ -56,8 +69,18 @@ class GMPlanData(GMModel):
     crisis_event: CrisisEvent
     resource_modifiers: "ResourceDelta"
     environmental: str | None = None
-    narration: str
+    narration: str = Field(
+        description=(
+            f"Short spoken narration for the player. Keep it to 1-2 short sentences, "
+            f"about 15-20 seconds aloud, and no more than {GM_NARRATION_MAX_WORDS} words."
+        )
+    )
     meta_hint: str | None = None
+
+    @field_validator("narration")
+    @classmethod
+    def _cap_narration_length(cls, value: str) -> str:
+        return _normalize_narration(value)
 
 
 class GMPlanningContext(GMModel):

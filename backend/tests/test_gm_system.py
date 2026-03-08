@@ -13,6 +13,7 @@ from app.gm import (
     list_preset_arcs,
     validate_arc,
 )
+from app.gm.models import GM_NARRATION_MAX_WORDS, GMPlanData
 from app.llm import LLMService
 from app.llm.models import LLMResult
 from app.world import build_default_world_state
@@ -53,6 +54,8 @@ def test_prompt_package_reflects_assertive_gm_brief() -> None:
     assert "do not wait passively for drama" in prompt.system_prompt.lower()
     assert "slow burn" in prompt.user_prompt.lower()
     assert "relationships summary" in prompt.user_prompt.lower()
+    assert "15-20 seconds" in prompt.user_prompt
+    assert f"{GM_NARRATION_MAX_WORDS} words" in prompt.user_prompt
 
 
 def test_rule_based_plan_pushes_drama_even_when_calm() -> None:
@@ -67,6 +70,29 @@ def test_rule_based_plan_pushes_drama_even_when_calm() -> None:
         "structural",
     }
     assert "assertive pacing" in plan.reasoning.lower()
+
+
+def test_gm_plan_data_caps_narration_to_short_spoken_length() -> None:
+    long_narration = " ".join(f"word{i}" for i in range(GM_NARRATION_MAX_WORDS + 8))
+
+    plan = GMPlanData.model_validate(
+        {
+            "round": 1,
+            "round_theme": "The Town Hears Itself Breathe",
+            "reasoning": "Keep the opener tight.",
+            "crisis_event": {
+                "type": "social",
+                "description": "A hush falls over the square.",
+                "affects": ["town_square"],
+                "severity": "low",
+            },
+            "resource_modifiers": {"food": 0, "water": 0, "materials": 0, "power": 0},
+            "narration": long_narration,
+        }
+    )
+
+    assert len(plan.narration.split()) == GM_NARRATION_MAX_WORDS
+    assert plan.narration.endswith("...")
 
 
 class _StubLLMService(LLMService):
