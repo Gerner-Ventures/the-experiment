@@ -166,6 +166,15 @@ class PromptTracePage(APIRequestModel):
     offset: int
 
 
+class UpdateRuntimeLLMModeRequest(APIRequestModel):
+    mode: Literal["live", "mock"]
+
+
+class RuntimeLLMModeResponse(APIRequestModel):
+    mode: Literal["live", "mock"]
+    llm_calls_enabled: bool
+
+
 class RelationshipEdge(APIRequestModel):
     source_agent_id: str
     source_agent_name: str

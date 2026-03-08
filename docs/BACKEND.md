@@ -111,6 +111,8 @@ Notes:
 - `make migrate` provisions or reuses the Neon branch for the current git branch, updates Doppler
   `dev` `DATABASE_URL`, and then runs Alembic against that branch.
 - `GET /api/health` is the only built-in health endpoint today.
+- `GET /api/runtime/llm-mode` and `PUT /api/runtime/llm-mode` expose a process-local live/mock
+  toggle so frontend debugging can avoid external LLM calls without restarting the backend.
 - If the backend restarts, experiment state should survive, but active WebSocket subscribers will need to reconnect.
 
 ### Headless Simulation Runner
@@ -160,6 +162,9 @@ Runtime modes:
 - `smoke_mock`: Postgres-backed runtime with rule-based GM planning, seeded mock agents, and no
   provider-key requirement
 - `smoke_live`: Postgres-backed runtime with the live LLM-backed services
+
+At runtime, `PUT /api/runtime/llm-mode` can still flip the in-memory process between `live` and
+`mock` text generation. That toggle is not persisted across restarts.
 
 Command notes:
 
