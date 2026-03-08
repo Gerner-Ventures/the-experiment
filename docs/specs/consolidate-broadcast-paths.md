@@ -23,7 +23,7 @@ This duplication will drift as new event types or broadcast behaviors are added.
 
 ## Solution
 
-Migrate the legacy `step()` method to use `run_round(state, hook=hook)` with a hook, eliminating `broadcast_round()` entirely.
+Migrate the legacy `step()` method to use a shared `_run_round_locked()` helper that calls `run_round(state, hook=hook)`, eliminating `broadcast_round()` entirely. Both `step()` and `_step_streaming()` now use this shared helper.
 
 ### 1. Update `step()` to use `RoundHook`
 
@@ -59,11 +59,14 @@ Both `_step_streaming` and the updated `step()` need to broadcast `round_end` wi
 
 - [x] `step()` uses `run_round(state, hook=hook)` — no direct engine method calls
 <!-- canon:realized-in:PR#125 file:backend/app/api/runtime.py -->
+<!-- canon:realized-in:PR#152 file:backend/app/api/runtime.py -->
 - [x] `broadcast_round()` is deleted
 - [x] `_broadcast_round_end()` is shared between `step()` and `_step_streaming()`
+<!-- canon:realized-in:PR#152 file:backend/app/api/services/streaming.py -->
 - [x] WS message sequence is identical for both `step()` and `start_step()` paths
 <!-- canon:realized-in:PR#125 file:backend/tests/test_runtime.py -->
 - [x] All existing tests pass
+<!-- canon:realized-in:PR#152 file:backend/tests/test_runtime.py -->
 - [x] Frontend receives same events regardless of which endpoint triggered the round
 <!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
 <!-- canon:realized-in:PR#124 file:backend/app/api/runtime.py -->
