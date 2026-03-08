@@ -146,6 +146,22 @@ class TestLangfuseLifecycle:
             langfuse._client = None
 
 
+class TestLLMRequestGenerationName:
+    def test_generation_name_field_defaults_to_none(self) -> None:
+        from app.llm.models import LLMRequest
+        req = LLMRequest(role="agent", messages=[{"role": "system", "content": "test"}])
+        assert req.generation_name is None
+
+    def test_generation_name_field_accepts_string(self) -> None:
+        from app.llm.models import LLMRequest
+        req = LLMRequest(
+            role="agent",
+            messages=[{"role": "system", "content": "test"}],
+            generation_name="agent:The Intern",
+        )
+        assert req.generation_name == "agent:The Intern"
+
+
 # --- Section 1: litellm Callback Integration ---
 
 
