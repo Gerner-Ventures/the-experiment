@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import get_args
+from typing import cast, get_args
 
 from app.actions.models import (
     ACTION_IDS,
@@ -69,6 +69,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         category="selfish",
         description="Privately accumulate supplies.",
         requires_target=True,
+        tags=_tags("mock_selfish"),
         allowed_location_types=_location_types(
             "farm",
             "water_source",
@@ -84,7 +85,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         category="selfish",
         description="Undermine a structure or plan.",
         requires_target=True,
-        tags=_tags("sabotage"),
+        tags=_tags("sabotage", "mock_selfish"),
     ),
     ActionSpec(
         id=DecisionActionName.EXPLORE,
@@ -92,6 +93,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         category="neutral",
         description="Search the town or its edges.",
         requires_location=True,
+        tags=_tags("mock_selfish"),
     ),
     ActionSpec(
         id=DecisionActionName.ACCUSE,
@@ -99,7 +101,7 @@ ACTION_SPECS: tuple[ActionSpec, ...] = (
         category="social",
         description="Openly accuse another agent.",
         requires_target=True,
-        tags=_tags("hostile", "interaction"),
+        tags=_tags("hostile", "interaction", "mock_selfish"),
     ),
     ActionSpec(
         id=DecisionActionName.VOTE,
@@ -364,6 +366,7 @@ COOPERATIVE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("cooperative")
 HOSTILE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("hostile")
 INTERACTION_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("interaction")
 MOCK_COOPERATIVE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("mock_cooperative")
+MOCK_SELFISH_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("mock_selfish")
 RANGED_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("ranged")
 SABOTAGE_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("sabotage")
 TERMINAL_ACTION_IDS: tuple[str, ...] = _tagged_action_ids("terminal")
@@ -376,17 +379,21 @@ ACTION_ALLOWED_LOCATION_TYPES: dict[str, frozenset[str]] = {
     for spec in ACTION_SPECS
     if spec.allowed_location_types
 }
-ACTION_CONSEQUENCE_POOLS: dict[str, tuple[str, ...]] = {
-    spec.id.value: tuple(consequence.value for consequence in spec.consequence_pool)
-    for spec in ACTION_SPECS
-    if spec.consequence_pool
+ACTION_CONSEQUENCE_POOLS: dict[str, tuple[ConsequenceActionName, ...]] = {
+    spec.id.value: spec.consequence_pool for spec in ACTION_SPECS if spec.consequence_pool
 }
-CONSEQUENCE_SUSPICION_DELTAS: dict[str, float] = {
-    spec.id.value: spec.suspicion_delta for spec in ACTION_SPECS if spec.suspicion_delta is not None
+CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionName, float] = {
+    cast(ConsequenceActionName, spec.id): spec.suspicion_delta
+    for spec in ACTION_SPECS
+    if spec.suspicion_delta is not None
 }
 
 
 def get_action(action_id: str) -> ActionSpec:
+    """Return the action spec for a known raw string action id.
+
+    ACTION_CATALOG is keyed by string ids for JSON/API interop. Unknown ids raise KeyError.
+    """
     return ACTION_CATALOG[action_id]
 
 

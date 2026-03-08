@@ -83,14 +83,12 @@ class SimulationEngine:
     AGENT_INTERACTION_ACTIONS = frozenset(INTERACTION_ACTION_IDS)
     RANGED_ACTIONS = frozenset(RANGED_ACTION_IDS)
     ACTION_LOCATION_RULES: dict[str, frozenset[str]] = ACTION_ALLOWED_LOCATION_TYPES
-    ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = {
-        action_type: cast(tuple[ConsequenceActionType, ...], consequence_types)
-        for action_type, consequence_types in ACTION_CONSEQUENCE_POOLS.items()
-    }
-    CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionType, float] = {
-        cast(ConsequenceActionType, consequence_type): delta
-        for consequence_type, delta in ACTION_CONSEQUENCE_SUSPICION_DELTAS.items()
-    }
+    ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = (
+        ACTION_CONSEQUENCE_POOLS
+    )
+    CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionType, float] = (
+        ACTION_CONSEQUENCE_SUSPICION_DELTAS
+    )
 
     def __init__(
         self,

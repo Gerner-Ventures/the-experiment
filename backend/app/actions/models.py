@@ -63,6 +63,7 @@ ActionTag = Literal[
     "hostile",
     "interaction",
     "mock_cooperative",
+    "mock_selfish",
     "ranged",
     "sabotage",
     "terminal",

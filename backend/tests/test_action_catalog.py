@@ -11,6 +11,8 @@ from app.actions import (
     DECISION_ACTION_IDS,
     HOSTILE_ACTION_IDS,
     INTERACTION_ACTION_IDS,
+    MOCK_COOPERATIVE_ACTION_IDS,
+    MOCK_SELFISH_ACTION_IDS,
     RANGED_ACTION_IDS,
     SABOTAGE_ACTION_IDS,
     TERMINAL_ACTION_IDS,
@@ -69,6 +71,18 @@ def test_catalog_preserves_backend_runtime_groupings() -> None:
     assert set(HOSTILE_ACTION_IDS) == {"accuse", "attack", "threaten", "stab", "shoot", "poison"}
     assert set(SABOTAGE_ACTION_IDS) == {"sabotage"}
     assert set(TERMINAL_ACTION_IDS) == {"self_sacrifice"}
+
+
+def test_catalog_preserves_mock_brain_action_buckets() -> None:
+    assert set(MOCK_COOPERATIVE_ACTION_IDS) == {
+        "gather",
+        "repair",
+        "trade",
+        "talk",
+        "rest",
+        "observe",
+    }
+    assert set(MOCK_SELFISH_ACTION_IDS) == {"hoard", "sabotage", "explore", "accuse"}
 
 
 def test_catalog_preserves_backend_location_rules() -> None:
