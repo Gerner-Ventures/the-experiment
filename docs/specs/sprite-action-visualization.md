@@ -4,7 +4,7 @@ status: todo
 issue: 109
 priority: P1
 tags: [stream-1, frontend, pixi, animation, turn-lifecycle]
-depends_on: [116]
+depends_on: [116, hd-sprite-system]
 ---
 
 # Sprite Action Visualization During Turns
@@ -207,9 +207,18 @@ Total: ~6-7 seconds per agent turn.
 - `frontend/src/config/character-sprites.ts` — poses, animations, pixel scale
 - `frontend/src/views/SimulationView.vue` — handler wiring
 
+## HD Sprite System Integration
+
+> See `hd-sprite-system.md` — the sprite system is being upgraded from 14×18px to 32×48px
+> composable characters. Key impacts on this spec:
+> - Sprite scale change (32×48 base) affects PIXEL_SCALE, selection ring, name label sizing
+> - 26+ poses available (up from 14) — more actions get distinct animations
+> - Composable body-part architecture means new poses are data config, not pixel art
+> - `ACTION_TO_ANIMATION` will have 1:1 mapping for all 42 action types
+> - Props (knife, gun, mug, etc.) render as part of the sprite frame
+
 ## Out of Scope
 
-- New pose artwork (uses existing 14 poses)
 - Direction-aware sprites (facing toward target) — future enhancement
 - Simultaneous multi-agent actions — turns remain sequential
 - Sound effects for actions
