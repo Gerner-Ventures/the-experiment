@@ -63,7 +63,7 @@ const isDemo = computed(() => route.params.id === 'demo')
 const loadError = ref<string | null>(null)
 
 // Mute state for agent voice narration
-const MUTE_STORAGE_KEY = 'agent-voice-muted'
+import { MUTE_STORAGE_KEY } from '@/config/audio'
 const isMuted = ref(localStorage.getItem(MUTE_STORAGE_KEY) === 'true')
 
 function toggleMute() {

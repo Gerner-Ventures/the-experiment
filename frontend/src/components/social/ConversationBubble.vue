@@ -4,8 +4,10 @@ import { SoundOutlined } from '@ant-design/icons-vue'
 import type { AudioStatus } from '@/stores/social'
 import { useLocale } from '@/locales'
 
-const MUTE_STORAGE_KEY = 'agent-voice-muted'
+import { MUTE_STORAGE_KEY } from '@/config/audio'
+
 const AUTO_DISMISS_MS = 6000
+const PENDING_TIMEOUT_MS = 3000
 
 const locale = useLocale()
 
@@ -26,6 +28,7 @@ const visible = ref(true)
 const isPlaying = ref(false)
 const autoplayBlocked = ref(false)
 let fadeTimer: ReturnType<typeof setTimeout> | null = null
+let pendingTimer: ReturnType<typeof setTimeout> | null = null
 let audio: HTMLAudioElement | null = null
 
 function isMuted(): boolean {
@@ -87,7 +90,11 @@ function dismiss() {
 // Watch for audioStatus changing to 'ready' after mount (late arrival)
 watch(() => props.audioStatus, (newStatus) => {
   if (newStatus === 'ready' && props.audioUrl && !audio && !isMuted()) {
-    // Cancel text-only timer since we have audio now
+    // Cancel pending and text-only timers since we have audio now
+    if (pendingTimer) {
+      clearTimeout(pendingTimer)
+      pendingTimer = null
+    }
     if (fadeTimer) {
       clearTimeout(fadeTimer)
       fadeTimer = null
@@ -99,6 +106,12 @@ watch(() => props.audioStatus, (newStatus) => {
 onMounted(() => {
   if (props.audioStatus === 'ready' && props.audioUrl && !isMuted()) {
     tryPlay()
+  } else if (props.audioStatus === 'pending' && !isMuted()) {
+    // Wait up to 3s for pending audio to become ready, then fall back to text-only
+    pendingTimer = setTimeout(() => {
+      pendingTimer = null
+      fadeTimer = setTimeout(dismiss, AUTO_DISMISS_MS)
+    }, PENDING_TIMEOUT_MS)
   } else {
     // Text-only fallback: auto-dismiss after 6s
     fadeTimer = setTimeout(dismiss, AUTO_DISMISS_MS)
@@ -107,6 +120,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   if (fadeTimer) clearTimeout(fadeTimer)
+  if (pendingTimer) clearTimeout(pendingTimer)
   stopAudio()
 })
 

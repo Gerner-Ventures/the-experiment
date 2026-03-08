@@ -40,8 +40,6 @@ const AUDIO_PENDING_TIMEOUT_MS = 3000
 /** Maximum time to wait for audio playback before force-advancing */
 const AUDIO_MAX_TIMEOUT_MS = 15000
 
-const MUTE_STORAGE_KEY = 'agent-voice-muted'
-
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
   const queue = ref<Turn[]>([])
