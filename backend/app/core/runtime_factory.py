@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.agents.mock_brain import MockAgentBrain
+from app.agents.mock_brain import MockAgentBrain, NoOpMemoryLLMService
 from app.agents.service import AgentService
 from app.api.runtime import ExperimentRuntime
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
@@ -12,7 +12,6 @@ from app.db.session import create_session_factory
 from app.engine import SimulationEngine
 from app.gm import GMService
 from app.headless.factory import (
-    NoOpMemoryLLMService,
     RuleBasedGMService,
     sync_provider_credentials_to_env,
     validate_live_mode_configuration,

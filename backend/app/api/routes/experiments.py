@@ -198,7 +198,9 @@ async def list_agents(experiment_id: str, request: Request) -> list[EngineAgentS
     summary="Get an agent dossier",
     description="Return the detailed state for a single agent, including memory, relationships, and status.",
 )
-async def get_agent_dossier(experiment_id: str, agent_id: str, request: Request) -> EngineAgentState:
+async def get_agent_dossier(
+    experiment_id: str, agent_id: str, request: Request
+) -> EngineAgentState:
     runtime = _runtime_from_request(request)
     await _get_state(runtime, experiment_id)
     try:

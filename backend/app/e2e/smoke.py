@@ -50,7 +50,9 @@ async def run_smoke(config: SmokeConfig) -> str:
             experiment_id = _require_string(created, "experiment_id")
 
             print("[smoke] Load GM plan")
-            gm_plan = await _request_json(client, "GET", f"/api/experiments/{experiment_id}/gm/plan")
+            gm_plan = await _request_json(
+                client, "GET", f"/api/experiments/{experiment_id}/gm/plan"
+            )
             _require_string(gm_plan, "status")
 
             print("[smoke] Approve GM plan")
@@ -60,7 +62,9 @@ async def run_smoke(config: SmokeConfig) -> str:
                 f"/api/experiments/{experiment_id}/gm/approve",
                 json_body={},
             )
-            _require(approved.get("status") in {"approved", "applied", "modified"}, "GM approval failed.")
+            _require(
+                approved.get("status") in {"approved", "applied", "modified"}, "GM approval failed."
+            )
 
             print("[smoke] Connect websocket")
             ws_url = _websocket_url(config.base_url, f"/api/experiments/{experiment_id}/ws")
@@ -68,23 +72,35 @@ async def run_smoke(config: SmokeConfig) -> str:
                 connected = json.loads(
                     await asyncio.wait_for(websocket.recv(), timeout=config.timeout_seconds)
                 )
-                _require(connected.get("type") == "connected", "WebSocket did not send connected message.")
+                _require(
+                    connected.get("type") == "connected",
+                    "WebSocket did not send connected message.",
+                )
 
                 print("[smoke] Step one round")
-                stepped = await _request_json(client, "POST", f"/api/experiments/{experiment_id}/step")
+                stepped = await _request_json(
+                    client, "POST", f"/api/experiments/{experiment_id}/step"
+                )
                 round_result = _require_mapping(stepped, "round_result")
-                _require(round_result.get("round_number") == 1, "Round step did not advance to round 1.")
+                _require(
+                    round_result.get("round_number") == 1, "Round step did not advance to round 1."
+                )
 
-                seen_types = await _collect_ws_types(websocket, timeout_seconds=config.timeout_seconds)
+                seen_types = await _collect_ws_types(
+                    websocket, timeout_seconds=config.timeout_seconds
+                )
                 missing = REQUIRED_WS_TYPES - seen_types
                 _require(
                     not missing,
-                    "WebSocket stream missing required message types: " + ", ".join(sorted(missing)),
+                    "WebSocket stream missing required message types: "
+                    + ", ".join(sorted(missing)),
                 )
 
             print("[smoke] Fetch current experiment state")
             state = await _request_json(client, "GET", f"/api/experiments/{experiment_id}")
-            _require(state.get("current_round") == 1, "Experiment state was not persisted after step.")
+            _require(
+                state.get("current_round") == 1, "Experiment state was not persisted after step."
+            )
 
             print("[smoke] Fetch event log")
             log = await _request_json(client, "GET", f"/api/experiments/{experiment_id}/log")
@@ -96,7 +112,10 @@ async def run_smoke(config: SmokeConfig) -> str:
                 "GET",
                 f"/api/experiments/{experiment_id}/analytics/summary",
             )
-            _require(summary.get("rounds_completed") == 1, "Analytics summary did not reflect completed round.")
+            _require(
+                summary.get("rounds_completed") == 1,
+                "Analytics summary did not reflect completed round.",
+            )
 
             print("[smoke] Fetch replay index")
             replay = await _request_json(client, "GET", f"/api/experiments/{experiment_id}/replay")
@@ -114,7 +133,10 @@ async def run_smoke(config: SmokeConfig) -> str:
             )
             _require(snapshot.get("round_number") == 1, "Round snapshot did not return round 1.")
             events = snapshot.get("events")
-            _require(isinstance(events, list) and len(events) > 0, "Round snapshot did not include events.")
+            _require(
+                isinstance(events, list) and len(events) > 0,
+                "Round snapshot did not include events.",
+            )
 
             print(f"[smoke] PASS experiment_id={experiment_id}")
             return experiment_id
@@ -122,7 +144,9 @@ async def run_smoke(config: SmokeConfig) -> str:
         transport_error = exc
 
     assert transport_error is not None
-    raise SmokeFailure(f"Server unavailable at {config.base_url}: {transport_error}") from transport_error
+    raise SmokeFailure(
+        f"Server unavailable at {config.base_url}: {transport_error}"
+    ) from transport_error
 
 
 async def _request_json(
