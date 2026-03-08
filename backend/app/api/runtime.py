@@ -40,7 +40,6 @@ from app.api.services import (
     RuntimeEventLogService,
     RuntimeStreamBroadcaster,
 )
-from app.api.services.streaming import StreamingHook as RuntimeStreamingHook
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
 from app.api.ws_manager import ConnectionManager
 from app.core import posthog as ph
@@ -628,16 +627,6 @@ class ExperimentRuntime:
                 parts.append(f"{agent.name} tracks {len(agent.relationships)} relationships.")
         return " ".join(parts) or "Relationships are still taking shape."
 
-    async def _broadcast_narration_audio_status_for_plan(
-        self, experiment_id: str, gm_plan: GMPlanRecord
-    ) -> None:
-        await self.audio.broadcast_narration_audio_status_for_plan(experiment_id, gm_plan)
-
-    def _build_round_summary(
-        self, state: SimulationState, round_result: RoundResult
-    ) -> dict[str, Any]:
-        return self.event_log.build_round_summary(state, round_result)
-
     def _llm_trackers(self) -> list[Any]:
         trackers = []
         candidates = [
@@ -729,43 +718,3 @@ class ExperimentRuntime:
             is_consequence=is_consequence,
             data=data,
         ).model_dump(mode="json")
-
-
-class _StreamingHook(RuntimeStreamingHook):
-    """Compatibility shim for tests that still import the legacy runtime hook."""
-
-    def __init__(self, *, experiment_id: str, runtime: ExperimentRuntime) -> None:
-        super().__init__(experiment_id=experiment_id, broadcaster=runtime.streaming)
-        self._runtime = runtime
-
-    async def on_round_start(self, round_number: int, gm_plan: GMPlanRecord) -> None:
-        cm = self._runtime.connection_manager
-        msg = self._runtime._message
-        eid = self._experiment_id
-
-        await cm.broadcast(
-            eid,
-            msg(
-                "round_start",
-                round_number=round_number,
-                data={"theme": gm_plan.plan.round_theme},
-            ),
-        )
-        await cm.broadcast(
-            eid,
-            msg(
-                "gm_plan",
-                round_number=round_number,
-                data=gm_plan.model_dump(mode="json"),
-            ),
-        )
-        await cm.broadcast(
-            eid,
-            msg(
-                "crisis_event",
-                round_number=round_number,
-                phase="dawn",
-                data=gm_plan.plan.crisis_event.model_dump(mode="json"),
-            ),
-        )
-        await self._runtime._broadcast_narration_audio_status_for_plan(eid, gm_plan)

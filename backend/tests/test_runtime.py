@@ -10,8 +10,9 @@ from starlette.websockets import WebSocketState
 
 from app.agents.models import AgentMemoryState, AgentTurnResult
 from app.api.models import CreateExperimentRequest, EventLogItem
-from app.api.runtime import ConnectionManager, ExperimentRuntime, _StreamingHook
+from app.api.runtime import ExperimentRuntime
 from app.api.store import InMemoryExperimentStore
+from app.api.ws_manager import ConnectionManager
 from app.core.config import Settings
 from app.engine.models import (
     ActionResolution,
@@ -229,10 +230,10 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     runtime_instance: ExperimentRuntime,
 ) -> None:
     runtime_instance.connection_manager.broadcast = AsyncMock()
-    runtime_instance._broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime_instance.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
 
     state = await runtime_instance.create_experiment(_request())
-    hook = _StreamingHook(experiment_id=state.experiment_id, runtime=runtime_instance)
+    hook = runtime_instance.streaming.build_hook(state.experiment_id)
     phase_result = PhaseResult(
         phase="morning",
         events=[
@@ -293,7 +294,7 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
     assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
 
-    runtime_instance._broadcast_narration_audio_status_for_plan.assert_awaited_once_with(
+    runtime_instance.audio.broadcast_narration_audio_status_for_plan.assert_awaited_once_with(
         state.experiment_id,
         _gm_plan(1),
     )
@@ -369,7 +370,7 @@ async def test_build_round_summary_tolerates_action_records_for_unknown_agents(
 ) -> None:
     state = await runtime_instance.create_experiment(_request())
 
-    summary = runtime_instance._build_round_summary(
+    summary = runtime_instance.event_log.build_round_summary(
         state,
         RoundResult(
             round_number=1,
@@ -571,7 +572,7 @@ async def test_broadcast_narration_audio_status_is_noop_without_tts_service() ->
     runtime = ExperimentRuntime(store=InMemoryExperimentStore())
     runtime.connection_manager = AsyncMock()
 
-    await runtime._broadcast_narration_audio_status_for_plan("exp-1", _gm_plan(1))
+    await runtime.audio.broadcast_narration_audio_status_for_plan("exp-1", _gm_plan(1))
 
     runtime.connection_manager.broadcast.assert_not_awaited()
 
