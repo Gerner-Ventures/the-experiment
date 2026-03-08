@@ -28,15 +28,11 @@ class RoundHook(Protocol):
     allowing the runtime to broadcast WS messages without duplicating round logic.
     """
 
-    async def on_round_start(
-        self, round_number: int, gm_plan: GMPlanRecord
-    ) -> None: ...
+    async def on_round_start(self, round_number: int, gm_plan: GMPlanRecord) -> None: ...
 
     async def on_phase_start(self, round_number: int, phase: PhaseName) -> None: ...
 
-    async def on_phase_complete(
-        self, round_number: int, phase_result: PhaseResult
-    ) -> None: ...
+    async def on_phase_complete(self, round_number: int, phase_result: PhaseResult) -> None: ...
 
     async def on_agent_action(
         self,
@@ -56,9 +52,7 @@ class NullHook:
     async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:
         pass
 
-    async def on_phase_complete(
-        self, round_number: int, phase_result: PhaseResult
-    ) -> None:
+    async def on_phase_complete(self, round_number: int, phase_result: PhaseResult) -> None:
         pass
 
     async def on_agent_action(

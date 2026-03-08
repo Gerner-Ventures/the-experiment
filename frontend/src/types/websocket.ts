@@ -12,6 +12,7 @@ export type WSMessageType =
   | 'threat_update' | 'resource_update'
   | 'observer_event'
   | 'experiment_end'
+  | 'step_error'
 
 /** Round phase identifiers */
 export type RoundPhase = 'gm_plan' | 'dawn' | 'morning' | 'midday' | 'afternoon' | 'night'

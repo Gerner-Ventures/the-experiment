@@ -378,7 +378,9 @@ class ExperimentRuntime:
                                 "agent_id": a.agent_id,
                                 "name": a.name,
                                 "character_id": a.character_id,
-                                "status": a.status.value if hasattr(a.status, "value") else str(a.status),
+                                "status": a.status.value
+                                if hasattr(a.status, "value")
+                                else str(a.status),
                                 "location": a.location,
                                 "suspicion_level": a.suspicion_level,
                                 "faction_id": a.faction_id,
@@ -1491,47 +1493,62 @@ class _StreamingHook:
         self._experiment_id = experiment_id
         self._runtime = runtime
 
-    async def on_round_start(
-        self, round_number: int, gm_plan: GMPlanRecord
-    ) -> None:
+    async def on_round_start(self, round_number: int, gm_plan: GMPlanRecord) -> None:
         cm = self._runtime.connection_manager
         msg = self._runtime._message
         eid = self._experiment_id
 
-        await cm.broadcast(eid, msg(
-            "round_start", round_number=round_number,
-            data={"theme": gm_plan.plan.round_theme},
-        ))
-        await cm.broadcast(eid, msg(
-            "gm_plan", round_number=round_number,
-            data=gm_plan.model_dump(mode="json"),
-        ))
-        await cm.broadcast(eid, msg(
-            "crisis_event", round_number=round_number, phase="dawn",
-            data=gm_plan.plan.crisis_event.model_dump(mode="json"),
-        ))
+        await cm.broadcast(
+            eid,
+            msg(
+                "round_start",
+                round_number=round_number,
+                data={"theme": gm_plan.plan.round_theme},
+            ),
+        )
+        await cm.broadcast(
+            eid,
+            msg(
+                "gm_plan",
+                round_number=round_number,
+                data=gm_plan.model_dump(mode="json"),
+            ),
+        )
+        await cm.broadcast(
+            eid,
+            msg(
+                "crisis_event",
+                round_number=round_number,
+                phase="dawn",
+                data=gm_plan.plan.crisis_event.model_dump(mode="json"),
+            ),
+        )
 
     async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:
         await self._runtime.connection_manager.broadcast(
             self._experiment_id,
             self._runtime._message(
-                "phase_change", round_number=round_number, phase=phase,
+                "phase_change",
+                round_number=round_number,
+                phase=phase,
                 data={"status": "starting"},
             ),
         )
 
-    async def on_phase_complete(
-        self, round_number: int, phase_result: PhaseResult
-    ) -> None:
+    async def on_phase_complete(self, round_number: int, phase_result: PhaseResult) -> None:
         cm = self._runtime.connection_manager
         msg = self._runtime._message
         eid = self._experiment_id
 
-        await cm.broadcast(eid, msg(
-            "phase_change", round_number=round_number,
-            phase=phase_result.phase,
-            data={"events": [e.model_dump(mode="json") for e in phase_result.events]},
-        ))
+        await cm.broadcast(
+            eid,
+            msg(
+                "phase_change",
+                round_number=round_number,
+                phase=phase_result.phase,
+                data={"events": [e.model_dump(mode="json") for e in phase_result.events]},
+            ),
+        )
         # Dual broadcast: phase_change above carries the full event list for the
         # experiment store.  The individual typed messages below (agent_speak,
         # meeting_start, etc.) are consumed by dedicated UI components that
@@ -1540,10 +1557,15 @@ class _StreamingHook:
             kind = event.data.get("kind")
             msg_type = _EVENT_KIND_TO_WS_TYPE.get(kind) if kind else None
             if msg_type:
-                await cm.broadcast(eid, msg(
-                    msg_type, round_number=round_number,
-                    phase=phase_result.phase, data=event.data,
-                ))
+                await cm.broadcast(
+                    eid,
+                    msg(
+                        msg_type,
+                        round_number=round_number,
+                        phase=phase_result.phase,
+                        data=event.data,
+                    ),
+                )
 
     async def on_agent_action(
         self,

@@ -20,6 +20,7 @@ export interface ExperimentEvent {
 let eventCounter = 0
 
 export const useExperimentStore = defineStore('experiment', () => {
+  const locale = useLocale()
   const id = ref<string | null>(null)
   const name = ref('')
   const status = ref<ExperimentStatus>('setup')
@@ -69,7 +70,6 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = msg.round ?? currentRound.value
     currentPhase.value = null
     status.value = 'running'
-    const locale = useLocale()
     useUIStore().setSteppingStatus(
       locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value)),
     )
@@ -120,7 +120,6 @@ export const useExperimentStore = defineStore('experiment', () => {
     // phase_change with {status: "starting"} = phase is about to begin (set stepping label)
     // phase_change with {events: [...]} = phase completed (log the event)
     if (data.status === 'starting' && phase) {
-      const locale = useLocale()
       const labels: Record<string, string> = {
         gm_plan: locale.hud.steppingGmPlan,
         dawn: locale.hud.steppingDawn,

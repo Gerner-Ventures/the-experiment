@@ -6,6 +6,7 @@ import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
 
 export const useAgentStore = defineStore('agent', () => {
+  const locale = useLocale()
   const agents = ref<Map<string, Agent>>(new Map())
 
   const agentList = computed(() => Array.from(agents.value.values()))
@@ -60,7 +61,6 @@ export const useAgentStore = defineStore('agent', () => {
       agent.status = actionToStatus(actionType)
     }
     const agentName = data.agent_name ?? agent?.name ?? 'Agent'
-    const locale = useLocale()
     useUIStore().setSteppingStatus(
       locale.hud.steppingAgent
         .replace('{name}', agentName)

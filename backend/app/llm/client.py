@@ -44,7 +44,9 @@ class LLMClient:
 
         # For Pydantic models, inject the JSON schema into the system prompt
         # so Anthropic models know what structure to return
-        if isinstance(request.response_format, type) and issubclass(request.response_format, BaseModel):
+        if isinstance(request.response_format, type) and issubclass(
+            request.response_format, BaseModel
+        ):
             schema = request.response_format.model_json_schema()
             schema_instruction = (
                 f"\n\nYou MUST respond with valid JSON matching this schema:\n"
@@ -52,7 +54,10 @@ class LLMClient:
                 f"Return ONLY the JSON object, no other text."
             )
             if messages and messages[0].get("role") == "system":
-                messages[0] = {**messages[0], "content": messages[0]["content"] + schema_instruction}
+                messages[0] = {
+                    **messages[0],
+                    "content": messages[0]["content"] + schema_instruction,
+                }
             else:
                 messages.insert(0, {"role": "system", "content": schema_instruction.strip()})
             api_response_format = {"type": "json_object"}
@@ -195,7 +200,8 @@ class LLMClient:
                         "schema": request.response_format
                         if isinstance(request.response_format, dict)
                         else request.response_format.model_json_schema()
-                        if isinstance(request.response_format, type) and issubclass(request.response_format, BaseModel)
+                        if isinstance(request.response_format, type)
+                        and issubclass(request.response_format, BaseModel)
                         else "unknown",
                         "failed_response": repair_prompt.original_text,
                         "error": repair_prompt.error,

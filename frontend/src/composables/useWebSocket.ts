@@ -5,6 +5,7 @@ import { useAgentStore } from '@/stores/agent'
 import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
+import { useUIStore } from '@/stores/ui'
 
 export type ConnectionState = 'connecting' | 'connected' | 'disconnected'
 
@@ -122,6 +123,9 @@ function routeMessage(msg: WSMessage) {
     exile_vote: (m) => socialStore.onExileVote(m),
     exile_result: (m) => socialStore.onExileResult(m),
     experiment_end: (m) => experimentStore.onEnd(m),
+    step_error: () => {
+      useUIStore().clearStepping()
+    },
   }
 
   const handler = router[msg.type as WSMessageType]
