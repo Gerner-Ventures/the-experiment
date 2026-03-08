@@ -142,10 +142,13 @@ async function handleStep() {
 async function handleStart() {
   if (!experimentStore.id) return
   try {
-    await api.startExperiment(experimentStore.id)
     uiStore.setPlaying(true)
+    uiStore.startStepping(locale.hud.steppingRunning)
+    await api.startExperiment(experimentStore.id)
   } catch (err) {
     console.error('Start failed:', err)
+    uiStore.setPlaying(false)
+    uiStore.clearStepping()
   }
 }
 
