@@ -47,6 +47,8 @@ Important behavior:
 | Method | Path | Purpose |
 |--------|------|---------|
 | `GET` | `/api/health` | Liveness check for local dev and infrastructure probes |
+| `GET` | `/api/runtime/llm-mode` | Read the process-local live/mock text generation mode |
+| `PUT` | `/api/runtime/llm-mode` | Toggle the backend between live LLM calls and mock text generation |
 | `POST` | `/api/experiments` | Create a new experiment with agent and arc configuration |
 | `GET` | `/api/experiments/{experiment_id}` | Retrieve the current experiment snapshot |
 | `POST` | `/api/experiments/{experiment_id}/start` | Mark an experiment as running without stepping a round |
@@ -119,6 +121,40 @@ Selected response fields:
 - `factions`: current alliance/cult state
 - `exile_history`: prior exile outcomes
 - `sacrifice_history`: prior ritual self-sacrifice outcomes
+
+## Runtime LLM Mode
+
+The backend exposes a process-local toggle for frontend debugging and no-provider-key runs.
+
+- `live` mode uses the normal GM, agent, and memory LLM paths.
+- `mock` mode avoids external LLM calls and swaps in rule-based GM narration plus seeded mock agent thoughts/actions.
+- the toggle is not persisted; it resets when the backend process restarts.
+- existing stored experiment state is not rewritten when the mode changes.
+
+Read the current mode:
+
+```bash
+curl http://localhost:8000/api/runtime/llm-mode
+```
+
+Example response:
+
+```json
+{
+  "mode": "mock",
+  "llm_calls_enabled": false
+}
+```
+
+Switch into mock mode:
+
+```bash
+curl -X PUT http://localhost:8000/api/runtime/llm-mode \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "mode": "mock"
+  }'
+```
 
 ## GM Plan Flow
 

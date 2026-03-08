@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.agents.mock_brain import MockAgentBrain, NoOpMemoryLLMService
 from app.agents.service import AgentService
 from app.api.runtime import ExperimentRuntime
 from app.api.store import ExperimentStore, SqlAlchemyExperimentStore
@@ -12,7 +11,6 @@ from app.db.session import create_session_factory
 from app.engine import SimulationEngine
 from app.gm import GMService
 from app.headless.factory import (
-    RuleBasedGMService,
     sync_provider_credentials_to_env,
     validate_live_mode_configuration,
 )
@@ -34,57 +32,28 @@ def build_runtime(
     runtime_mode = settings.backend_runtime_mode
     connection_manager = connection_manager or ConnectionManager()
     tts_service = NarrationTTSService(settings)
-    gm_service: GMService
-
-    if runtime_mode == "default":
-        return (
-            ExperimentRuntime(
-                store=store,
-                connection_manager=connection_manager,
-                tts_service=tts_service,
-            ),
-            db_engine,
-        )
-
-    if runtime_mode == "smoke_mock":
-        gm_service = RuleBasedGMService()
-        agent_service = AgentService(
-            brain=MockAgentBrain(seed=settings.smoke_seed),
-            memory_llm_service=NoOpMemoryLLMService(),
-        )
-        engine = SimulationEngine(
-            gm_service=gm_service,
-            agent_service=agent_service,
-            random_seed=settings.smoke_seed,
-        )
-        return (
-            ExperimentRuntime(
-                store=store,
-                engine=engine,
-                gm_service=gm_service,
-                connection_manager=connection_manager,
-                tts_service=tts_service,
-            ),
-            db_engine,
-        )
+    if runtime_mode not in {"default", "smoke_mock", "smoke_live"}:
+        raise ValueError(f"Unsupported backend runtime mode: {runtime_mode}")
 
     if runtime_mode == "smoke_live":
         sync_provider_credentials_to_env()
         validate_live_mode_configuration()
-        gm_service = GMService()
-        engine = SimulationEngine(
-            gm_service=gm_service,
-            random_seed=settings.smoke_seed,
-        )
-        return (
-            ExperimentRuntime(
-                store=store,
-                engine=engine,
-                gm_service=gm_service,
-                connection_manager=connection_manager,
-                tts_service=tts_service,
-            ),
-            db_engine,
-        )
 
-    raise ValueError(f"Unsupported backend runtime mode: {runtime_mode}")
+    random_seed = settings.smoke_seed if runtime_mode != "default" else 7
+    gm_service = GMService()
+    agent_service = AgentService()
+    engine = SimulationEngine(
+        gm_service=gm_service,
+        agent_service=agent_service,
+        random_seed=random_seed,
+    )
+    runtime = ExperimentRuntime(
+        store=store,
+        engine=engine,
+        gm_service=gm_service,
+        connection_manager=connection_manager,
+        tts_service=tts_service,
+        mock_seed=settings.smoke_seed,
+        llm_mode="mock" if runtime_mode == "smoke_mock" else "live",
+    )
+    return runtime, db_engine

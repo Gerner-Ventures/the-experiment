@@ -6,11 +6,14 @@ import time
 import uuid
 from collections import defaultdict
 from collections.abc import AsyncIterator
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import structlog
+from app.agents.mock_brain import MockAgentBrain, NoOpMemoryLLMService
 from app.agents.models import AgentMemoryState
+from app.agents.service import AgentService
 from app.api.models import (
     AgentSpeechAudioMetadata,
     AnalyticsSummary,
@@ -42,7 +45,7 @@ from app.api.ws_manager import ConnectionManager
 from app.core import posthog as ph
 from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
-from app.gm import GMService, get_preset_arc
+from app.gm import GMService, RuleBasedGMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
 from app.highlights import HighlightSelector
 from app.llm import UsageRecord
@@ -52,6 +55,14 @@ from app.world import build_default_world_state, resolve_spawn_tile
 
 log = structlog.get_logger(__name__)
 logger = logging.getLogger(__name__)
+
+RuntimeLLMMode = Literal["live", "mock"]
+
+
+@dataclass(frozen=True)
+class RuntimeLLMModeServices:
+    gm_service: GMService
+    agent_service: AgentService
 
 
 class ExperimentRuntime:
@@ -63,9 +74,13 @@ class ExperimentRuntime:
         gm_service: GMService | None = None,
         connection_manager: ConnectionManager | None = None,
         tts_service: NarrationTTSService | None = None,
+        mock_seed: int = 0,
+        llm_mode: RuntimeLLMMode | None = None,
     ) -> None:
         self.gm_service = gm_service or (engine.gm_service if engine is not None else GMService())
         self.engine = engine or SimulationEngine(gm_service=self.gm_service)
+        if getattr(self.engine, "agent_service", None) is None:
+            self.engine.agent_service = AgentService()
         self.engine.gm_service = self.gm_service
         self.connection_manager = connection_manager or ConnectionManager()
         self.store = store or SqlAlchemyExperimentStore(AsyncSessionLocal)
@@ -96,11 +111,39 @@ class ExperimentRuntime:
             agent_speech_log=self._agent_speech_log,
             audio_service=self.audio,
         )
+        self._llm_mode_services = self._build_llm_mode_services(mock_seed=mock_seed)
+        inferred_mode = self._infer_llm_mode()
+        if llm_mode is None and inferred_mode == "mock":
+            self._llm_mode_services["mock"] = RuntimeLLMModeServices(
+                gm_service=self.gm_service,
+                agent_service=self.engine.agent_service,
+            )
+        self._llm_mode: RuntimeLLMMode = "live"
+        self._apply_llm_mode(llm_mode or inferred_mode)
 
     async def aclose(self) -> None:
         self._agent_speech_log.clear()
         if self.tts_service is not None:
             await self.tts_service.aclose()
+
+    def get_llm_mode_status(self) -> dict[str, bool | str]:
+        return {
+            "mode": self._llm_mode,
+            "llm_calls_enabled": self._llm_mode == "live",
+        }
+
+    async def set_llm_mode(self, mode: RuntimeLLMMode) -> dict[str, bool | str]:
+        async with self.lock:
+            self._apply_llm_mode(mode)
+            log.info("runtime_llm_mode_changed", mode=mode)
+            ph.capture(
+                "runtime_llm_mode_changed",
+                {
+                    "mode": mode,
+                    "llm_calls_enabled": mode == "live",
+                },
+            )
+            return self.get_llm_mode_status()
 
     async def create_experiment(self, request: CreateExperimentRequest) -> SimulationState:
         async with self.lock:
@@ -595,6 +638,19 @@ class ExperimentRuntime:
                 None,
             ),
         ]
+        for services in self._llm_mode_services.values():
+            candidates.extend(
+                [
+                    getattr(getattr(services.gm_service, "llm_service", None), "client", None),
+                    getattr(
+                        getattr(
+                            getattr(services.agent_service, "brain", None), "llm_service", None
+                        ),
+                        "client",
+                        None,
+                    ),
+                ]
+            )
         seen_ids: set[int] = set()
         for client in candidates:
             tracker = getattr(client, "tracker", None)
@@ -606,6 +662,44 @@ class ExperimentRuntime:
             seen_ids.add(tracker_id)
             trackers.append(tracker)
         return trackers
+
+    def _build_llm_mode_services(
+        self, *, mock_seed: int
+    ) -> dict[RuntimeLLMMode, RuntimeLLMModeServices]:
+        return {
+            "live": RuntimeLLMModeServices(
+                gm_service=self.gm_service,
+                agent_service=self.engine.agent_service,
+            ),
+            "mock": RuntimeLLMModeServices(
+                gm_service=RuleBasedGMService(),
+                agent_service=AgentService(
+                    brain=MockAgentBrain(seed=mock_seed),
+                    memory_llm_service=NoOpMemoryLLMService(),
+                ),
+            ),
+        }
+
+    def _infer_llm_mode(self) -> RuntimeLLMMode:
+        brain = getattr(self.engine.agent_service, "brain", None)
+        if isinstance(self.gm_service, RuleBasedGMService) or isinstance(brain, MockAgentBrain):
+            return "mock"
+        return "live"
+
+    def _capture_live_services(self) -> None:
+        self._llm_mode_services["live"] = RuntimeLLMModeServices(
+            gm_service=self.gm_service,
+            agent_service=self.engine.agent_service,
+        )
+
+    def _apply_llm_mode(self, mode: RuntimeLLMMode) -> None:
+        if mode == "mock" and self._llm_mode != "mock":
+            self._capture_live_services()
+        services = self._llm_mode_services[mode]
+        self._llm_mode = mode
+        self.gm_service = services.gm_service
+        self.engine.gm_service = services.gm_service
+        self.engine.agent_service = services.agent_service
 
     def _message(
         self,
