@@ -194,12 +194,15 @@ build-frontend: ## Build frontend for production
 # Database
 # ============================================================================
 
-##@ Database (Docker)
+##@ Database
 
-.PHONY: migrate seed db-reset db-shell
+.PHONY: migrate local-migrate seed db-reset db-shell
 
 migrate: ## Run database migrations (alembic upgrade head)
 	cd backend && doppler run -p the-experiment -c dev -- poetry run alembic upgrade head
+
+local-migrate: ## Run database migrations using local backend/.env DATABASE_URL
+	cd backend && poetry run alembic upgrade head
 
 seed: ## Seed the database
 	cd backend && doppler run -p the-experiment -c dev -- poetry run python -m app.db.seed
