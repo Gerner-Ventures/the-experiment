@@ -8,6 +8,13 @@ from datetime import UTC, datetime
 from random import Random
 from typing import Literal, cast
 
+from app.actions import (
+    ACTION_ALLOWED_LOCATION_TYPES,
+    ACTION_CONSEQUENCE_POOLS,
+    CONSEQUENCE_SUSPICION_DELTAS as ACTION_CONSEQUENCE_SUSPICION_DELTAS,
+    INTERACTION_ACTION_IDS,
+    RANGED_ACTION_IDS,
+)
 from app.agents.memory import append_recent_event
 from app.agents.models import (
     AgentMemoryState,
@@ -71,41 +78,16 @@ class SimulationEngine:
     SELF_SACRIFICE_THREAT_DELTA = -8.0
     SELF_SACRIFICE_RESOURCE_EFFECTS = {"food": 1.0, "materials": 0.8}
     SELF_SACRIFICE_SUSPICION_DELTA = 9.0
-    AGENT_INTERACTION_ACTIONS = {
-        "talk",
-        "trade",
-        "accuse",
-        "attack",
-        "threaten",
-        "stab",
-        "shoot",
-        "poison",
-        "argue",
-        "investigate",
-    }
-    RANGED_ACTIONS = {"shoot"}
-    ACTION_LOCATION_RULES: dict[str, set[str]] = {
-        "gather": {"farm", "water_source", "store"},
-        "repair": {"workshop", "meeting_hall", "boundary", "mystery"},
-        "hoard": {"farm", "water_source", "store", "residence", "bar", "brothel"},
-        "vote": {"meeting_hall"},
-    }
+    AGENT_INTERACTION_ACTIONS = frozenset(INTERACTION_ACTION_IDS)
+    RANGED_ACTIONS = frozenset(RANGED_ACTION_IDS)
+    ACTION_LOCATION_RULES: dict[str, frozenset[str]] = ACTION_ALLOWED_LOCATION_TYPES
     ACTION_CONSEQUENCE_TYPES: dict[str, tuple[ConsequenceActionType, ...]] = {
-        "shoot": ("bleeding", "injured"),
-        "stab": ("bleeding", "injured"),
-        "attack": ("injured", "knocked_down", "stunned", "burning"),
-        "poison": ("poisoned",),
-        "threaten": ("crying", "fleeing", "stunned"),
+        action_type: cast(tuple[ConsequenceActionType, ...], consequence_types)
+        for action_type, consequence_types in ACTION_CONSEQUENCE_POOLS.items()
     }
     CONSEQUENCE_SUSPICION_DELTAS: dict[ConsequenceActionType, float] = {
-        "bleeding": 8.0,
-        "injured": 7.0,
-        "stunned": 6.0,
-        "knocked_down": 7.0,
-        "burning": 9.0,
-        "poisoned": 8.0,
-        "crying": 4.0,
-        "fleeing": 5.0,
+        cast(ConsequenceActionType, consequence_type): delta
+        for consequence_type, delta in ACTION_CONSEQUENCE_SUSPICION_DELTAS.items()
     }
 
     def __init__(

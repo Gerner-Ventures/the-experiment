@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from app.actions import HOSTILE_ACTION_IDS, SABOTAGE_ACTION_IDS
 from app.api.models import EventLogItem, HighlightCategory, HighlightItem, HighlightScope
 
 ROUND_HIGHLIGHT_LIMIT = 5
 GAME_HIGHLIGHT_LIMIT = 12
-SABOTAGE_ACTION_TYPES = frozenset({"sabotage"})
-HOSTILE_ACTION_TYPES = frozenset({"accuse", "attack", "threaten", "stab", "shoot", "poison"})
+SABOTAGE_ACTION_TYPES = frozenset(SABOTAGE_ACTION_IDS)
+HOSTILE_ACTION_TYPES = frozenset(HOSTILE_ACTION_IDS)
 CRISIS_SEVERITY_SCORES = {"critical": 9.5, "high": 8.5, "medium": 7.5, "low": 6.5}
 PHASE_ORDER = {"gm_plan": 0, "dawn": 1, "morning": 2, "midday": 3, "afternoon": 4, "night": 5}
 

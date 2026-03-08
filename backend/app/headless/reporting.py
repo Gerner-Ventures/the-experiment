@@ -4,6 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from app.actions import COOPERATIVE_ACTION_IDS
 from app.api.models import CreateExperimentRequest
 from app.api.models import EventLogItem
 from app.api.runtime import ExperimentRuntime
@@ -17,18 +18,7 @@ from app.headless.models import (
     ValidationResult,
 )
 
-COOPERATIVE_ACTIONS = {
-    "gather",
-    "repair",
-    "self_sacrifice",
-    "talk",
-    "trade",
-    "rest",
-    "observe",
-    "pray",
-    "rally",
-    "mourn",
-}
+COOPERATIVE_ACTIONS = frozenset(COOPERATIVE_ACTION_IDS)
 REQUIRED_PHASES = {"gm_plan", "dawn", "morning", "midday", "afternoon", "night"}
 
 

@@ -6,6 +6,7 @@ import hashlib
 import random
 from typing import Any, cast, get_args
 
+from app.actions import MOCK_COOPERATIVE_ACTION_IDS
 from app.agents.brain import AgentBrain
 from app.agents.models import (
     AgentContext,
@@ -30,7 +31,7 @@ from app.schemas.agent_decision import (
 )
 
 # Weighted by personality
-COOPERATIVE_ACTIONS = ("gather", "repair", "trade", "talk", "rest", "observe")
+COOPERATIVE_ACTIONS = cast(tuple[DecisionActionType, ...], MOCK_COOPERATIVE_ACTION_IDS)
 SELFISH_ACTIONS = ("hoard", "sabotage", "explore", "accuse")
 TERMINAL_ACTIONS = get_args(TerminalActionType)
 NON_TERMINAL_ACTIONS = tuple(
@@ -76,7 +77,7 @@ class MockAgentBrain(AgentBrain):
         selfish_weight = (axes.dominance + axes.ambition + axes.impulsiveness) / 300
 
         if rng.random() < coop_weight * 0.7:
-            action_type = cast(DecisionActionType, rng.choice(COOPERATIVE_ACTIONS))
+            action_type = rng.choice(COOPERATIVE_ACTIONS)
         elif rng.random() < selfish_weight * 0.5:
             action_type = cast(DecisionActionType, rng.choice(SELFISH_ACTIONS))
         else:

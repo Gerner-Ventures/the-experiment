@@ -4,6 +4,7 @@ This document is the contributor-oriented map of the FastAPI backend: how it is 
 
 For the external API contract, see [docs/API.md](API.md).
 For narration audio architecture and local verification, see [docs/AUDIO_NARRATION.md](AUDIO_NARRATION.md).
+For backend action configuration ownership, see [docs/ACTION_CATALOG.md](ACTION_CATALOG.md).
 For deployment and persistence details, see [docs/INFRASTRUCTURE.md](INFRASTRUCTURE.md).
 
 ## System Map
@@ -33,6 +34,7 @@ flowchart LR
 | `backend/app/api/routes/` | REST and WebSocket route definitions |
 | `backend/app/api/runtime.py` | High-level experiment orchestration, persistence boundary, broadcast fanout, analytics/replay assembly |
 | `backend/app/api/store.py` | Store interface plus in-memory and SQLAlchemy-backed implementations |
+| `backend/app/actions/` | Canonical backend action catalog and static action rule metadata |
 | `backend/app/highlights/` | Highlight-reel scoring and variety-aware selection from persisted logs |
 | `backend/app/e2e/` | Real-server smoke client and checked-in smoke scenario payload |
 | `backend/app/engine/` | Core simulation loop and round-phase execution |
@@ -295,6 +297,7 @@ This means a backend restart should preserve experiment state, but not live subs
 - New REST endpoint: `backend/app/api/routes/experiments.py` plus `backend/app/api/models.py`
 - Change experiment lifecycle logic: `backend/app/api/runtime.py`
 - Change round mechanics: `backend/app/engine/service.py`
+- Change action ids, static action metadata, or action rule groupings: `backend/app/actions/`
 - Change GM planning or preset arcs: `backend/app/gm/`
 - Change agent prompting, memory, or relationship behavior: `backend/app/agents/`
 - Change persistence shape: `backend/app/api/store.py`, `backend/app/db/models.py`, and Alembic migrations

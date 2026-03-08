@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict, cast, get_args
 
 import structlog
+from app.actions import COOPERATIVE_ACTION_IDS, HOSTILE_ACTION_IDS, SABOTAGE_ACTION_IDS
 from app.agents.mock_brain import MockAgentBrain, NoOpMemoryLLMService
 from app.agents.models import AgentMemoryState
 from app.agents.service import AgentService
@@ -60,19 +61,9 @@ from app.world import build_default_world_state, resolve_spawn_tile
 
 log = structlog.get_logger(__name__)
 
-COOPERATIVE_ACTION_TYPES = {
-    "gather",
-    "repair",
-    "talk",
-    "trade",
-    "rest",
-    "observe",
-    "pray",
-    "rally",
-    "mourn",
-}
-SABOTAGE_ACTION_TYPES = {"sabotage"}
-HOSTILE_ACTION_TYPES = {"accuse", "attack", "threaten", "stab", "shoot", "poison"}
+COOPERATIVE_ACTION_TYPES = frozenset(COOPERATIVE_ACTION_IDS)
+SABOTAGE_ACTION_TYPES = frozenset(SABOTAGE_ACTION_IDS)
+HOSTILE_ACTION_TYPES = frozenset(HOSTILE_ACTION_IDS)
 GOAL_ACHIEVED_KEYWORDS = ("achieved", "completed", "fulfilled", "succeeded", "escaped", "revealed")
 GOAL_FAILED_KEYWORDS = ("no progress", "failed", "stalled", "blocked", "lost", "setback")
 GOAL_PARTIAL_KEYWORDS = ("closer", "progress", "holding", "step", "movement", "advance")

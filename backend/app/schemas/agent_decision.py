@@ -1,7 +1,8 @@
-from typing import Literal, cast, get_args
+from typing import Literal, cast
 
 from pydantic import Field
 
+from app.actions import DECISION_ACTION_IDS
 from app.schemas.common import APIModel
 
 DecisionActionType = Literal[
@@ -41,7 +42,7 @@ DecisionActionType = Literal[
     "self_sacrifice",
 ]
 DECISION_ACTION_TYPES: tuple[DecisionActionType, ...] = cast(
-    tuple[DecisionActionType, ...], get_args(DecisionActionType)
+    tuple[DecisionActionType, ...], DECISION_ACTION_IDS
 )
 CooperationIntent = Literal["high", "medium", "low", "none"]
 
