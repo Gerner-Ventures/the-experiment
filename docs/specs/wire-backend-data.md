@@ -1,6 +1,6 @@
 ---
 title: "[P0] Wire stores & HUD to real backend data (remove mocks)"
-status: todo
+status: in_progress
 issue: 42
 priority: P0
 tags: [stream-1, frontend, backend, data-wiring]
