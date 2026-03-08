@@ -420,14 +420,6 @@ function goBack() {
           />
         </div>
 
-        <!-- Action label overlay (during acting phase) -->
-        <ActionLabel
-          v-if="actionLabelPosition && actionLabelType"
-          class="pointer-events-none"
-          :action-type="actionLabelType"
-          :position="actionLabelPosition"
-        />
-
         <!-- Turn-driven conversation bubble -->
         <ConversationBubble
           v-if="turnStore.phase === 'talking' && turnStore.activeTurn?.thought"
