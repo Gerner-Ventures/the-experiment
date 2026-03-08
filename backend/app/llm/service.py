@@ -118,9 +118,9 @@ class LLMService:
                 metadata={
                     "memory_classifier": True,
                     "round_number": event.round_number,
-                    "experiment_id": experiment_id or "",
-                    "agent_id": agent_id or "",
-                    "agent_name": agent_name or "",
+                    **_optional(
+                        experiment_id=experiment_id, agent_id=agent_id, agent_name=agent_name
+                    ),
                 },
                 generation_name=f"memory:classify:{agent_name}"
                 if agent_name
@@ -173,9 +173,9 @@ class LLMService:
                 metadata={
                     "memory_consolidator": True,
                     "round_number": max((event.round_number for event in events), default=0),
-                    "experiment_id": experiment_id or "",
-                    "agent_id": agent_id or "",
-                    "agent_name": agent_name or "",
+                    **_optional(
+                        experiment_id=experiment_id, agent_id=agent_id, agent_name=agent_name
+                    ),
                 },
                 generation_name=f"memory:consolidate:{agent_name}"
                 if agent_name
@@ -226,9 +226,9 @@ class LLMService:
                 metadata={
                     "relationship_consolidator": True,
                     "round_number": round_number or 0,
-                    "experiment_id": experiment_id or "",
-                    "agent_id": agent_id or "",
-                    "agent_name": agent_name or "",
+                    **_optional(
+                        experiment_id=experiment_id, agent_id=agent_id, agent_name=agent_name
+                    ),
                 },
                 generation_name=f"memory:relationship:{agent_name}"
                 if agent_name
@@ -238,6 +238,11 @@ class LLMService:
         return RelationshipConsolidationDecision.model_validate(
             _require_parsed_result(result, operation="relationship consolidation")
         )
+
+
+def _optional(**kwargs: str | None) -> dict[str, str]:
+    """Return only non-None key/value pairs, avoiding empty-string pollution in metadata."""
+    return {k: v for k, v in kwargs.items() if v is not None}
 
 
 def _require_parsed_result(result: LLMResult, *, operation: str) -> dict[str, object]:

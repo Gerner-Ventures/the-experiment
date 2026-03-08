@@ -132,6 +132,7 @@ class SimulationEngine:
             input={
                 "round": round_number,
                 "arc": state.arc.name,
+                # TODO: include current act name (spec Req 7)
                 "resources": state.world_state.resources.model_dump(),
                 "threat_level": state.world_state.threat_level,
                 "agent_count": len(state.agents),
@@ -277,6 +278,7 @@ class SimulationEngine:
                     scores={
                         "cooperation_ratio": round(cooperation_ratio, 3),
                         "threat_level": round(state.world_state.threat_level, 2),
+                        # TODO: add total_cost_usd and llm_call_count scores (spec Req 5)
                     },
                 )
         state.recent_events.extend(

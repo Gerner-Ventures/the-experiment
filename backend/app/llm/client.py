@@ -71,6 +71,7 @@ class LLMClient:
             **request.metadata,
             **get_trace_context(),
             "generation_name": request.generation_name or request.role,
+            # Convert "" to None so Langfuse doesn't create a phantom empty-string session
             "session_id": request.metadata.get("experiment_id") or None,
             "trace_user_id": request.metadata.get("agent_name", request.role),
         }

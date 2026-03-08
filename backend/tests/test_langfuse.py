@@ -1,5 +1,9 @@
 """Tests for Langfuse configuration and lifecycle (S3.6 sections 1, 3 + 5)."""
 
+from __future__ import annotations
+
+import json
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,6 +11,45 @@ import pytest
 import app.llm.client as llm_client_module
 import app.llm.config as llm_config_module
 from app.core.config import Settings
+
+
+# --- Shared test helpers for LLM client fakes ---
+
+_VALID_AGENT_DECISION = json.dumps(
+    {
+        "inner_thought": "ok",
+        "suspicion": None,
+        "action": {"type": "observe", "target": "well", "location": "well"},
+        "dialogue": None,
+        "goal_progress": "none",
+        "cooperation_intent": "medium",
+    }
+)
+
+
+class FakeResponse:
+    """Minimal litellm response stub for testing LLMClient."""
+
+    def __init__(self, content: str = _VALID_AGENT_DECISION) -> None:
+        self.model = "openai/gpt-4o-mini"
+        self.choices = [type("C", (), {"message": type("M", (), {"content": content})()})()]
+        self.usage = type(
+            "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
+        )()
+
+    def model_dump(self) -> dict[str, Any]:
+        return {}
+
+
+class FakeRouter:
+    """Minimal litellm Router stub that captures metadata."""
+
+    def __init__(self) -> None:
+        self.last_metadata: dict[str, Any] = {}
+
+    async def acompletion(self, **kwargs: Any) -> FakeResponse:
+        self.last_metadata = kwargs.get("metadata", {})
+        return FakeResponse()
 
 
 # --- Section 3: Configuration ---
@@ -343,64 +386,10 @@ class TestTraceContextPropagation:
     @pytest.mark.asyncio
     async def test_llm_client_merges_trace_context_into_metadata(self) -> None:
         """When trace context is set, generate_structured should include it in the litellm call."""
-        import json
-        from typing import Any
         from app.core.langfuse import set_trace_context, _trace_context
         from app.llm.client import LLMClient
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
-
-        class FakeResponse:
-            def __init__(self) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [
-                    type(
-                        "C",
-                        (),
-                        {
-                            "message": type(
-                                "M",
-                                (),
-                                {
-                                    "content": json.dumps(
-                                        {
-                                            "inner_thought": "ok",
-                                            "suspicion": None,
-                                            "action": {
-                                                "type": "observe",
-                                                "target": "well",
-                                                "location": "well",
-                                            },
-                                            "dialogue": None,
-                                            "goal_progress": "none",
-                                            "cooperation_intent": "medium",
-                                        }
-                                    )
-                                },
-                            )()
-                        },
-                    )
-                ]
-                self.usage = type(
-                    "U",
-                    (),
-                    {
-                        "prompt_tokens": 10,
-                        "completion_tokens": 5,
-                        "total_tokens": 15,
-                    },
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        class FakeRouter:
-            def __init__(self) -> None:
-                self.last_metadata: dict[str, Any] = {}
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.last_metadata = kwargs.get("metadata", {})
-                return FakeResponse()
 
         client = LLMClient()
         fake_router = FakeRouter()
@@ -639,57 +628,9 @@ class TestGenerationNameInMetadata:
     @pytest.mark.asyncio
     async def test_generation_name_used_over_role_when_provided(self) -> None:
         """When LLMRequest has generation_name set, it should appear in metadata instead of role."""
-        import json
-        from typing import Any
         from app.llm.client import LLMClient
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
-
-        class FakeResponse:
-            def __init__(self) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [
-                    type(
-                        "C",
-                        (),
-                        {
-                            "message": type(
-                                "M",
-                                (),
-                                {
-                                    "content": json.dumps(
-                                        {
-                                            "inner_thought": "ok",
-                                            "suspicion": None,
-                                            "action": {
-                                                "type": "observe",
-                                                "target": "well",
-                                                "location": "well",
-                                            },
-                                            "dialogue": None,
-                                            "goal_progress": "none",
-                                            "cooperation_intent": "medium",
-                                        }
-                                    )
-                                },
-                            )()
-                        },
-                    )()
-                ]
-                self.usage = type(
-                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        class FakeRouter:
-            def __init__(self) -> None:
-                self.last_metadata: dict[str, Any] = {}
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.last_metadata = kwargs.get("metadata", {})
-                return FakeResponse()
 
         client = LLMClient()
         fake_router = FakeRouter()
@@ -709,57 +650,9 @@ class TestGenerationNameInMetadata:
     @pytest.mark.asyncio
     async def test_generation_name_falls_back_to_role(self) -> None:
         """When generation_name is None, metadata should use the role string."""
-        import json
-        from typing import Any
         from app.llm.client import LLMClient
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
-
-        class FakeResponse:
-            def __init__(self) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [
-                    type(
-                        "C",
-                        (),
-                        {
-                            "message": type(
-                                "M",
-                                (),
-                                {
-                                    "content": json.dumps(
-                                        {
-                                            "inner_thought": "ok",
-                                            "suspicion": None,
-                                            "action": {
-                                                "type": "observe",
-                                                "target": "well",
-                                                "location": "well",
-                                            },
-                                            "dialogue": None,
-                                            "goal_progress": "none",
-                                            "cooperation_intent": "medium",
-                                        }
-                                    )
-                                },
-                            )()
-                        },
-                    )()
-                ]
-                self.usage = type(
-                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        class FakeRouter:
-            def __init__(self) -> None:
-                self.last_metadata: dict[str, Any] = {}
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.last_metadata = kwargs.get("metadata", {})
-                return FakeResponse()
 
         client = LLMClient()
         fake_router = FakeRouter()
@@ -779,57 +672,9 @@ class TestGenerationNameInMetadata:
 class TestSessionAndUserMetadata:
     @pytest.mark.asyncio
     async def test_session_id_from_experiment_id(self) -> None:
-        import json
-        from typing import Any
         from app.llm.client import LLMClient
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
-
-        class FakeResponse:
-            def __init__(self) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [
-                    type(
-                        "C",
-                        (),
-                        {
-                            "message": type(
-                                "M",
-                                (),
-                                {
-                                    "content": json.dumps(
-                                        {
-                                            "inner_thought": "ok",
-                                            "suspicion": None,
-                                            "action": {
-                                                "type": "observe",
-                                                "target": "well",
-                                                "location": "well",
-                                            },
-                                            "dialogue": None,
-                                            "goal_progress": "none",
-                                            "cooperation_intent": "medium",
-                                        }
-                                    )
-                                },
-                            )()
-                        },
-                    )()
-                ]
-                self.usage = type(
-                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        class FakeRouter:
-            def __init__(self) -> None:
-                self.last_metadata: dict[str, Any] = {}
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.last_metadata = kwargs.get("metadata", {})
-                return FakeResponse()
 
         client = LLMClient()
         fake_router = FakeRouter()
@@ -848,57 +693,9 @@ class TestSessionAndUserMetadata:
 
     @pytest.mark.asyncio
     async def test_trace_user_id_falls_back_to_role(self) -> None:
-        import json
-        from typing import Any
         from app.llm.client import LLMClient
         from app.llm.models import LLMRequest
         from app.schemas.agent_decision import AgentDecision
-
-        class FakeResponse:
-            def __init__(self) -> None:
-                self.model = "openai/gpt-4o-mini"
-                self.choices = [
-                    type(
-                        "C",
-                        (),
-                        {
-                            "message": type(
-                                "M",
-                                (),
-                                {
-                                    "content": json.dumps(
-                                        {
-                                            "inner_thought": "ok",
-                                            "suspicion": None,
-                                            "action": {
-                                                "type": "observe",
-                                                "target": "well",
-                                                "location": "well",
-                                            },
-                                            "dialogue": None,
-                                            "goal_progress": "none",
-                                            "cooperation_intent": "medium",
-                                        }
-                                    )
-                                },
-                            )()
-                        },
-                    )()
-                ]
-                self.usage = type(
-                    "U", (), {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}
-                )()
-
-            def model_dump(self) -> dict[str, Any]:
-                return {}
-
-        class FakeRouter:
-            def __init__(self) -> None:
-                self.last_metadata: dict[str, Any] = {}
-
-            async def acompletion(self, **kwargs: Any) -> FakeResponse:
-                self.last_metadata = kwargs.get("metadata", {})
-                return FakeResponse()
 
         client = LLMClient()
         fake_router = FakeRouter()

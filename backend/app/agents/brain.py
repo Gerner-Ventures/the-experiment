@@ -71,7 +71,7 @@ class AgentBrain:
                     "round_number": context.world_state.round_number,
                     "tags": [
                         "role:agent",
-                        f"archetype:{context.goal.archetype}",
+                        f"archetype:{context.goal.archetype}" if context.goal else "archetype:none",
                     ],
                 },
                 model_override=None,
