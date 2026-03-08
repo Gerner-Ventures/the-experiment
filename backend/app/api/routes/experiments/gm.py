@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Request
 
 from app.api.models import ApproveGMPlanRequest, ReviseGMPlanRequest
-from app.api.runtime import GMPlanRevisionError
+from app.api.runtime import GMPlanRevisionConflictError, GMPlanRevisionError
 from app.gm.models import GMPlanRecord
 
 from .support import _runtime_from_request
@@ -64,5 +64,7 @@ async def revise_gm_plan(
         return await runtime.revise_gm_plan(experiment_id, body.feedback)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
+    except GMPlanRevisionConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except GMPlanRevisionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc

@@ -25,6 +25,7 @@ class RuleBasedGMService(GMService):
         revised = GMPlanData.model_validate(
             {
                 **current_plan.model_dump(mode="json"),
+                "round": current_plan.round,
                 "round_theme": f"{current_plan.round_theme} ({feedback[:40]})",
                 "reasoning": (
                     f"{current_plan.reasoning} Revised using GM feedback: {feedback}"

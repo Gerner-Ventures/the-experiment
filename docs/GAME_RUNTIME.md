@@ -44,8 +44,9 @@ Key fields:
 Manual GM steering behavior:
 
 - when `auto_approve=false`, the runtime keeps the upcoming GM plan in `gm_plan` with `status="pending"` until approval
-- `POST /api/experiments/{id}/step` returns `409` until that upcoming plan has been approved/applied
+- `POST /api/experiments/{id}/step` returns `409` until that upcoming plan has been generated and approved/applied
 - `POST /api/experiments/{id}/gm/revise` replaces the pending upcoming draft in-place and records feedback/revision audit events in the log
+- once a GM plan is already `applied`, `/gm/revise` rejects further revision for that round instead of resetting it back to pending
 
 Code reference:
 

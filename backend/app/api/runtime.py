@@ -47,6 +47,7 @@ from app.db.session import AsyncSessionLocal
 from app.engine import EngineAgentState, RoundResult, SimulationEngine, SimulationState
 from app.gm import GMService, RuleBasedGMService, get_preset_arc
 from app.gm.models import DirectorArc, GMPlanData, GMPlanRecord, GMPlanningContext
+from app.gm.service import GMPlanRevisionFailure
 from app.highlights import HighlightSelector
 from app.llm import UsageRecord
 from app.schemas.ws_message import WSMessage, WSMessageType
@@ -70,6 +71,10 @@ class GMPlanApprovalRequiredError(RuntimeError):
 
 
 class GMPlanRevisionError(RuntimeError):
+    pass
+
+
+class GMPlanRevisionConflictError(RuntimeError):
     pass
 
 
@@ -329,31 +334,36 @@ class ExperimentRuntime:
         return plan
 
     async def revise_gm_plan(self, experiment_id: str, feedback: str) -> GMPlanRecord:
-        state = await self.get_state(experiment_id)
-        record = await self.get_or_generate_gm_plan(experiment_id)
-        context = self._build_gm_planning_context(state)
-        try:
-            revised = await self.gm_service.revise_plan(context, record.plan, feedback)
-        except Exception as exc:
-            raise GMPlanRevisionError("GM plan revision failed.") from exc
-        state.gm_plan = revised
-        await self.store.save_state(state)
-        await self.event_log.log(
-            experiment_id,
-            event_type="gm_plan_feedback",
-            summary=f"GM feedback submitted for round {record.plan.round}.",
-            round_number=record.plan.round,
-            data={"feedback": feedback},
-        )
-        await self.event_log.log(
-            experiment_id,
-            event_type="gm_plan_revised",
-            summary=revised.plan.round_theme,
-            round_number=revised.plan.round,
-            data=self._gm_plan_summary_data(revised.plan),
-        )
-        await self.audio.prepare_narration_audio(experiment_id, revised)
-        return revised
+        async with self.lock:
+            record = await self.get_or_generate_gm_plan(experiment_id)
+            if record.status == "applied":
+                raise GMPlanRevisionConflictError(
+                    "Applied GM plans cannot be revised. Generate the next upcoming plan instead."
+                )
+            state = await self.get_state(experiment_id)
+            context = self._build_gm_planning_context(state)
+            try:
+                revised = await self.gm_service.revise_plan(context, record.plan, feedback)
+            except GMPlanRevisionFailure as exc:
+                raise GMPlanRevisionError(str(exc)) from exc
+            state.gm_plan = revised
+            await self.store.save_state(state)
+            await self.event_log.log(
+                experiment_id,
+                event_type="gm_plan_feedback",
+                summary=f"GM feedback submitted for round {record.plan.round}.",
+                round_number=record.plan.round,
+                data={"feedback": feedback},
+            )
+            await self.event_log.log(
+                experiment_id,
+                event_type="gm_plan_revised",
+                summary=revised.plan.round_theme,
+                round_number=revised.plan.round,
+                data=self._gm_plan_summary_data(revised.plan),
+            )
+            await self.audio.prepare_narration_audio(experiment_id, revised)
+            return revised
 
     async def approve_gm_plan(
         self, experiment_id: str, modified_plan: GMPlanData | None = None
@@ -777,11 +787,12 @@ class ExperimentRuntime:
     ) -> None:
         if state.auto_approve:
             return
-        record = await self.get_or_generate_gm_plan(experiment_id)
-        if record.status == "applied":
+        next_round = state.current_round + 1
+        record = state.gm_plan
+        if record is not None and record.plan.round == next_round and record.status == "applied":
             return
         raise GMPlanApprovalRequiredError(
-            "GM plan approval is required before stepping when auto_approve is false."
+            "Generate and approve the upcoming GM plan before stepping when auto_approve is false."
         )
 
     def _gm_plan_summary_data(self, plan: GMPlanData) -> dict[str, Any]:

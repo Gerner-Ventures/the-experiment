@@ -55,7 +55,7 @@ flowchart LR
 
 ## Runtime Flow
 
-1. A GM plan is generated, revised, or approved.
+1. A pending GM plan is generated or revised, or an approved plan is applied.
 2. If the plan includes narration text, `ExperimentRuntime` builds a
    `NarrationAudioRequest`.
 3. The runtime immediately broadcasts `gm_audio_status` with `pending` or `ready`.

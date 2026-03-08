@@ -29,7 +29,7 @@ GM plan statuses:
 Important behavior:
 
 - `POST /api/experiments/{id}/step` will move an experiment from `setup` to `running` automatically.
-- When `auto_approve=false`, `POST /api/experiments/{id}/step` returns `409` until the upcoming GM plan has been approved.
+- When `auto_approve=false`, `POST /api/experiments/{id}/step` returns `409` until you have generated and approved the upcoming GM plan.
 - Experiment state, GM plans, event logs, round snapshots, faction state, exile history, and sacrifice history are persisted through the store boundary.
 - The WebSocket stream is server-push only. Control actions still go through REST.
 
@@ -176,8 +176,9 @@ curl -X POST http://localhost:8000/api/experiments/$EXPERIMENT_ID/gm/revise \
 Rules for `feedback`:
 
 - leading and trailing whitespace is trimmed
-- blank feedback is rejected with `422`
+- blank or whitespace-only feedback is rejected with `422`
 - feedback longer than 500 characters is rejected with `422`
+- already-applied GM plans cannot be revised; `POST /gm/revise` returns `409` for that state conflict
 
 Each generated or revised pending draft can be previewed through:
 
@@ -419,8 +420,9 @@ Analytics persistence notes:
 - Unknown agents return `404 Agent not found`.
 - Unknown rounds return `404 Round not found`.
 - Missing round snapshots return `404 Round snapshot not found`.
-- In manual mode, stepping without an applied upcoming GM plan returns `409 GM plan approval is required before stepping when auto_approve is false.`.
+- In manual mode, stepping without a generated and applied upcoming GM plan returns `409 Generate and approve the upcoming GM plan before stepping when auto_approve is false.`.
 - Round narration that has not been generated, revised, or persisted yet returns `409 Narration is not available for this round yet.`.
+- Revising an already-applied GM plan returns `409 Applied GM plans cannot be revised. Generate the next upcoming plan instead.`.
 - GM revision failures return `502 GM plan revision failed.`.
 - Unconfigured ElevenLabs audio returns `503 Narration audio is not configured.`.
 - Invalid query/body payloads return FastAPI `422 Unprocessable Entity` responses.
