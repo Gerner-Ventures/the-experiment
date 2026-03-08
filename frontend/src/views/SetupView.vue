@@ -115,6 +115,7 @@ async function beginExperiment() {
       agents: agents.value.map(toAgentPayload),
       preset_arc_id: selectedArc.value,
       total_rounds: totalRounds.value,
+      auto_approve: true,
     })
 
     experimentStore.setExperiment({

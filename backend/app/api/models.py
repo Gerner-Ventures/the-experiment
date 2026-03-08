@@ -36,7 +36,7 @@ class AgentCreateRequest(APIRequestModel):
 class CreateExperimentRequest(APIRequestModel):
     name: str
     total_rounds: int = Field(default=15, ge=1)
-    auto_approve: bool = False
+    auto_approve: bool = True
     preset_arc_id: str = "lord_of_the_flies"
     arc: DirectorArc | None = None
     agents: list[AgentCreateRequest] = Field(default_factory=list)
