@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.agents.models import PersonalityProfile, SecretGoal
 from app.db.models import AgentStatus
@@ -77,6 +77,20 @@ class ApproveGMPlanRequest(APIRequestModel):
     modified_plan: GMPlanData | None = None
 
 
+class ReviseGMPlanRequest(APIRequestModel):
+    feedback: str
+
+    @field_validator("feedback")
+    @classmethod
+    def _normalize_feedback(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Feedback cannot be blank.")
+        if len(normalized) > 500:
+            raise ValueError("Feedback must be 500 characters or fewer.")
+        return normalized
+
+
 class UpdateArcRequest(APIRequestModel):
     arc: DirectorArc
 
@@ -88,6 +102,8 @@ EventLogType = Literal[
     "observer_event",
     "arc_updated",
     "gm_plan_generated",
+    "gm_plan_feedback",
+    "gm_plan_revised",
     "gm_plan_approved",
     "gm_plan",
     "dawn",

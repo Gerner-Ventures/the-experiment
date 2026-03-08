@@ -10,6 +10,7 @@ from app.api.models import (
     StepStartedResponse,
     UpdateArcRequest,
 )
+from app.api.runtime import GMPlanApprovalRequiredError
 from app.engine import SimulationState
 
 from .support import _get_state, _runtime_from_request
@@ -81,10 +82,13 @@ async def pause_experiment(experiment_id: str, request: Request) -> ExperimentSu
 async def step_experiment(experiment_id: str, request: Request) -> StepStartedResponse:
     runtime = _runtime_from_request(request)
     try:
+        await runtime.assert_step_allowed(experiment_id)
         state = await runtime.get_state(experiment_id)
         runtime.start_step(experiment_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Experiment not found") from exc
+    except GMPlanApprovalRequiredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except RuntimeError:
         raise HTTPException(status_code=409, detail="A round is already in progress")
     return StepStartedResponse(

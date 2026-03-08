@@ -21,6 +21,7 @@ from app.api.store import InMemoryExperimentStore
 from app.core.config import Settings
 from app.core.runtime_factory import build_runtime
 from app.gm import RuleBasedGMService
+from app.gm.service import GMPlanRevisionFailure
 from app.llm import UsageTracker
 from app.llm.models import LLMUsage, UsageRecord
 from app.main import create_app
@@ -249,6 +250,127 @@ def test_runtime_llm_mode_routes_toggle_process_local_mock_mode() -> None:
         assert not isinstance(runtime.engine.agent_service.brain, MockAgentBrain)
 
 
+def test_step_requires_gm_approval_in_manual_mode(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    blocked = client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    assert blocked.status_code == 409
+    assert "generate and approve" in blocked.json()["detail"].lower()
+
+    pending_state = client.get(f"{API_PREFIX}/experiments/{experiment_id}")
+    assert pending_state.status_code == 200
+    assert pending_state.json()["gm_plan"] is None
+
+    gm_plan = client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
+    assert gm_plan.status_code == 200
+    assert gm_plan.json()["status"] == "pending"
+
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "applied"
+
+    stepped = client.post(f"{API_PREFIX}/experiments/{experiment_id}/step")
+    assert stepped.status_code == 200
+    _wait_for_round_completion(client, experiment_id)
+
+
+def test_revise_gm_plan_route_returns_pending_and_persists_audit_logs(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    original = client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
+    assert original.status_code == 200
+
+    revised = client.post(
+        f"{API_PREFIX}/experiments/{experiment_id}/gm/revise",
+        json={"feedback": " make it darker and add an earthquake "},
+    )
+    assert revised.status_code == 200
+    body = revised.json()
+    assert body["status"] == "pending"
+    assert body["plan"]["round"] == 1
+    assert body["plan"]["round_theme"] != original.json()["plan"]["round_theme"]
+    assert body["plan"]["narration"] != original.json()["plan"]["narration"]
+
+    feedback_logs = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "gm_plan_feedback"},
+    )
+    assert feedback_logs.status_code == 200
+    assert feedback_logs.json()["total"] == 1
+    assert feedback_logs.json()["items"][0]["data"]["feedback"] == (
+        "make it darker and add an earthquake"
+    )
+
+    revised_logs = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/log",
+        params={"event_type": "gm_plan_revised"},
+    )
+    assert revised_logs.status_code == 200
+    assert revised_logs.json()["total"] == 1
+    assert revised_logs.json()["items"][0]["data"] == {
+        "round": 1,
+        "round_theme": body["plan"]["round_theme"],
+        "narration": body["plan"]["narration"],
+    }
+
+
+@pytest.mark.parametrize(
+    "feedback",
+    ["", "   ", "x" * 501],
+)
+def test_revise_gm_plan_route_validates_feedback(client: TestClient, feedback: str) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+
+    response = client.post(
+        f"{API_PREFIX}/experiments/{experiment_id}/gm/revise",
+        json={"feedback": feedback},
+    )
+
+    assert response.status_code == 422
+
+
+def test_revise_failure_keeps_existing_pending_plan(runtime: ExperimentRuntime) -> None:
+    async def failing_revise_plan(*args: Any, **kwargs: Any) -> Any:
+        raise GMPlanRevisionFailure("GM plan revision failed.")
+
+    runtime.gm_service.revise_plan = failing_revise_plan  # type: ignore[method-assign]
+    app = create_app(runtime=runtime)
+
+    with TestClient(app, raise_server_exceptions=False) as failure_client:
+        created = failure_client.post(f"{API_PREFIX}/experiments", json=_payload())
+        experiment_id = created.json()["experiment_id"]
+        original = failure_client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
+        assert original.status_code == 200
+
+        revised = failure_client.post(
+            f"{API_PREFIX}/experiments/{experiment_id}/gm/revise",
+            json={"feedback": "make it darker and add an earthquake"},
+        )
+        assert revised.status_code == 502
+        assert revised.json()["detail"] == "GM plan revision failed."
+
+        after = failure_client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
+        assert after.status_code == 200
+        assert after.json() == original.json()
+
+
+def test_revise_rejects_applied_plan(client: TestClient) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "applied"
+
+    revised = client.post(
+        f"{API_PREFIX}/experiments/{experiment_id}/gm/revise",
+        json={"feedback": "make it darker and add an earthquake"},
+    )
+    assert revised.status_code == 409
+    assert "cannot be revised" in revised.json()["detail"].lower()
+
+
 def test_start_and_pause_routes_update_experiment_status(client: TestClient) -> None:
     created = client.post(f"{API_PREFIX}/experiments", json=_payload())
     experiment_id = created.json()["experiment_id"]
@@ -464,6 +586,42 @@ def test_round_narration_metadata_and_audio_routes(client: TestClient) -> None:
     assert metadata.status_code == 200
     assert metadata.json()["round_number"] == 1
     assert metadata.json()["text"]
+    assert metadata.json()["audio_url"].endswith("/rounds/1/narration/audio")
+    assert metadata.json()["status"] in {"pending", "ready"}
+
+    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    assert audio.status_code == 200
+    assert audio.headers["content-type"].startswith("audio/mpeg")
+    assert audio.content == b"audio-chunk-1audio-chunk-2"
+
+
+def test_pending_plan_narration_preview_and_audio_are_available_before_approval(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    provider = runtime.tts_service._provider
+    assert isinstance(provider, _FakeNarrationProvider)
+
+    gm_plan = client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
+    assert gm_plan.status_code == 200
+    assert gm_plan.json()["status"] == "pending"
+    generated_calls = _wait_for_provider_calls(provider, minimum_calls=1)
+    assert generated_calls >= 1
+
+    revised = client.post(
+        f"{API_PREFIX}/experiments/{experiment_id}/gm/revise",
+        json={"feedback": "make it darker and add an earthquake"},
+    )
+    assert revised.status_code == 200
+    assert revised.json()["status"] == "pending"
+    assert _wait_for_provider_calls(provider, minimum_calls=generated_calls + 1) >= (
+        generated_calls + 1
+    )
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 200
+    assert metadata.json()["text"] == revised.json()["plan"]["narration"]
     assert metadata.json()["audio_url"].endswith("/rounds/1/narration/audio")
     assert metadata.json()["status"] in {"pending", "ready"}
 
@@ -920,6 +1078,20 @@ def _wait_for_step_cleanup(
             return
         time.sleep(delay_seconds)
     raise AssertionError(f"Timed out waiting for step cleanup for experiment {experiment_id}.")
+
+
+def _wait_for_provider_calls(
+    provider: _FakeNarrationProvider,
+    *,
+    minimum_calls: int,
+    attempts: int = 100,
+    delay_seconds: float = 0.01,
+) -> int:
+    for _ in range(attempts):
+        if provider.calls >= minimum_calls:
+            return provider.calls
+        time.sleep(delay_seconds)
+    raise AssertionError(f"Timed out waiting for provider to reach {minimum_calls} calls.")
 
 
 def _seed_highlight_logs(runtime: ExperimentRuntime, experiment_id: str) -> None:
