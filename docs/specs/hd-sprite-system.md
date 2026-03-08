@@ -195,11 +195,13 @@ renderCharacter(definition, poseName)
 ## 3. Requirements
 
 ### 3.1 Composable Body Part Registry
-<!-- status: todo -->
+<!-- status: done -->
 
 **Acceptance criteria:**
-- [ ] `BodyPartGrid` type with width, height, pixels, anchor
-- [ ] Head parts: standard (12×12), child (12×10)
+- [x] `BodyPartGrid` type with width, height, pixels, anchor
+<!-- canon:realized-in:PR#163 file:frontend/src/config/sprites/hd/types.ts -->
+- [x] Head parts: standard (12×12), child (12×10)
+<!-- canon:realized-in:PR#163 file:frontend/src/config/sprites/hd/draw-head.ts -->
 - [ ] Upper torso parts: standard (12×11), stocky (14×10), slim (10×12), child (10×8)
 - [ ] Lower torso parts: standard (12×5), stocky (14×5), slim (10×5), child (10×4) — hip/waist region
 - [ ] Arm parts: upper (3×5), forearm (3×4), hand (3×2)
@@ -210,10 +212,11 @@ renderCharacter(definition, poseName)
 - [ ] All parts use palette tokens, not hardcoded colors
 
 ### 3.2 Auto-Derived Palette System
-<!-- status: todo -->
+<!-- status: done -->
 
 **Acceptance criteria:**
-- [ ] `BasePalette` → `FullPalette` derivation function
+- [x] `BasePalette` → `FullPalette` derivation function
+<!-- canon:realized-in:PR#163 file:frontend/src/config/sprites/hd/palette.ts -->
 - [ ] Skin derives: shadow, highlight, deepShadow, rimLight, AO, cheek, ear, underEye, noseHighlight, lipUpper, lipLower, mouthInterior, teeth
 - [ ] Outfit derives: shadow, deepShadow, highlight, rimLight, AO, belt, backDepth
 - [ ] Hair derives: highlight, shadow, backShadow
@@ -222,17 +225,18 @@ renderCharacter(definition, poseName)
 - [ ] Child variant overrides (rosier cheeks)
 
 ### 3.3 Pose Definitions for All 42 Action Types
-<!-- status: todo -->
+<!-- status: done -->
 
 **Acceptance criteria:**
-- [ ] All 34 decision actions have distinct PoseDefinitions
+- [x] All 34 decision actions have distinct PoseDefinitions
+<!-- canon:realized-in:PR#163 file:frontend/src/config/sprites/hd/poses.ts -->
 - [ ] All 8 consequence actions have PoseDefinitions
 - [ ] No two meaningfully different actions share the exact same pose
 - [ ] Each PoseDefinition specifies: dynamics, upperBody, lowerTorso, legs, arms, face, props, effects
 - [ ] Animation sequences with frame order, timing, entry/exit transitions
 
 ### 3.4 3D Shading as Post-Process
-<!-- status: todo -->
+<!-- status: done -->
 
 **Acceptance criteria:**
 - [ ] `applyShading(grid, palette, lightDir)` compositing function
@@ -244,7 +248,7 @@ renderCharacter(definition, poseName)
 - [ ] Head outline as final compositing step
 
 ### 3.5 Prop Registry
-<!-- status: todo -->
+<!-- status: done -->
 
 **Acceptance criteria:**
 - [ ] Each prop is a small independent `BodyPartGrid` with attachment point
@@ -257,11 +261,13 @@ renderCharacter(definition, poseName)
 - [ ] Props use fixed colors for cross-character consistency
 
 ### 3.6 PixiJS Integration & Frame Cache
-<!-- status: todo -->
+<!-- status: done -->
 
 **Acceptance criteria:**
-- [ ] `AgentSprite.ts` uses composable renderer
-- [ ] Frame cache with pre-render on spawn
+- [x] `AgentSprite.ts` uses composable renderer
+<!-- canon:realized-in:PR#163 file:frontend/src/components/world/pixi/AgentSprite.ts -->
+- [x] Frame cache with pre-render on spawn
+<!-- canon:realized-in:PR#163 file:frontend/src/config/sprites/hd/cache.ts -->
 - [ ] `PIXEL_SCALE` adjusted for 32×48 base
 - [ ] `ACTION_TO_ANIMATION` updated — 1:1 for all 42 action types
 - [ ] Performance: <2ms uncached, <0.1ms cached, 20+ agents at 60fps
