@@ -126,6 +126,26 @@ describe('NarrationOverlay', () => {
     expect(wrapper.emitted('update:autoplayBlocked')![0]).toEqual([true])
   })
 
+  it('shows error text when audio element fails to load', async () => {
+    // Simulate audio.play() succeeding but the element hitting a load error
+    const wrapper = createWrapper({
+      audioStatus: 'idle',
+      audioUrl: '/audio/broken',
+    })
+    await wrapper.setProps({ audioStatus: 'ready' })
+    await wrapper.vm.$nextTick()
+
+    // Find the 'error' handler registered on the Audio element and call it
+    const errorCall = mockAddEventListener.mock.calls.find(
+      (call: [string, () => void]) => call[0] === 'error'
+    )
+    expect(errorCall).toBeDefined()
+    errorCall![1]() // trigger the error handler
+    await wrapper.vm.$nextTick()
+
+    expect(wrapper.text()).toContain('Audio unavailable')
+  })
+
   it('autoplays audio on mount when already ready (reconnect)', async () => {
     const wrapper = createWrapper({
       audioStatus: 'ready',

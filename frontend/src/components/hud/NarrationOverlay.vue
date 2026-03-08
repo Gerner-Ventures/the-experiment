@@ -35,19 +35,25 @@ function onAudioEnded() {
 }
 function onAudioError() {
   emit('update:playing', false)
+  audioLoadFailed.value = true
 }
 
+const audioEnded = ref(false)
+const audioLoadFailed = ref(false)
+
 const showPlayButton = computed(() =>
-  props.audioStatus === 'ready' && (props.autoplayBlocked || audioEnded.value)
+  props.audioStatus === 'ready' && !audioLoadFailed.value && (props.autoplayBlocked || audioEnded.value)
 )
 const showAudioLoading = computed(() => props.audioStatus === 'pending')
-const showAudioError = computed(() => props.audioStatus === 'error' || props.audioStatus === 'unavailable')
-const audioEnded = ref(false)
+const showAudioError = computed(() =>
+  props.audioStatus === 'error' || props.audioStatus === 'unavailable' || audioLoadFailed.value
+)
 
 watch(() => props.visible, (show) => {
   if (show && props.text) {
     startTypewriter()
     audioEnded.value = false
+    audioLoadFailed.value = false
   } else {
     stopTypewriter()
     stopAudio()
