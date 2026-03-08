@@ -27,6 +27,7 @@ export class AgentSpriteObject {
   private animTimer: ReturnType<typeof setTimeout> | null = null
   private actionTimer: ReturnType<typeof setTimeout> | null = null
   private walkTimer: ReturnType<typeof setInterval> | null = null
+  private idleCallbackHandle: number | null = null
   private walkFrame = 0
   private currentHDAnimation: HDAnimationDef | null = null
   private currentFrame = 0
@@ -44,9 +45,13 @@ export class AgentSpriteObject {
     startY: number,
   ) {
     // Resolve HD character definition
-    this.hdCharacter = (typeof characterIdOrDef === 'object' && 'basePalette' in characterIdOrDef)
+    const resolved = (typeof characterIdOrDef === 'object' && 'basePalette' in characterIdOrDef)
       ? characterIdOrDef as HDCharacterDef
-      : getHDSpriteById(characterIdOrDef.id)!
+      : getHDSpriteById(characterIdOrDef.id)
+    if (!resolved) {
+      console.error(`[AgentSprite] Unknown character ID: ${characterIdOrDef.id}, falling back to first available`)
+    }
+    this.hdCharacter = resolved ?? getHDSpriteById('lotf_ralph')!
 
     this.tileX = startX
     this.tileY = startY
@@ -85,7 +90,8 @@ export class AgentSpriteObject {
     // Pre-render common poses in idle time (idle already cached from getTexture above)
     if (typeof requestIdleCallback === 'function') {
       const char = this.hdCharacter
-      requestIdleCallback(() => {
+      this.idleCallbackHandle = requestIdleCallback(() => {
+        this.idleCallbackHandle = null
         HDFrameCache.prerender(char, [
           'walk1', 'walk2', 'talk1', 'talk2',
           'wave1', 'wave2', 'punch1', 'punch2',
@@ -217,6 +223,7 @@ export class AgentSpriteObject {
     this.playHDAnimation(hdAnim, onComplete)
   }
 
+  /** Play an HD animation. Note: onComplete is only called for non-looping animations. */
   playHDAnimation(anim: HDAnimationDef, onComplete?: () => void) {
     this.stopAnimation()
     this.currentHDAnimation = anim
@@ -336,6 +343,10 @@ export class AgentSpriteObject {
 
   destroy() {
     this.stopAllBehavior()
+    if (this.idleCallbackHandle !== null && typeof cancelIdleCallback === 'function') {
+      cancelIdleCallback(this.idleCallbackHandle)
+      this.idleCallbackHandle = null
+    }
     for (const tex of this.textureCache.values()) {
       tex.destroy(true)
     }

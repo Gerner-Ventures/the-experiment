@@ -112,7 +112,7 @@ export const ARC = {
   endpointY: 0.15,
   /** Y-position of the arc apex (top of arc, overhead sun) */
   apexY: 0.08,
-  /** Vertical offset for bezier control points below apex */
+  /** Vertical offset (px) for bezier control points below apex — fixed pixels, does not scale with screen */
   controlPointOffset: 20,
   /** GSAP MotionPath curviness (higher = rounder arc) */
   curviness: 1.2,
