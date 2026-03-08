@@ -56,14 +56,18 @@ function addAgent() {
   const nextId = String(Date.now())
   const used = usedCharacterIds()
   const nextChar = CHARACTERS.find(c => !used.has(c.id)) ?? CHARACTERS[0]
+  const agentIndex = agents.value.length
+  const goalKey = GOAL_PRESET_KEYS[agentIndex % GOAL_PRESET_KEYS.length]
+  const traitPairs: [number, number][] = [[0,14],[1,7],[2,4],[3,11],[5,12],[6,16]]
+  const [t1, t2] = traitPairs[agentIndex % traitPairs.length]
   agents.value.push({
     id: nextId,
     name: nextChar.name,
     characterId: nextChar.id,
-    personality: [],
+    personality: [PERSONALITY_TRAIT_KEYS[t1], PERSONALITY_TRAIT_KEYS[t2]],
     personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
-    secretGoal: '',
-    goalArchetype: '',
+    secretGoal: getGoalPreset(goalKey).goal,
+    goalArchetype: GOAL_ARCHETYPE_MAP[goalKey],
     llmModel: DEFAULT_LLM_MODEL,
   })
   activeKeys.value = [nextId]
@@ -131,9 +135,9 @@ function removeAgent(id: string) {
               <Tag
                 v-for="trait in agent.personality"
                 :key="trait"
-                class="!text-[10px] !m-0"
+                class="!text-[10px] !m-0 !bg-accent/10 !text-accent/70 !border-accent/20"
               >
-                {{ trait }}
+                {{ getTraitLabel(trait) }}
               </Tag>
             </Flex>
 
