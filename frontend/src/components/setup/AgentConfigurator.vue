@@ -12,7 +12,7 @@ import type { AgentConfig } from '@/types/agent'
 import {
   PERSONALITY_TRAIT_KEYS, GOAL_PRESET_KEYS,
   MAX_PERSONALITY_TRAITS, MIN_AGENTS, MAX_AGENTS, DEFAULT_LLM_MODEL,
-  DEFAULT_PERSONALITY_AXES, GOAL_ARCHETYPE_MAP,
+  DEFAULT_PERSONALITY_AXES, DEFAULT_TRAIT_PAIRS, GOAL_ARCHETYPE_MAP,
   getTraitLabel, getGoalPreset,
   type PersonalityTrait,
 } from '@/config/agent-options'
@@ -56,14 +56,17 @@ function addAgent() {
   const nextId = String(Date.now())
   const used = usedCharacterIds()
   const nextChar = CHARACTERS.find(c => !used.has(c.id)) ?? CHARACTERS[0]
+  const agentIndex = agents.value.length
+  const goalKey = GOAL_PRESET_KEYS[agentIndex % GOAL_PRESET_KEYS.length]
+  const [trait1, trait2] = DEFAULT_TRAIT_PAIRS[agentIndex % DEFAULT_TRAIT_PAIRS.length]
   agents.value.push({
     id: nextId,
     name: nextChar.name,
     characterId: nextChar.id,
-    personality: [],
+    personality: [trait1, trait2],
     personalityAxes: { ...DEFAULT_PERSONALITY_AXES },
-    secretGoal: '',
-    goalArchetype: '',
+    secretGoal: getGoalPreset(goalKey).goal,
+    goalArchetype: GOAL_ARCHETYPE_MAP[goalKey],
     llmModel: DEFAULT_LLM_MODEL,
   })
   activeKeys.value = [nextId]
@@ -131,9 +134,9 @@ function removeAgent(id: string) {
               <Tag
                 v-for="trait in agent.personality"
                 :key="trait"
-                class="!text-[10px] !m-0"
+                class="!text-[10px] !m-0 !bg-accent/10 !text-accent/70 !border-accent/20"
               >
-                {{ trait }}
+                {{ getTraitLabel(trait) }}
               </Tag>
             </Flex>
 

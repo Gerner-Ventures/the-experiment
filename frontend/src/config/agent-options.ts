@@ -66,6 +66,16 @@ export const TRAIT_TO_AXES: Record<PersonalityTrait, Partial<Record<string, numb
   creative: { impulsiveness: 10, ambition: 10 },
 }
 
+/** Default trait pairs assigned to new agents, cycling by index */
+export const DEFAULT_TRAIT_PAIRS: [PersonalityTrait, PersonalityTrait][] = [
+  ['cautious', 'observant'],
+  ['aggressive', 'friendly'],
+  ['charismatic', 'paranoid'],
+  ['quiet', 'empathetic'],
+  ['analytical', 'cunning'],
+  ['manipulative', 'strategic'],
+]
+
 import type { GoalArchetype } from '@/types/agent'
 
 /** Maps goal presets to backend GoalArchetype */
