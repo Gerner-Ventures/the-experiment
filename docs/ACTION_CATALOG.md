@@ -77,7 +77,7 @@ in the catalog instead of adding another hardcoded set elsewhere.
 The catalog is intended to be the backend source of truth for:
 
 - schema/action-id lists in `backend/app/schemas/agent_decision.py`
-- compatibility registry views in `backend/app/agents/registry.py`
+- direct action metadata lookups via `app.actions.get_action(...)`
 - prompt/decision helpers that need the decision action set
 - engine checks in `backend/app/engine/service.py`
 - report and analytics grouping in `backend/app/api/runtime.py`

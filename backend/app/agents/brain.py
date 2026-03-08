@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from app.actions import DecisionActionName
+from app.actions import DecisionActionName, get_action
 from app.agents.models import (
     AgentContext,
     AgentMemoryState,
@@ -10,7 +10,6 @@ from app.agents.models import (
     KeyMemory,
     MemoryEvent,
 )
-from app.agents.registry import get_action_definition
 from app.agents.suspicion import apply_suspicion_trigger
 from app.llm import LLMService
 from app.schemas.agent_decision import (
@@ -114,7 +113,7 @@ class AgentBrain:
                 goal_progress="No clear progress this turn.",
                 cooperation_intent="medium",
             )
-        action = get_action_definition(decision.action.type)
+        action = get_action(decision.action.type)
 
         updated_memory = context.memory
         updated_memory = _record_decision_memory(

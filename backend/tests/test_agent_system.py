@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.actions import get_action
 from app.agents.brain import AgentBrain, build_agent_prompt
 from app.agents.models import (
     AgentContext,
@@ -23,7 +24,6 @@ from app.engine.models import (
     EngineAgentState,
     SimulationState,
 )
-from app.agents.registry import get_action_definition
 from app.agents.service import AgentService
 from app.agents.suspicion import apply_suspicion_trigger
 from app.engine.service import SimulationEngine
@@ -641,15 +641,15 @@ async def test_night_phase_materializes_active_agents_once(monkeypatch: pytest.M
 
 
 def test_action_registry_exposes_expected_actions() -> None:
-    action = get_action_definition("hoard")
+    action = get_action("hoard")
     assert action.category == "selfish"
     assert action.requires_target is True
 
-    aggressive = get_action_definition("attack")
+    aggressive = get_action("attack")
     assert aggressive.category == "selfish"
     assert aggressive.requires_target is True
 
-    biological = get_action_definition("sleep")
+    biological = get_action("sleep")
     assert biological.requires_location is True
 
 
