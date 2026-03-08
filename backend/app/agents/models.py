@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.db.models import AgentStatus
 from app.llm.models import MemorySalienceType
-from app.schemas.agent_decision import AgentDecision
+from app.schemas.agent_decision import AgentDecision, DECISION_ACTION_TYPES, DecisionActionType
 from app.world.models import WorldState
 
 PersonalityAxis = Literal[
@@ -24,42 +24,17 @@ GoalArchetype = Literal[
     "personal_redemption",
     "obsession_desire",
 ]
-ActionType = Literal[
-    "move",
-    "gather",
-    "repair",
-    "trade",
-    "talk",
-    "hoard",
-    "sabotage",
-    "explore",
-    "accuse",
-    "vote",
-    "rest",
-    "observe",
-    "attack",
-    "threaten",
-    "stab",
-    "shoot",
-    "poison",
-    "dance",
-    "pray",
-    "rally",
-    "mourn",
-    "celebrate",
-    "argue",
-    "pee",
-    "poop",
-    "vomit",
-    "sleep",
-    "eat",
-    "drink",
-    "investigate",
-    "monologue",
-    "panic",
-    "breakdown",
-    "self_sacrifice",
+ConsequenceActionType = Literal[
+    "bleeding",
+    "injured",
+    "stunned",
+    "knocked_down",
+    "burning",
+    "poisoned",
+    "crying",
+    "fleeing",
 ]
+ActionType = DecisionActionType | ConsequenceActionType
 SuspicionTrigger = Literal[
     "edge_of_map", "failed_action", "observer_event", "paranoia_spread", "meta_signal"
 ]
@@ -90,42 +65,17 @@ CURATED_TRAIT_TAGS: tuple[str, ...] = (
     "ruthless",
     "lonely",
 )
-ACTION_TYPES: tuple[ActionType, ...] = (
-    "move",
-    "gather",
-    "repair",
-    "trade",
-    "talk",
-    "hoard",
-    "sabotage",
-    "explore",
-    "accuse",
-    "vote",
-    "rest",
-    "observe",
-    "attack",
-    "threaten",
-    "stab",
-    "shoot",
-    "poison",
-    "dance",
-    "pray",
-    "rally",
-    "mourn",
-    "celebrate",
-    "argue",
-    "pee",
-    "poop",
-    "vomit",
-    "sleep",
-    "eat",
-    "drink",
-    "investigate",
-    "monologue",
-    "panic",
-    "breakdown",
-    "self_sacrifice",
+CONSEQUENCE_ACTION_TYPES: tuple[ConsequenceActionType, ...] = (
+    "bleeding",
+    "injured",
+    "stunned",
+    "knocked_down",
+    "burning",
+    "poisoned",
+    "crying",
+    "fleeing",
 )
+ACTION_TYPES: tuple[ActionType, ...] = (*DECISION_ACTION_TYPES, *CONSEQUENCE_ACTION_TYPES)
 
 
 class AgentModel(BaseModel):
@@ -186,7 +136,7 @@ class AgentMemoryState(AgentModel):
 
 class ActionDefinition(AgentModel):
     type: ActionType
-    category: Literal["cooperative", "selfish", "neutral", "social"]
+    category: Literal["cooperative", "selfish", "neutral", "social", "consequence"]
     description: str
     requires_target: bool = False
     requires_location: bool = False

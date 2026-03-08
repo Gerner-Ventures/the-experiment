@@ -22,6 +22,7 @@
     "round": { "type": "integer" },
     "phase": { "type": "string" },
     "timestamp": { "type": "string", "format": "date-time" },
+    "is_consequence": { "type": "boolean" },
     "data": { "type": "object" }
   },
   "required": ["type", "round", "timestamp", "data"]

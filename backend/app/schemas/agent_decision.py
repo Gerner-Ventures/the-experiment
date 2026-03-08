@@ -4,6 +4,43 @@ from pydantic import Field
 
 from app.schemas.common import APIModel
 
+DECISION_ACTION_TYPES: tuple[str, ...] = (
+    "move",
+    "gather",
+    "repair",
+    "trade",
+    "talk",
+    "hoard",
+    "sabotage",
+    "explore",
+    "accuse",
+    "vote",
+    "rest",
+    "observe",
+    "attack",
+    "threaten",
+    "stab",
+    "shoot",
+    "poison",
+    "dance",
+    "pray",
+    "rally",
+    "mourn",
+    "celebrate",
+    "argue",
+    "pee",
+    "poop",
+    "vomit",
+    "sleep",
+    "eat",
+    "drink",
+    "investigate",
+    "monologue",
+    "panic",
+    "breakdown",
+    "self_sacrifice",
+)
+
 DecisionActionType = Literal[
     "move",
     "gather",
