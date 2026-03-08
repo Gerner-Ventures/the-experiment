@@ -98,6 +98,18 @@ export interface GMPlanRecord {
   modified: boolean
 }
 
+export interface NarrationMetadata {
+  experiment_id: string
+  round_number: number
+  text: string
+  voice_id: string
+  model_id: string
+  output_format: string
+  status: 'pending' | 'ready' | 'unavailable'
+  audio_url: string
+  cache_hit: boolean
+}
+
 // ---------------------------------------------------------------------------
 // API client — all paths prefixed with /api/experiments
 // ---------------------------------------------------------------------------
@@ -139,6 +151,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ modified_plan: modifiedPlan ?? null }),
     })
+  },
+
+  // Narration
+  getRoundNarration(experimentId: string, roundNumber: number): Promise<NarrationMetadata> {
+    return request(`${BASE}/${experimentId}/rounds/${roundNumber}/narration`)
+  },
+
+  getRoundNarrationAudioUrl(experimentId: string, roundNumber: number): string {
+    return `${API_BASE}${BASE}/${experimentId}/rounds/${roundNumber}/narration/audio`
   },
 
   // Arc
