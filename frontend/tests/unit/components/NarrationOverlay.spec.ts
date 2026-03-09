@@ -90,11 +90,11 @@ describe('NarrationOverlay', () => {
   it('attempts autoplay when audio becomes ready', async () => {
     const wrapper = createWrapper({
       audioStatus: 'idle',
-      audioUrl: '/api/experiments/e1/rounds/1/narration/audio',
+      audioUrl: '/api/experiments/e1/rounds/1/narration/audio?v=narr-1',
     })
     await wrapper.setProps({ audioStatus: 'ready' })
     await wrapper.vm.$nextTick()
-    expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio')
+    expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio?v=narr-1')
     expect(mockPlay).toHaveBeenCalled()
   })
 
@@ -149,10 +149,10 @@ describe('NarrationOverlay', () => {
   it('autoplays audio on mount when already ready (reconnect)', async () => {
     const wrapper = createWrapper({
       audioStatus: 'ready',
-      audioUrl: '/api/experiments/e1/rounds/1/narration/audio',
+      audioUrl: '/api/experiments/e1/rounds/1/narration/audio?v=narr-1',
     })
     await wrapper.vm.$nextTick()
-    expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio')
+    expect(global.Audio).toHaveBeenCalledWith('/api/experiments/e1/rounds/1/narration/audio?v=narr-1')
     expect(mockPlay).toHaveBeenCalled()
   })
 
@@ -160,14 +160,36 @@ describe('NarrationOverlay', () => {
     const wrapper = createWrapper({
       text: 'Reconnected narration.',
       audioStatus: 'ready',
-      audioUrl: '/audio/reconnect',
+      audioUrl: '/audio/reconnect?v=narr-2',
     })
     // Typewriter should start immediately
     jest.advanceTimersByTime(50)
     await wrapper.vm.$nextTick()
     expect(wrapper.text()).toContain('R')
     // Audio should autoplay
-    expect(global.Audio).toHaveBeenCalledWith('/audio/reconnect')
+    expect(global.Audio).toHaveBeenCalledWith('/audio/reconnect?v=narr-2')
+    expect(mockPlay).toHaveBeenCalled()
+  })
+
+  it('restarts playback when a new narration version arrives for the same overlay', async () => {
+    const wrapper = createWrapper({
+      text: 'Version one.',
+      audioStatus: 'ready',
+      audioUrl: '/audio/reconnect?v=narr-1',
+    })
+
+    await wrapper.vm.$nextTick()
+    expect(global.Audio).toHaveBeenCalledWith('/audio/reconnect?v=narr-1')
+
+    await wrapper.setProps({
+      text: 'Version two.',
+      audioStatus: 'ready',
+      audioUrl: '/audio/reconnect?v=narr-2',
+    })
+    await wrapper.vm.$nextTick()
+
+    expect(mockPause).toHaveBeenCalled()
+    expect(global.Audio).toHaveBeenLastCalledWith('/audio/reconnect?v=narr-2')
     expect(mockPlay).toHaveBeenCalled()
   })
 })

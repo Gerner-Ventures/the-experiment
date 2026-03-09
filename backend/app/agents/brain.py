@@ -74,7 +74,13 @@ class AgentBrain:
                         "role": "system",
                         "content": (
                             "Return a structured agent decision as JSON. Keep every prose field concise. "
-                            "`inner_thought` must be 1-2 short sentences, no monologue."
+                            "`inner_thought` must be 1-2 short sentences, no monologue.\n\n"
+                            "IMPORTANT: All fields must be at the TOP LEVEL. Example structure:\n"
+                            '{"inner_thought": "...", "suspicion": null, '
+                            '"action": {"type": "observe", "target": null, "location": null}, '
+                            '"dialogue": null, "goal_progress": "...", "cooperation_intent": "medium"}\n\n'
+                            "The 'action' object must ONLY contain 'type', 'target', and 'location'. "
+                            "Do NOT put inner_thought or other fields inside action."
                         ),
                     },
                     {"role": "user", "content": prompt},

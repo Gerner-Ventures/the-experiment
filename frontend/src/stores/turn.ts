@@ -5,26 +5,35 @@ import { useLocale } from '@/locales'
 import { HD_ACTION_TO_ANIMATION as ACTION_TO_ANIMATION } from '@/config/sprites/hd/animations'
 import { SKIP_ACTION_PHASE, SPEECH_ONLY_ACTIONS } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
+import type { AgentSpeechSource } from '@/types/websocket'
 
 export interface Turn {
   id: number
   agentId: string
   agentName: string
+  round: number
   actionType: string
   targetAgentId?: string
   targetLocation?: string
   thought?: string
-  /** When true, the conversation row was already added by agent_speak — skip addConversation */
+  thoughtSource?: AgentSpeechSource
+  /** When true, the speech row was already added by agent_speak — skip addConversation */
   fromSpeakEvent?: boolean
 }
 
-export type TurnPhase = 'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'
+export type TurnPhase = 'idle' | 'thinking' | 'moving' | 'acting' | 'hud-only'
 
 export interface TurnHandlers {
   move: (agentId: string, location: string, onComplete: () => void) => void
   playAction: (agentId: string, animationName: string, onComplete: () => void) => void
   updateAgent: (agentId: string, status: AgentStatus, location?: string) => void
-  addConversation: (agentId: string, agentName: string, message: string) => void
+  addConversation: (
+    agentId: string,
+    agentName: string,
+    message: string,
+    source: AgentSpeechSource,
+    round: number,
+  ) => void
   getAgentLocation: (agentId: string) => string | undefined
 }
 
@@ -55,7 +64,7 @@ export const useTurnStore = defineStore('turn', () => {
   let turnCounter = 0
   let hudTimer: ReturnType<typeof setTimeout> | null = null
   let actionFloorTimer: ReturnType<typeof setTimeout> | null = null
-  let speechAudioTimer: ReturnType<typeof setTimeout> | null = null
+  let thoughtTimer: ReturnType<typeof setTimeout> | null = null
   let turnGapTimer: ReturnType<typeof setTimeout> | null = null
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
@@ -126,36 +135,99 @@ export const useTurnStore = defineStore('turn', () => {
         .replace('{action}', turn.actionType),
     )
 
-    // Update agent status
-    handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType))
-
-    // Speech-only actions (meeting_speech, meeting_vote) skip movement and acting —
-    // go straight to speech bubble phase
-    if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
-      console.debug(`[Turn] Speech-only: ${turn.agentName} → ${turn.actionType}`)
-      startSpeechPhase()
+    if (turn.thought) {
+      startThoughtPhase()
       return
     }
 
-    // Step 1: Move if the agent's target location differs from their current location
+    startMovementPhase()
+  }
+
+  function startThoughtPhase() {
+    const turn = activeTurn.value
+    if (!turn || !turn.thought) return
+
+    if (thoughtTimer) {
+      clearTimeout(thoughtTimer)
+      thoughtTimer = null
+    }
+
+    phase.value = 'thinking'
+    handlers?.updateAgent(turn.agentId, 'thinking')
+    if (!turn.fromSpeakEvent) {
+      handlers?.addConversation(
+        turn.agentId,
+        turn.agentName,
+        turn.thought,
+        turn.thoughtSource ?? 'inner_thought',
+        turn.round,
+      )
+    }
+    console.debug(`[Turn] Thinking: ${turn.agentName}`)
+    thoughtTimer = setTimeout(() => {
+      completeThoughtPhase(turn.id)
+    }, AUDIO_MAX_TIMEOUT_MS)
+  }
+
+  function completeThoughtPhase(turnId?: number) {
+    const turn = activeTurn.value
+    if (!turn) {
+      console.debug('[Turn] Ignoring thought completion with no active turn')
+      return
+    }
+    if (phase.value !== 'thinking') {
+      console.debug(`[Turn] Ignoring thought completion outside thinking phase: ${phase.value}`)
+      return
+    }
+    if (turnId != null && turn.id !== turnId) {
+      console.debug(`[Turn] Ignoring stale thought completion for turn ${turnId}; active is ${turn.id}`)
+      return
+    }
+
+    if (thoughtTimer) {
+      clearTimeout(thoughtTimer)
+      thoughtTimer = null
+    }
+
+    startMovementPhase()
+  }
+
+  function startMovementPhase() {
+    const turn = activeTurn.value
+    if (!turn) return
+
+    handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType))
+
+    // Speech-only actions (meeting_speech, meeting_vote) skip movement and acting
+    if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
+      console.debug(`[Turn] Speech-only: ${turn.agentName} → ${turn.actionType}`)
+      completeTurnPhase()
+      return
+    }
+
     const currentLocation = handlers?.getAgentLocation(turn.agentId)
-    const needsMove = turn.targetLocation && turn.targetLocation !== currentLocation
+    const needsMove = !!turn.targetLocation && turn.targetLocation !== currentLocation
 
     if (needsMove && handlers) {
+      const turnId = turn.id
       phase.value = 'moving'
       console.debug(`[Turn] Moving ${turn.agentName}: ${currentLocation} → ${turn.targetLocation}`)
       handlers.move(turn.agentId, turn.targetLocation!, () => {
-        // Movement complete — update agent location, proceed to action phase
         handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
+        if (activeTurn.value?.id !== turnId) {
+          console.debug(`[Turn] Ignoring stale movement completion for turn ${turnId}`)
+          return
+        }
         startActionPhase()
       })
-    } else {
-      if (turn.targetLocation) {
-        console.debug(`[Turn] ${turn.agentName} already at ${turn.targetLocation}`)
-        handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
-      }
-      startActionPhase()
+      return
     }
+
+    if (turn.targetLocation) {
+      console.debug(`[Turn] ${turn.agentName} already at ${turn.targetLocation}`)
+      handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
+    }
+    startActionPhase()
   }
 
   function startActionPhase() {
@@ -164,9 +236,11 @@ export const useTurnStore = defineStore('turn', () => {
 
     const animation = ACTION_TO_ANIMATION[turn.actionType]
     if (!animation || SKIP_ACTION_PHASE.has(turn.actionType)) {
-      startSpeechPhase()
+      completeTurnPhase()
       return
     }
+
+    const turnId = turn.id
 
     phase.value = 'acting'
 
@@ -176,12 +250,20 @@ export const useTurnStore = defineStore('turn', () => {
 
     const proceed = () => {
       if (animDone && floorDone) {
-        startSpeechPhase()
+        if (activeTurn.value?.id !== turnId) {
+          console.debug(`[Turn] Ignoring stale action completion for turn ${turnId}`)
+          return
+        }
+        completeTurnPhase()
       }
     }
 
     if (handlers) {
       handlers.playAction(turn.agentId, animation, () => {
+        if (activeTurn.value?.id !== turnId) {
+          console.debug(`[Turn] Ignoring stale action callback for turn ${turnId}`)
+          return
+        }
         animDone = true
         proceed()
       })
@@ -195,62 +277,39 @@ export const useTurnStore = defineStore('turn', () => {
     }, MIN_ACTION_DURATION_MS)
   }
 
-  function startSpeechPhase() {
+  function completeTurnPhase() {
     const turn = activeTurn.value
     if (!turn) return
 
     if (turn.thought) {
-      phase.value = 'talking'
-      // Add to conversation log — skip if already added via agent_speak WS event
-      if (!turn.fromSpeakEvent) {
-        handlers?.addConversation(turn.agentId, turn.agentName, turn.thought)
-      }
-      console.debug(`[Turn] Showing bubble: ${turn.agentName}`)
-      // ConversationBubble will render because activeTurn has a thought.
-      // It emits 'dismiss' → SimulationView calls onBubbleDismissed()
-      // It emits 'audioEnd' → SimulationView calls notifyAudioComplete()
-      // Safety: max timeout prevents indefinite blocking if audio never completes
-      speechAudioTimer = setTimeout(() => {
-        speechAudioTimer = null
-        onBubbleDismissed()
-      }, AUDIO_MAX_TIMEOUT_MS)
-    } else {
-      // HUD-only: show status briefly then advance
-      phase.value = 'hud-only'
-      console.debug(`[Turn] HUD-only: ${turn.agentName} → ${turn.actionType}`)
-      hudTimer = setTimeout(() => scheduleNext(), HUD_ONLY_DURATION_MS)
+      finishTurn()
+      return
     }
+
+    phase.value = 'hud-only'
+    console.debug(`[Turn] HUD-only: ${turn.agentName} → ${turn.actionType}`)
+    hudTimer = setTimeout(() => finishTurn(), HUD_ONLY_DURATION_MS)
   }
 
   /**
    * Called by SimulationView when ConversationBubble emits 'audioEnd'.
-   * Clears audio timers and triggers bubble dismissal.
+   * Advances the matching thought phase once audio playback completes.
    */
-  function notifyAudioComplete() {
-    if (speechAudioTimer) {
-      clearTimeout(speechAudioTimer)
-      speechAudioTimer = null
-    }
-    onBubbleDismissed()
+  function notifyAudioComplete(turnId?: number) {
+    completeThoughtPhase(turnId)
   }
 
   /**
    * Called by SimulationView when ConversationBubble emits 'dismiss' (text-only fade).
-   * Also called internally by notifyAudioComplete for audio-gated flow.
    */
-  function onBubbleDismissed() {
-    // Guard: only advance if we're actually in the talking phase.
-    // Prevents double-advance from bubble dismiss + audio timeout racing.
-    if (phase.value !== 'talking') return
+  function onBubbleDismissed(turnId?: number) {
+    console.debug('[Turn] Thought dismissed, continuing action')
+    completeThoughtPhase(turnId)
+  }
 
-    console.debug(`[Turn] Bubble dismissed, advancing`)
-    // Reset agent to idle
+  function finishTurn() {
     if (activeTurn.value) {
       handlers?.updateAgent(activeTurn.value.agentId, 'idle')
-    }
-    if (speechAudioTimer) {
-      clearTimeout(speechAudioTimer)
-      speechAudioTimer = null
     }
     scheduleNext()
   }
@@ -264,9 +323,9 @@ export const useTurnStore = defineStore('turn', () => {
       clearTimeout(actionFloorTimer)
       actionFloorTimer = null
     }
-    if (speechAudioTimer) {
-      clearTimeout(speechAudioTimer)
-      speechAudioTimer = null
+    if (thoughtTimer) {
+      clearTimeout(thoughtTimer)
+      thoughtTimer = null
     }
     if (turnGapTimer) {
       clearTimeout(turnGapTimer)

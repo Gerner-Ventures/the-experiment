@@ -105,6 +105,7 @@ Heuristics:
 
 - Use unresolved review threads as the source of truth for inline feedback.
 - Use `latestReviews` before `reviews` when you want one current top-level signal per reviewer.
+- Do not keep both a `latestReviews` item and a `reviews` item for the same reviewer request. If they overlap, keep the newest actionable version only once in the ledger.
 - Skip items that already have a later reply from you clearly stating the outcome.
 - Ignore empty praise, approval-only reviews, and comments that do not ask for a change.
 
@@ -161,7 +162,7 @@ If you had to amend the PR description, do that before the final response pass.
 
 ## Respond On GitHub
 
-After the push succeeds, respond to every actionable feedback item you kept in the ledger.
+After the push succeeds, respond to every actionable feedback item you kept in the ledger, but do it exactly once per item.
 
 ### Inline review threads
 
@@ -214,7 +215,9 @@ gh pr review <number> --comment --body-file "$review_file"
 rm -f "$review_file"
 ```
 
-If a top-level PR comment needs a direct answer that would be lost in the summary review, add a normal PR comment that links back to the original feedback item.
+Before posting, check whether you already submitted an identical `COMMENTED` review on the current `HEAD` commit during this feedback pass. If you did, do not post another one. If `gh pr review --comment` succeeds, treat the summary review as posted and do not retry the command unless you first confirm that no matching review exists on the PR.
+
+If a top-level PR comment needs a direct answer that would be lost in the summary review, add one normal PR comment that links back to the original feedback item. Do this only when the summary review is not enough on its own. Never restate the same disposition in both the summary review and a separate PR comment unless the extra comment adds information the summary cannot carry.
 
 ```bash
 gh pr comment <number> --body-file /tmp/pr-comment.md

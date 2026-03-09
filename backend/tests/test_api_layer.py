@@ -436,7 +436,7 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
             "threat_update",
             "round_end",
         }
-        for _ in range(40):
+        for _ in range(80):
             message = websocket.receive_json()
             seen_types.add(message["type"])
             if "round_end" in seen_types:
@@ -584,15 +584,26 @@ def test_round_narration_metadata_and_audio_routes(client: TestClient) -> None:
 
     metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
     assert metadata.status_code == 200
-    assert metadata.json()["round_number"] == 1
-    assert metadata.json()["text"]
-    assert metadata.json()["audio_url"].endswith("/rounds/1/narration/audio")
-    assert metadata.json()["status"] in {"pending", "ready"}
+    payload = metadata.json()
+    assert payload["round_number"] == 1
+    assert payload["text"]
+    assert payload["narration_id"]
+    assert payload["audio_url"].endswith(f"/rounds/1/narration/audio?v={payload['narration_id']}")
+    assert payload["status"] in {"pending", "ready"}
 
-    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    audio = client.get(payload["audio_url"])
     assert audio.status_code == 200
     assert audio.headers["content-type"].startswith("audio/mpeg")
+    assert audio.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert audio.headers["etag"] == f'"{payload["narration_id"]}"'
     assert audio.content == b"audio-chunk-1audio-chunk-2"
+
+    unversioned_audio = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio"
+    )
+    assert unversioned_audio.status_code == 200
+    assert unversioned_audio.headers["cache-control"] == "no-store"
+    assert "etag" not in unversioned_audio.headers
 
 
 def test_pending_plan_narration_preview_and_audio_are_available_before_approval(
@@ -621,14 +632,46 @@ def test_pending_plan_narration_preview_and_audio_are_available_before_approval(
 
     metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
     assert metadata.status_code == 200
-    assert metadata.json()["text"] == revised.json()["plan"]["narration"]
-    assert metadata.json()["audio_url"].endswith("/rounds/1/narration/audio")
-    assert metadata.json()["status"] in {"pending", "ready"}
+    payload = metadata.json()
+    assert payload["text"] == revised.json()["plan"]["narration"]
+    assert payload["narration_id"]
+    assert payload["audio_url"].endswith(f"/rounds/1/narration/audio?v={payload['narration_id']}")
+    assert payload["status"] in {"pending", "ready"}
 
-    audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
+    audio = client.get(payload["audio_url"])
     assert audio.status_code == 200
     assert audio.headers["content-type"].startswith("audio/mpeg")
     assert audio.content == b"audio-chunk-1audio-chunk-2"
+
+
+def test_round_narration_metadata_versions_audio_to_resolved_text(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    provider = runtime.tts_service._provider
+    assert isinstance(provider, _FakeNarrationProvider)
+
+    initial_plan = client.get(f"{API_PREFIX}/experiments/{experiment_id}/gm/plan")
+    assert initial_plan.status_code == 200
+    initial_meta = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert initial_meta.status_code == 200
+    initial_payload = initial_meta.json()
+    assert initial_payload["text"] == initial_plan.json()["plan"]["narration"]
+
+    revised = client.post(
+        f"{API_PREFIX}/experiments/{experiment_id}/gm/revise",
+        json={"feedback": "change the narration so the mood is much colder"},
+    )
+    assert revised.status_code == 200
+    assert _wait_for_provider_calls(provider, minimum_calls=2) >= 2
+
+    revised_meta = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert revised_meta.status_code == 200
+    revised_payload = revised_meta.json()
+    assert revised_payload["text"] == revised.json()["plan"]["narration"]
+    assert revised_payload["narration_id"] != initial_payload["narration_id"]
+    assert revised_payload["audio_url"] != initial_payload["audio_url"]
 
 
 def test_round_narration_requires_available_narration_text(client: TestClient) -> None:
@@ -637,6 +680,24 @@ def test_round_narration_requires_available_narration_text(client: TestClient) -
 
     metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
     assert metadata.status_code == 409
+
+
+def test_round_narration_metadata_supports_text_only_fallback_without_tts(
+    client: TestClient, runtime: ExperimentRuntime
+) -> None:
+    runtime.tts_service = None
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 200
+    payload = metadata.json()
+    assert payload["text"] == approved.json()["plan"]["narration"]
+    assert payload["status"] == "unavailable"
+    assert payload["narration_id"] is None
+    assert payload["audio_url"] is None
 
 
 def test_round_narration_audio_surfaces_provider_errors(
@@ -662,6 +723,40 @@ def test_round_narration_audio_surfaces_provider_errors(
 
     audio = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio")
     assert audio.status_code == 503
+
+
+def test_round_narration_audio_rejects_stale_version(
+    client: TestClient,
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+
+    metadata = client.get(f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration")
+    assert metadata.status_code == 200
+    stale_version = "stale-narration-version"
+
+    audio = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio",
+        params={"v": stale_version},
+    )
+    assert audio.status_code == 409
+
+
+def test_round_narration_audio_rejects_oversized_version(
+    client: TestClient,
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+
+    audio = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio",
+        params={"v": "x" * 65},
+    )
+    assert audio.status_code == 422
 
 
 def test_derived_round_logs_are_persisted(client: TestClient) -> None:

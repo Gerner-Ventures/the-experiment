@@ -1,5 +1,6 @@
 import { setActivePinia, createPinia } from 'pinia'
 import { useAgentStore } from '@/stores/agent'
+import { useTurnStore } from '@/stores/turn'
 import type { AgentStatus } from '@/types/agent'
 
 // Mock the locale module (required by turn store, which agent store imports)
@@ -39,6 +40,95 @@ function makeRawAgent(overrides: Record<string, unknown> = {}): Record<string, u
 describe('agent store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
+  })
+
+  describe('onAction', () => {
+    it('enqueues inner-thought narration instead of dialogue text', () => {
+      const store = useAgentStore()
+      const turnStore = useTurnStore()
+      store.setAgents([makeRawAgent()])
+
+      store.onAction({
+        type: 'agent_action',
+        round: 4,
+        timestamp: '2026-03-08T00:00:00Z',
+        data: {
+          agent_id: 'agent-1',
+          action: { type: 'move', location: 'forest' },
+          inner_thought: 'I should move first.',
+          speech_text: 'I should move first.',
+          speech_source: 'inner_thought',
+          dialogue: 'Out of my way.',
+        },
+      })
+
+      expect(turnStore.activeTurn).not.toBeNull()
+      expect(turnStore.activeTurn!.thought).toBe('I should move first.')
+      expect(turnStore.activeTurn!.round).toBe(4)
+      expect(turnStore.activeTurn!.fromSpeakEvent).toBe(true)
+    })
+
+    it('does not mutate agent location before the turn executes', () => {
+      const store = useAgentStore()
+      store.setAgents([makeRawAgent({ location: 'town_square' })])
+
+      store.onAction({
+        type: 'agent_action',
+        round: 1,
+        timestamp: '2026-03-08T00:00:00Z',
+        data: {
+          agent_id: 'agent-1',
+          action: { type: 'move', location: 'forest' },
+          inner_thought: 'Walk now.',
+        },
+      })
+
+      const agent = store.getAgent('agent-1')!
+      expect(agent.location).toBe('town_square')
+      expect(agent.status).toBe('idle')
+    })
+
+    it('keeps fallback inner-thought rows enabled when only dialogue speech is present', () => {
+      const store = useAgentStore()
+      const turnStore = useTurnStore()
+      store.setAgents([makeRawAgent()])
+
+      store.onAction({
+        type: 'agent_action',
+        round: 2,
+        timestamp: '2026-03-08T00:00:00Z',
+        data: {
+          agent_id: 'agent-1',
+          action: 'talk',
+          inner_thought: 'Stay calm.',
+          dialogue: 'Hello there.',
+        },
+      })
+
+      expect(turnStore.activeTurn?.thought).toBe('Stay calm.')
+      expect(turnStore.activeTurn?.fromSpeakEvent).toBe(false)
+    })
+
+    it('does not treat dialogue speech_text as an inner thought', () => {
+      const store = useAgentStore()
+      const turnStore = useTurnStore()
+      store.setAgents([makeRawAgent()])
+
+      store.onAction({
+        type: 'agent_action',
+        round: 3,
+        timestamp: '2026-03-08T00:00:00Z',
+        data: {
+          agent_id: 'agent-1',
+          action: 'talk',
+          speech_text: 'Spoken dialogue only.',
+          speech_source: 'dialogue',
+        },
+      })
+
+      expect(turnStore.activeTurn?.thought).toBeUndefined()
+      expect(turnStore.activeTurn?.thoughtSource).toBe('dialogue')
+    })
   })
 
   describe('updateAgentStatus', () => {

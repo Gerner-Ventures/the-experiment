@@ -165,7 +165,7 @@ function turnPhaseColor(phase: TurnPhase): string {
   switch (phase) {
     case 'moving': return '#3b82f6'
     case 'acting': return '#f59e0b'
-    case 'talking': return '#8b5cf6'
+    case 'thinking': return '#8b5cf6'
     case 'hud-only': return '#6b7280'
     case 'idle': return '#374151'
     default: return '#374151'
@@ -176,7 +176,7 @@ function turnPhaseLabel(phase: TurnPhase): string {
   switch (phase) {
     case 'moving': return locale.log.turnPhaseMoving
     case 'acting': return locale.log.turnPhaseActing
-    case 'talking': return locale.log.turnPhaseTalking
+    case 'thinking': return locale.log.turnPhaseTalking
     case 'hud-only': return locale.log.turnPhaseHud
     case 'idle': return locale.log.turnQueueEmpty
     default: return phase

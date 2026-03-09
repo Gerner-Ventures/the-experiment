@@ -40,18 +40,41 @@ class RuntimeAudioService:
         self, experiment_id: str, round_number: int
     ) -> NarrationAudioMetadata:
         state = await self.get_state(experiment_id)
-        request = await self._narration_audio_request(experiment_id, round_number, state=state)
-        status = "unavailable"
-        cache_hit = False
+        text = await self._resolve_narration_text(experiment_id, round_number, state=state)
+        if self.tts_service is None:
+            return NarrationAudioMetadata(
+                experiment_id=experiment_id,
+                round_number=round_number,
+                text=text,
+                narration_id=None,
+                voice_id="",
+                model_id="",
+                output_format="",
+                status="unavailable",
+                audio_url=None,
+                cache_hit=False,
+            )
+
+        request = self.tts_service.build_request(
+            experiment_id=experiment_id,
+            round_number=round_number,
+            text=text,
+            map_name=state.world_state.map_name,
+        )
+        narration_id = self.tts_service.narration_id(request)
+        status, cache_hit = await self.tts_service.get_status(request)
         audio_url: str | None = None
-        if self.tts_service is not None:
-            status, cache_hit = await self.tts_service.get_status(request)
-            if status != "unavailable":
-                audio_url = self.tts_service.build_audio_url(experiment_id, round_number)
+        if status != "unavailable":
+            audio_url = self.tts_service.build_audio_url(
+                experiment_id,
+                round_number,
+                narration_id=narration_id,
+            )
         return NarrationAudioMetadata(
             experiment_id=experiment_id,
             round_number=round_number,
-            text=request.text,
+            text=text,
+            narration_id=narration_id,
             voice_id=request.voice_id,
             model_id=request.model_id,
             output_format=request.output_format,
@@ -61,11 +84,21 @@ class RuntimeAudioService:
         )
 
     async def get_narration_audio_stream(
-        self, experiment_id: str, round_number: int
-    ) -> tuple[str, AsyncIterator[bytes]]:
+        self,
+        experiment_id: str,
+        round_number: int,
+        *,
+        version: str | None = None,
+    ) -> tuple[str, AsyncIterator[bytes], str]:
         request = await self._narration_audio_request(experiment_id, round_number)
         if self.tts_service is None:
             raise NarrationAudioError("Narration audio is not configured.", status_code=503)
+        narration_id = self.tts_service.narration_id(request)
+        if version is not None and version != narration_id:
+            raise NarrationAudioError(
+                "Narration audio version does not match the current narration.",
+                status_code=409,
+            )
         result = await self.tts_service.stream(request)
         log.info(
             "narration_audio_stream_requested",
@@ -77,7 +110,7 @@ class RuntimeAudioService:
             output_format=request.output_format,
             cache_hit=result.cache_hit,
         )
-        return result.content_type, result.stream
+        return result.content_type, result.stream, narration_id
 
     async def get_agent_speech_metadata(
         self,
@@ -99,6 +132,7 @@ class RuntimeAudioService:
                 round_number=round_number,
                 index=index,
                 text=entry["text"],
+                source=str(entry.get("source", "dialogue")),
                 voice_id="",
                 model_id="",
                 output_format="",
@@ -122,6 +156,7 @@ class RuntimeAudioService:
             round_number=round_number,
             index=index,
             text=entry["text"],
+            source=str(entry.get("source", "dialogue")),
             voice_id=request.voice_id,
             model_id=request.model_id,
             output_format=request.output_format,
@@ -274,14 +309,14 @@ class RuntimeAudioService:
     ) -> None:
         if gm_plan is None or not gm_plan.plan.narration.strip():
             return
+        if self.tts_service is None or not self.tts_service.configured:
+            return
         request = await self._narration_audio_request(
             experiment_id,
             gm_plan.plan.round,
             narration_text=gm_plan.plan.narration,
         )
         await self.broadcast_narration_audio_status(experiment_id, request)
-        if self.tts_service is None or not self.tts_service.configured:
-            return
         tts_service = self.tts_service
 
         async def _prewarm() -> None:
@@ -327,6 +362,7 @@ class RuntimeAudioService:
     ) -> None:
         if self.tts_service is None:
             return
+        narration_id = self.tts_service.narration_id(request)
         if error is not None:
             await self.connection_manager.broadcast(
                 experiment_id,
@@ -334,7 +370,11 @@ class RuntimeAudioService:
                     "gm_audio_status",
                     round_number=request.round_number,
                     phase="gm_plan",
-                    data={"status": "error", "error": error},
+                    data={
+                        "status": "error",
+                        "error": error,
+                        "narration_id": narration_id,
+                    },
                 ),
             )
             return
@@ -346,15 +386,20 @@ class RuntimeAudioService:
                     "gm_audio_status",
                     round_number=request.round_number,
                     phase="gm_plan",
-                    data={"status": "error", "error": "Narration audio is unavailable."},
+                    data={
+                        "status": "error",
+                        "error": "Narration audio is unavailable.",
+                        "narration_id": narration_id,
+                    },
                 ),
             )
             return
-        data: dict[str, Any] = {"status": status}
+        data: dict[str, Any] = {"status": status, "narration_id": narration_id}
         if status == "ready":
             data["audio_url"] = self.tts_service.build_audio_url(
                 experiment_id,
                 request.round_number,
+                narration_id=narration_id,
             )
         await self.connection_manager.broadcast(
             experiment_id,
@@ -408,6 +453,7 @@ class RuntimeAudioService:
                     "round_number": round_number,
                     "index": current_index,
                     "text": message_text,
+                    "source": str(item.data.get("source", "dialogue")),
                 }
                 self.agent_speech_log[experiment_id].append(reconstructed)
                 return reconstructed

@@ -25,3 +25,17 @@ export interface GMPlan {
   narration: string
   metaHint: string | null
 }
+
+/** Narration metadata returned by the backend narration endpoint */
+export interface NarrationMetadata {
+  experiment_id: string
+  round_number: number
+  text: string
+  narration_id: string | null
+  voice_id: string
+  model_id: string
+  output_format: string
+  status: 'pending' | 'ready' | 'unavailable'
+  audio_url?: string | null
+  cache_hit: boolean
+}

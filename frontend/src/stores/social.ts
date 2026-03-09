@@ -1,7 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { WSMessage } from '@/types/websocket'
-import type { AgentSpeechAudioData } from '@/types/websocket'
+import type {
+  AgentSpeakData,
+  AgentSpeechAudioData,
+  AgentSpeechSource,
+  WSMessage,
+} from '@/types/websocket'
 import { useTurnStore } from '@/stores/turn'
 import { useLocale } from '@/locales'
 
@@ -22,6 +26,7 @@ export interface ConversationMessage {
   agentName: string
   target: string
   message: string
+  source: AgentSpeechSource
   timestamp: string
   round: number
   index: number
@@ -62,17 +67,28 @@ export const useSocialStore = defineStore('social', () => {
 
   const isMeetingActive = computed(() => meeting.value?.active ?? false)
 
-  function onSpeak(msg: WSMessage) {
-    const data = msg.data as {
-      agent_id: string
-      agent_name: string
-      target: string
-      message: string
-    }
-    addConversation(data.agent_id, data.agent_name, data.message, data.target, msg.timestamp, msg.round)
+  function onSpeak(msg: WSMessage<AgentSpeakData>) {
+    const data = msg.data
+    addConversation(
+      data.agent_id,
+      data.agent_name,
+      data.message,
+      data.target ?? '',
+      msg.timestamp,
+      msg.round,
+      data.source ?? 'dialogue',
+    )
   }
 
-  function addConversation(agentId: string, agentName: string, message: string, target = '', timestamp?: string, round = 0) {
+  function addConversation(
+    agentId: string,
+    agentName: string,
+    message: string,
+    target = '',
+    timestamp?: string,
+    round = 0,
+    source: AgentSpeechSource = 'dialogue',
+  ) {
     // Compute index: count of messages from the same agent in the same round
     const index = conversations.value.filter(
       (c) => c.agentId === agentId && c.round === round,
@@ -83,6 +99,7 @@ export const useSocialStore = defineStore('social', () => {
       agentName,
       target,
       message,
+      source,
       timestamp: timestamp ?? new Date().toISOString(),
       round,
       index,
@@ -97,11 +114,17 @@ export const useSocialStore = defineStore('social', () => {
   function onSpeechAudio(msg: WSMessage<AgentSpeechAudioData>) {
     const data = msg.data
     const entry = conversations.value.find(
-      (c) => c.agentId === data.agent_id && c.round === data.round && c.index === data.index,
+      (c) =>
+        c.agentId === data.agent_id
+        && c.round === data.round
+        && c.index === data.index
+        && (!data.source || c.source === data.source),
     )
     if (entry) {
       entry.audioStatus = data.status
       entry.audioUrl = data.audio_url ?? null
+    } else {
+      console.warn('[Social] Missing conversation entry for audio update', data)
     }
   }
 
@@ -158,8 +181,10 @@ export const useSocialStore = defineStore('social', () => {
     useTurnStore().enqueue({
       agentId: data.agent_id,
       agentName,
+      round: msg.round,
       actionType: 'meeting_speech',
       thought: bubbleText,
+      thoughtSource: 'dialogue',
       fromSpeakEvent: false,
     })
   }
@@ -178,8 +203,10 @@ export const useSocialStore = defineStore('social', () => {
     useTurnStore().enqueue({
       agentId: data.agent_id,
       agentName,
+      round: msg.round,
       actionType: 'meeting_vote',
       thought: `Vote: ${data.vote}`,
+      thoughtSource: 'dialogue',
       fromSpeakEvent: false,
     })
   }

@@ -15,25 +15,24 @@ const PENDING_TIMEOUT_MS = 3000
 const locale = useLocale()
 
 const props = withDefaults(defineProps<{
+  turnId: number
   agentName: string
   message: string
   agentId: string
+  variant?: 'thought' | 'dialogue'
   getPosition: (agentId: string) => { x: number; y: number } | null
   audioStatus: AudioStatus
   audioUrl: string | null
-  /** Visual variant: 'speech' for spoken dialog, 'thought' for internal monologue */
-  variant?: 'speech' | 'thought'
 }>(), {
-  variant: 'thought',
+  variant: 'dialogue',
 })
 
 const emit = defineEmits<{
-  dismiss: [agentId: string]
-  audioEnd: []
+  dismiss: [turnId: number]
+  audioEnd: [turnId: number]
 }>()
 
 const visible = ref(false)
-const dismissed = ref(false)
 const revealedChars = ref(0)
 const posX = ref(0)
 const posY = ref(0)
@@ -54,6 +53,21 @@ const TOTAL_LIFETIME_MS = Math.max(
 
 const displayedMessage = computed(() => props.message.slice(0, revealedChars.value))
 const isFullyRevealed = computed(() => revealedChars.value >= props.message.length)
+const bubbleLabel = computed(() =>
+  props.variant === 'thought'
+    ? locale.social.speech.thoughtLabel
+    : locale.social.speech.dialogueLabel,
+)
+const bubbleFrameClass = computed(() =>
+  props.variant === 'thought'
+    ? 'bg-[#0d1620] border-[#8fd3ff]/80 shadow-[4px_4px_0_rgba(16,44,61,0.5)] thought-drift'
+    : 'bg-[#0a0a0f] border-white/80 shadow-[4px_4px_0_rgba(0,0,0,0.5)]',
+)
+const bubbleTextClass = computed(() =>
+  props.variant === 'thought'
+    ? 'text-[#d7efff] italic'
+    : 'text-white/80',
+)
 
 function isMuted(): boolean {
   return window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true'
@@ -101,8 +115,13 @@ function tryPlay() {
           dismissTimer = null
         }
       })
-      .catch(() => {
-        autoplayBlocked.value = true
+      .catch((err: unknown) => {
+        const errName = err instanceof Error ? err.name : ''
+        if (errName === 'NotAllowedError') {
+          autoplayBlocked.value = true
+          return
+        }
+        autoplayBlocked.value = false
         isPlaying.value = false
       })
   }
@@ -115,13 +134,13 @@ function handleTapToPlay() {
 
 function onAudioEnded() {
   isPlaying.value = false
-  emit('audioEnd')
+  emit('audioEnd', props.turnId)
   dismiss()
 }
 
 function onAudioError() {
   isPlaying.value = false
-  emit('audioEnd')
+  emit('audioEnd', props.turnId)
   dismiss()
 }
 
@@ -136,11 +155,10 @@ function stopAudio() {
 }
 
 function dismiss() {
-  if (dismissed.value) return
-  dismissed.value = true
+  if (!visible.value) return
   visible.value = false
   stopAudio()
-  emit('dismiss', props.agentId)
+  emit('dismiss', props.turnId)
 }
 
 // Watch for audioStatus changing to 'ready' after mount (late arrival)
@@ -197,6 +215,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  const wasPending = dismissTimer !== null || isPlaying.value
   if (dismissTimer) {
     clearTimeout(dismissTimer)
     dismissTimer = null
@@ -214,10 +233,8 @@ onUnmounted(() => {
     pendingTimer = null
   }
   stopAudio()
-  // Emit dismiss only if we haven't already — prevents double-fire
-  if (!dismissed.value) {
-    dismissed.value = true
-    emit('dismiss', props.agentId)
+  if (wasPending) {
+    emit('dismiss', props.turnId)
   }
 })
 </script>
@@ -233,17 +250,12 @@ onUnmounted(() => {
         transform: 'translateX(-50%)',
       }"
     >
-      <div
-        class="retro-bubble bg-[#0a0a0f] px-3 py-2"
-        :class="variant === 'thought'
-          ? 'border border-dashed border-white/40 rounded-lg shadow-[2px_2px_0_rgba(0,0,0,0.3)] thought-drift'
-          : 'border-2 border-white/80 rounded-none shadow-[4px_4px_0_rgba(0,0,0,0.5)]'"
-      >
+      <div class="retro-bubble border-2 rounded-none px-3 py-2" :class="bubbleFrameClass">
         <div
-          class="font-mono text-[10px] uppercase tracking-wider mb-0.5 flex items-center gap-1"
-          :class="variant === 'thought' ? 'text-white/40' : 'text-accent'"
+          class="font-mono text-[10px] text-accent uppercase tracking-wider mb-0.5 flex items-center gap-1"
         >
           {{ agentName }}
+          <span class="text-[9px] text-white/45">{{ bubbleLabel }}</span>
           <SoundOutlined v-if="isPlaying" class="text-accent/80" />
           <span
             v-if="autoplayBlocked"
@@ -256,7 +268,7 @@ onUnmounted(() => {
         <div
           ref="scrollContainer"
           class="text-xs leading-snug font-mono max-h-[72px] overflow-y-auto bubble-scroll"
-          :class="variant === 'thought' ? 'text-white/50 italic' : 'text-white/80'"
+          :class="bubbleTextClass"
         >
           <template v-if="variant === 'thought'">
             {{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>
@@ -266,7 +278,7 @@ onUnmounted(() => {
           </template>
         </div>
       </div>
-      <!-- Pixel-art tail pointer -->
+      <!-- Tail: thought bubbles get circular dots, dialogue gets triangular pointer -->
       <div :class="variant === 'thought' ? 'thought-tail' : 'retro-tail'" />
     </div>
   </Transition>
@@ -303,7 +315,7 @@ onUnmounted(() => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(143, 211, 255, 0.4);
   margin-top: 4px;
 }
 
@@ -315,7 +327,7 @@ onUnmounted(() => {
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(143, 211, 255, 0.2);
 }
 
 .thought-drift {

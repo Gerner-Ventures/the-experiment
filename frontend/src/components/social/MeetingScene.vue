@@ -39,8 +39,8 @@ const backdropStyle = computed(() => ({
 }))
 
 const emit = defineEmits<{
-  'bubble-dismiss': []
-  'audio-end': []
+  'bubble-dismiss': [turnId: number]
+  'audio-end': [turnId: number]
   'scene-entered': []
   'scene-exited': []
   'exile-complete': [agentId: string]
@@ -88,7 +88,7 @@ const activeTurnIsSpoken = computed(() => {
 
 // Speaking agent ID — only for spoken actions (speech, vote)
 const speakingAgentId = computed(() => {
-  if (props.turnPhase === 'talking' && props.activeTurn && activeTurnIsSpoken.value) {
+  if (props.turnPhase === 'thinking' && props.activeTurn && activeTurnIsSpoken.value) {
     return props.activeTurn.agentId
   }
   return null
@@ -96,7 +96,7 @@ const speakingAgentId = computed(() => {
 
 // Thinking agent ID — for non-spoken actions (inner thoughts)
 const thinkingAgentId = computed(() => {
-  if (props.turnPhase === 'talking' && props.activeTurn && !activeTurnIsSpoken.value) {
+  if (props.turnPhase === 'thinking' && props.activeTurn && !activeTurnIsSpoken.value) {
     return props.activeTurn.agentId
   }
   return null
@@ -401,18 +401,19 @@ onUnmounted(() => {
 
     <!-- Meeting conversation bubble (anchored to seats) -->
     <ConversationBubble
-      v-if="turnPhase === 'talking' && activeTurn?.thought"
+      v-if="turnPhase === 'thinking' && activeTurn?.thought"
       :key="activeTurn.id"
       class="pointer-events-auto"
+      :turn-id="activeTurn.id"
       :agent-name="activeTurn.agentName"
       :message="activeTurn.thought"
       :agent-id="activeTurn.agentId"
       :get-position="getMeetingSeatPosition"
       :audio-status="(activeBubbleAudio?.audioStatus ?? 'idle') as AudioStatus"
       :audio-url="activeBubbleAudio?.audioUrl ?? null"
-      :variant="activeTurnIsSpoken ? 'speech' : 'thought'"
-      @dismiss="emit('bubble-dismiss')"
-      @audio-end="emit('audio-end')"
+      :variant="activeTurnIsSpoken ? 'dialogue' : 'thought'"
+      @dismiss="emit('bubble-dismiss', $event)"
+      @audio-end="emit('audio-end', $event)"
     />
   </div>
 </template>

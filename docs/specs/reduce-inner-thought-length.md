@@ -26,11 +26,12 @@ Inner thoughts should be concise — a brief window into the agent's reasoning, 
 
 ### Acceptance Criteria
 
-- [x] Agent inner thoughts are limited to 1-2 concise sentences (roughly 20-40 tokens)
+- [x] Agent inner thoughts are limited to 1-2 concise sentences via prompt engineering (no hard schema constraint to avoid malformed JSON)
 <!-- canon:realized-in:PR#108 file:backend/app/schemas/agent_decision.py -->
 <!-- canon:realized-in:PR#108 file:shared/schemas/agent_decision.json -->
 - [x] LLM prompt templates explicitly instruct brevity for the `inner_thoughts` field
 <!-- canon:realized-in:PR#108 file:backend/app/agents/brain.py -->
+<!-- canon:realized-in:PR#174 file:backend/app/agents/brain.py -->
 - [x] Token budget or max_tokens constraint is applied to inner thought generation where possible
 - [ ] Existing game flow and agent decision quality is not degraded by shorter thoughts
 - [ ] Frontend conversation bubbles and log entries render cleanly without overflow

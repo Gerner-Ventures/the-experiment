@@ -29,10 +29,32 @@ export interface WSMessage<T = Record<string, unknown>> {
 /** Narration audio status from backend TTS pipeline */
 export type NarrationAudioStatus = 'pending' | 'ready' | 'error' | 'unavailable'
 
+export type AgentSpeechSource = 'inner_thought' | 'dialogue'
+
+export interface AgentActionData {
+  agent_id: string
+  agent_name?: string
+  action: Record<string, unknown> | string
+  inner_thought?: string
+  speech_text?: string | null
+  speech_source?: AgentSpeechSource | null
+  dialogue?: string | { message?: string | null; target?: string | null } | null
+  cooperation_intent?: string
+}
+
+export interface AgentSpeakData {
+  agent_id: string
+  agent_name: string
+  target?: string
+  message: string
+  source?: AgentSpeechSource
+}
+
 /** Payload for gm_audio_status WebSocket message */
 export interface GMAudioStatusData {
   status: NarrationAudioStatus
-  audio_url?: string
+  narration_id: string
+  audio_url?: string | null
   error?: string
 }
 
@@ -41,6 +63,7 @@ export interface AgentSpeechAudioData {
   agent_id: string
   round: number
   index: number
+  source?: AgentSpeechSource
   status: NarrationAudioStatus
   audio_url: string | null
 }

@@ -634,9 +634,17 @@ class ExperimentRuntime:
         return await self.audio.get_narration_audio_metadata(experiment_id, round_number)
 
     async def get_narration_audio_stream(
-        self, experiment_id: str, round_number: int
-    ) -> tuple[str, AsyncIterator[bytes]]:
-        return await self.audio.get_narration_audio_stream(experiment_id, round_number)
+        self,
+        experiment_id: str,
+        round_number: int,
+        *,
+        version: str | None = None,
+    ) -> tuple[str, AsyncIterator[bytes], str]:
+        return await self.audio.get_narration_audio_stream(
+            experiment_id,
+            round_number,
+            version=version,
+        )
 
     async def get_agent_speech_metadata(
         self,

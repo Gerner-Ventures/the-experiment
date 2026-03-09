@@ -27,7 +27,7 @@ import { useGMStore } from '@/stores/gm'
 import { useUIStore, PANELS } from '@/stores/ui'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
-import { AGGRESSIVE_ACTIONS, SPOKEN_ACTIONS } from '@/config/action-categories'
+import { AGGRESSIVE_ACTIONS } from '@/config/action-categories'
 import { MUTE_STORAGE_KEY } from '@/config/audio'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { api } from '@/services/api'
@@ -70,20 +70,64 @@ function toggleMute() {
   window.localStorage.setItem(MUTE_STORAGE_KEY, String(isMuted.value))
 }
 
-// Determine whether the active turn bubble is speech or thought
-const activeBubbleVariant = computed<'speech' | 'thought'>(() => {
-  const action = turnStore.activeTurn?.actionType
-  return action && SPOKEN_ACTIONS.has(action) ? 'speech' : 'thought'
-})
-
 // Find the socialStore conversation entry matching the active turn bubble (for audio data)
 const activeBubbleAudio = computed(() => {
   const turn = turnStore.activeTurn
   if (!turn?.thought) return null
-  return socialStore.conversations.find(
-    (c) => c.agentId === turn.agentId && c.message === turn.thought,
-  ) ?? null
+  for (let i = socialStore.conversations.length - 1; i >= 0; i--) {
+    const conversation = socialStore.conversations[i]
+    if (
+      conversation.agentId === turn.agentId
+      && conversation.round === turn.round
+      && conversation.source === (turn.thoughtSource ?? 'inner_thought')
+      && conversation.message === turn.thought
+    ) {
+      return conversation
+    }
+  }
+  console.warn('[Simulation] Missing audio match for active turn bubble', {
+    agentId: turn.agentId,
+    round: turn.round,
+    source: turn.thoughtSource ?? 'inner_thought',
+    thought: turn.thought,
+  })
+  return null
 })
+
+const activeDialogueBubble = computed(() => {
+  if (turnStore.phase === 'thinking') return null
+  for (let i = socialStore.conversations.length - 1; i >= 0; i--) {
+    const conversation = socialStore.conversations[i]
+    if (conversation.source === 'dialogue') {
+      return conversation
+    }
+  }
+  return null
+})
+
+let narrationHydrationToken = 0
+
+async function syncRoundNarration(experimentId: string, round: number, fallbackText: string) {
+  const token = ++narrationHydrationToken
+  gmStore.setNarrationFallback(fallbackText, round)
+
+  try {
+    const meta = await api.getRoundNarration(experimentId, round)
+    if (token !== narrationHydrationToken) return
+
+    gmStore.hydrateNarration(
+      meta.text,
+      meta.round_number,
+      meta.narration_id,
+      meta.status,
+      meta.audio_url ?? null,
+    )
+  } catch (err) {
+    if (token !== narrationHydrationToken) return
+    console.warn('Failed to load round narration metadata:', err)
+    gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+  }
+}
 
 async function initExperiment() {
   const experimentId = route.params.id as string
@@ -129,18 +173,7 @@ async function initExperiment() {
       const planRound = (planData.plan?.round as number) ?? detail.current_round
       const planNarration = (planData.plan?.narration as string) ?? ''
       if (planData.status === 'applied' && planNarration) {
-        try {
-          const meta = await api.getRoundNarration(detail.experiment_id, planRound)
-          gmStore.hydrateNarration(
-            planNarration,
-            planRound,
-            meta.status === 'ready' ? 'ready' : 'unavailable',
-            meta.status === 'ready' ? meta.audio_url ?? null : null,
-          )
-        } catch {
-          // Backend narration endpoint unavailable — show text only
-          gmStore.hydrateNarration(planNarration, planRound, 'unavailable', null)
-        }
+        await syncRoundNarration(detail.experiment_id, planRound, planNarration)
       }
     }
 
@@ -215,6 +248,25 @@ watch(() => uiStore.isPlaying, (playing) => {
   }
 })
 
+watch(
+  () => {
+    const plan = gmStore.currentPlan
+    if (!experimentStore.id || !plan?.narration) return null
+    return `${experimentStore.id}:${plan.round}:${plan.narration}`
+  },
+  (planKey) => {
+    if (!planKey) return
+    const experimentId = experimentStore.id
+    const currentPlan = gmStore.currentPlan
+    if (!experimentId || !currentPlan?.narration) return
+    void syncRoundNarration(
+      experimentId,
+      currentPlan.round,
+      currentPlan.narration,
+    )
+  },
+)
+
 // When a round completes (from WS round_end), schedule next step if auto-playing
 watch(() => experimentStore.completedRounds, () => {
   if (!waitingForRound || !uiStore.isPlaying) return
@@ -278,8 +330,8 @@ function wireTurnHandlers() {
     updateAgent(agentId: string, status: AgentStatus, location?: string) {
       agentStore.updateAgentStatus(agentId, status, location)
     },
-    addConversation(agentId: string, agentName: string, message: string) {
-      socialStore.addConversation(agentId, agentName, message)
+    addConversation(agentId: string, agentName: string, message: string, source, round) {
+      socialStore.addConversation(agentId, agentName, message, '', undefined, round, source)
     },
     getAgentLocation(agentId: string) {
       return agentStore.getAgent(agentId)?.location
@@ -476,18 +528,35 @@ function goBack() {
 
         <!-- Turn-driven conversation bubble (hidden during meeting — MeetingScene renders its own) -->
         <ConversationBubble
-          v-if="turnStore.phase === 'talking' && turnStore.activeTurn?.thought && !socialStore.isMeetingActive"
+          v-if="turnStore.phase === 'thinking' && turnStore.activeTurn?.thought && !socialStore.isMeetingActive"
           :key="turnStore.activeTurn.id"
           class="pointer-events-auto"
+          :turn-id="turnStore.activeTurn.id"
           :agent-name="turnStore.activeTurn.agentName"
           :message="turnStore.activeTurn.thought"
           :agent-id="turnStore.activeTurn.agentId"
+          variant="thought"
           :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
           :audio-status="activeBubbleAudio?.audioStatus ?? 'idle'"
           :audio-url="activeBubbleAudio?.audioUrl ?? null"
-          :variant="activeBubbleVariant"
-          @dismiss="turnStore.onBubbleDismissed()"
-          @audio-end="turnStore.notifyAudioComplete()"
+          @dismiss="turnStore.onBubbleDismissed($event)"
+          @audio-end="turnStore.notifyAudioComplete($event)"
+        />
+
+        <ConversationBubble
+          v-else-if="activeDialogueBubble && !socialStore.isMeetingActive"
+          :key="`dialogue-${activeDialogueBubble.id}`"
+          class="pointer-events-auto"
+          :turn-id="activeDialogueBubble.id"
+          :agent-name="activeDialogueBubble.agentName"
+          :message="activeDialogueBubble.message"
+          :agent-id="activeDialogueBubble.agentId"
+          variant="dialogue"
+          :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
+          :audio-status="activeDialogueBubble.audioStatus"
+          :audio-url="activeDialogueBubble.audioUrl"
+          @dismiss="turnStore.onBubbleDismissed($event)"
+          @audio-end="turnStore.notifyAudioComplete($event)"
         />
       </div>
     </div>
@@ -528,8 +597,8 @@ function goBack() {
       :has-pending-turns="turnStore.hasPendingTurns"
       :active-bubble-audio="activeBubbleAudio"
       :theme-id="themeId"
-      @bubble-dismiss="turnStore.onBubbleDismissed()"
-      @audio-end="turnStore.notifyAudioComplete()"
+      @bubble-dismiss="turnStore.onBubbleDismissed($event)"
+      @audio-end="turnStore.notifyAudioComplete($event)"
       @scene-exited="onMeetingSceneExited"
       @exile-complete="onExileComplete"
     />

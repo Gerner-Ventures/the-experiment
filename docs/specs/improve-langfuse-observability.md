@@ -1,230 +1,169 @@
 ---
-title: "Improve Langfuse Observability"
-status: todo
+title: "Standardize Observability Across PostHog, Langfuse & Structlog"
+status: in_progress
 priority: high
-tags: [stream-3, infra, observability, langfuse, tracing]
+tags: [stream-3, infra, observability, langfuse, tracing, posthog, logging]
 depends_on: [s3.6-langfuse-tracing]
+updated: "2026-03-08"
 ---
 
-# Improve Langfuse Observability
+# Standardize Observability Across PostHog, Langfuse & Structlog
 
-Fix broken trace hierarchy and enrich Langfuse data so that every LLM call is navigable by experiment, round, phase, and agent — with descriptive names, tags, and quality scores.
+Standardize field names and event coverage across all three observability systems so that every event is filterable by environment, experiment, round, agent, and phase — and the same context propagates consistently regardless of where you look.
 
 ## Background
 
-S3.6 established the Langfuse integration: litellm callback registration, trace/span creation per round and phase, and context propagation via `contextvars`. The infrastructure is in place, but the Langfuse dashboard reveals that **it isn't working as intended**:
+The project uses three observability systems:
 
-1. **Orphaned traces** — 106 of 107 traces show as top-level `litellm-acompletion` instead of nesting under `round-{N}` traces. The `trace_id`/`parent_observation_id` context propagation is failing silently.
-2. **Generic names** — Every LLM call is named `litellm-acompletion`. There's no way to distinguish GM plans from agent decisions from memory operations at a glance.
-3. **No session/user IDs** — LLM call traces don't carry `session_id` (experiment) or `user_id`, making cross-round analysis impossible.
-4. **No tags** — Can't filter by arc, act, agent archetype, or LLM role.
-5. **No scores** — Round-level metrics (cooperation_ratio, threat_level, cost) aren't recorded as Langfuse scores.
-6. **Missing context on memory calls** — Memory service calls don't pass `experiment_id`, `agent_id`, or `agent_name`, making them unattributable.
+1. **Structlog** — JSON-structured application logs, exported to PostHog via OpenTelemetry
+2. **PostHog** — Product analytics events for experiment lifecycle tracking
+3. **Langfuse** — LLM-specific tracing with trace/span hierarchy, generation metadata, and quality scores
 
-The result is a dashboard full of undifferentiated, unlinked LLM calls that provide almost no observability value.
+Each system was built independently, resulting in:
+
+- **Inconsistent field names** — `agent_name` vs `agent_id` vs `trace_user_id` depending on system
+- **Incomplete context propagation** — some events carry `experiment_id` + `round_number` + `agent_id`, others carry only a subset
+- **Sparse PostHog coverage** — only 8 event types, no agent-level or phase-level events
+- **Broken Langfuse trace hierarchy** — LLM calls appear as orphaned `litellm-acompletion` traces instead of nesting under round traces (106/107 traces orphaned)
+- **Missing Langfuse scores** — `total_cost_usd` and `llm_call_count` not yet recorded as round-level scores
+
+### What's Already Working
+
+Several items from the original spec have been implemented:
+
+- **Descriptive generation names** — GM calls named `gm-plan`, agent calls `agent:{name}`, memory calls `memory:classify:{name}` etc.
+- **Session/user IDs** — `session_id` (experiment_id) and `trace_user_id` (agent_name) propagated on all LLM calls
+- **Langfuse scores** — `cooperation_ratio` and `threat_level` recorded via `record_scores()`
+- **Trace I/O** — Round trace input (resources, threat, agent count) and output (status, cooperation, event count) recorded
+- **Memory call metadata** — `experiment_id`, `agent_id`, `agent_name` passed through to all memory LLM calls
+- **Tags** — Round traces tagged with `arc:{name}`, agent calls tagged with `role:agent` and `archetype:{type}`
+- **Debug logging** — `langfuse_context` debug log emits `trace_id`, `parent_observation_id` before LLM calls
+
+### What Remains
+
+1. **Broken trace hierarchy** — The critical issue. LLM calls still appear orphaned.
+2. **Cross-system field standardization** — No canonical field set enforced across systems.
+3. **Sparse PostHog events** — Missing agent-level, phase-level, and LLM cost events.
+4. **Incomplete Langfuse scores** — `total_cost_usd` and `llm_call_count` not recorded.
+5. **Inconsistent structlog fields** — Events don't carry a standard context set.
 
 ## Requirements
 
-### 1. Fix Trace Hierarchy (Critical)
+### 1. Fix Langfuse Trace Hierarchy (Critical)
 
 LLM calls must nest under their parent round trace and phase span, not create orphaned top-level traces.
 
 **Acceptance Criteria:**
 - [ ] Root cause identified and documented: determine why `trace_id`/`parent_observation_id` from `get_trace_context()` are not being consumed by litellm's Langfuse callback
-- [ ] All LLM calls (gm, agent, memory) appear as **generations** nested under their parent span in Langfuse, not as separate top-level traces
+- [ ] All LLM calls (gm, agent, memory) appear as generations nested under their parent span in Langfuse, not as separate top-level traces
 - [ ] Verified with a full experiment run: the Langfuse traces view shows only `round-{N}` traces, with all LLM calls nested inside
-- [ ] Add a debug log in `LLMClient.generate_structured()` that logs `trace_id` and `parent_observation_id` values at DEBUG level before passing to litellm
 
-### 2. Descriptive Generation Names
+**Investigation approach:**
+1. Check if litellm Router strips/restructures metadata keys before passing to the Langfuse callback
+2. Check if `get_trace_context()` returns empty dict due to `_obj_id()` returning empty string
+3. Verify litellm reads the exact metadata keys we're passing (`trace_id`, `parent_observation_id`)
+4. Test with direct `litellm.acompletion()` bypassing Router to isolate
 
-Replace the generic `litellm-acompletion` name with role-specific names.
+### 2. Define Canonical Context Fields
 
-**Acceptance Criteria:**
-- [ ] GM plan calls named `gm-plan`
-- [ ] Agent decision calls named `agent:{agent_name}` (e.g., `agent:The Intern`)
-- [ ] Memory classify calls named `memory:classify:{agent_name}`
-- [ ] Memory consolidate calls named `memory:consolidate:{agent_name}`
-- [ ] Relationship consolidate calls named `memory:relationship:{agent_name}`
-- [ ] JSON repair calls named `{role}:repair`
-- [ ] Names passed via the `generation_name` metadata key (already partially implemented but using only the role string)
-
-### 3. Session and User ID Propagation
-
-Every LLM call must carry session and user context so Langfuse can group by experiment and attribute to agents.
+Define a standard set of context fields that MUST appear on every observability event, regardless of system.
 
 **Acceptance Criteria:**
-- [ ] `session_id` (set to `experiment_id`) passed in metadata for all LLM calls
-- [ ] `trace_user_id` (set to `agent_name` or `"gm"` or `"system"`) passed in metadata for all LLM calls
-- [ ] Langfuse Sessions view shows experiments grouped by session with all their rounds
+- [ ] Canonical field set defined and documented: `environment`, `experiment_id`, `round_number`, `agent_id`, `agent_name`, `phase`, `role`
+- [ ] A shared helper function (e.g. `build_observability_context()`) constructs the canonical context dict from available state
+- [ ] All structlog events emitted during a round carry the full canonical context via `structlog.contextvars`
+- [ ] All PostHog events carry the canonical fields in their properties dict
+- [ ] All Langfuse metadata includes the canonical fields
+- [ ] Field names are identical across all three systems (no `trace_user_id` vs `agent_name` divergence)
 
-### 4. Tags for Filtering
+### 3. Expand PostHog Event Coverage
 
-Add structured tags to enable Langfuse dashboard filtering.
-
-**Acceptance Criteria:**
-- [ ] Round traces tagged with: arc name (e.g., `arc:lord-of-the-flies`), current act (e.g., `act:false-peace`), experiment status
-- [ ] LLM call metadata includes `tags` array with: role (e.g., `role:agent`), phase (e.g., `phase:morning`), and agent archetype when applicable (e.g., `archetype:resource_control`)
-- [ ] Tags follow a `namespace:value` convention for consistency
-
-### 5. Langfuse Scores
-
-Record round-level metrics as Langfuse scores for trend analysis.
+Add agent-level and phase-level events so PostHog can answer questions like "which agents fail most?" and "which phases are slowest?"
 
 **Acceptance Criteria:**
-- [ ] `cooperation_ratio` recorded as a numeric score on each round trace
-- [ ] `threat_level` recorded as a numeric score on each round trace
+- [ ] `agent_decision` event captured per agent turn: `experiment_id`, `round_number`, `agent_id`, `agent_name`, `action_type`, `phase`, `cooperation_intent`, `model`
+- [ ] `agent_decision_fallback` event captured when AgentBrain falls back to OBSERVE: `experiment_id`, `round_number`, `agent_id`, `agent_name`, `error_type`
+- [ ] `round_llm_cost` event captured per round with aggregated LLM cost: `experiment_id`, `round_number`, `total_cost_usd`, `call_count`, `total_tokens`
+- [ ] `phase_completed` event captured per phase: `experiment_id`, `round_number`, `phase`, `duration_seconds`, `agent_count`
+- [ ] All new PostHog events use the canonical field names from Req 2
+
+### 4. Complete Langfuse Scores
+
+Record the remaining round-level metrics as Langfuse scores.
+
+**Acceptance Criteria:**
 - [ ] `total_cost_usd` recorded as a numeric score on each round trace (sum of all LLM calls in the round)
 - [ ] `llm_call_count` recorded as a numeric score on each round trace
-- [ ] Scores use the Langfuse `score()` API, not just metadata
 
-### 6. Enrich Memory Call Metadata
+### 5. Standardize Structlog Events
 
-Memory service calls currently pass minimal metadata. Add context so they're attributable.
-
-**Acceptance Criteria:**
-- [ ] All memory LLM calls (`classify_memory_event`, `consolidate_memory_events`, `consolidate_relationship_memory`) include `experiment_id`, `agent_id`, and `agent_name` in their metadata
-- [ ] Memory calls include the `round_number` consistently (relationship consolidation currently omits it)
-- [ ] The calling code in `SimulationEngine._night_phase` passes agent context through to the LLM service
-
-### 7. Trace Input/Output Recording
-
-Record structured round context as trace input and results as trace output for debugging.
+Ensure all structlog events carry consistent context and follow naming conventions.
 
 **Acceptance Criteria:**
-- [ ] Round trace `input` set to a summary of world state: resources, threat_level, cooperation_ratio, agent count, arc, act
-- [ ] Round trace `output` set to a summary of round results: events count, status changes, resource deltas
-- [ ] Keep input/output concise (not full state dumps) to stay within Langfuse size limits
+- [ ] All structlog events during a round carry `experiment_id` and `round_number` via `structlog.contextvars` (bound once at round start, not passed per-call)
+- [ ] Agent-scoped events also bind `agent_id` and `agent_name` in context
+- [ ] Event names follow `{domain}_{action}` convention: `round_started`, `round_completed`, `agent_decided`, `llm_parse_failed`, `phase_completed`
+- [ ] No structlog event emits a field that conflicts with a canonical field name (e.g. no `model` that means different things in different events)
 
 ## Technical Design
 
-### Root Cause Investigation (Req 1)
+### Canonical Context via structlog.contextvars
 
-The most likely causes of orphaned traces, in order of probability:
+Bind canonical fields once per round using `structlog.contextvars.bind_contextvars()`. These automatically appear on every structlog event within the async context:
 
-1. **litellm Router metadata handling** — The `Router.acompletion()` method may strip or restructure custom metadata keys before passing them to the Langfuse callback. Test with direct `litellm.acompletion()` to isolate.
-2. **Empty trace context** — `get_trace_context()` may return `{}` if `_obj_id()` returns empty string for the trace/span objects (the `or ""` fallback is truthy-falsy ambiguous). Add explicit None checks.
-3. **Async context loss** — The `contextvars.ContextVar` should propagate through `await` chains, but if litellm's Router spawns threads internally, the context could be lost. Since we read the contextvar and merge into the metadata dict before calling Router, this should not be the issue — but verify.
-4. **Langfuse SDK version mismatch** — litellm's built-in callback may expect different metadata keys than what we're passing. Check litellm source for the exact keys it reads.
-
-**Investigation steps:**
 ```python
-# Add to LLMClient.generate_structured() before the router call:
-log.debug(
-    "langfuse_context",
-    trace_id=metadata.get("trace_id"),
-    parent_observation_id=metadata.get("parent_observation_id"),
-    generation_name=metadata.get("generation_name"),
-    has_context=bool(get_trace_context()),
+# At round start in SimulationEngine.run_round():
+structlog.contextvars.bind_contextvars(
+    environment=settings.env,
+    experiment_id=state.experiment_id,
+    round_number=round_number,
+)
+
+# At agent scope:
+structlog.contextvars.bind_contextvars(
+    agent_id=agent.agent_id,
+    agent_name=agent.name,
 )
 ```
 
-### Metadata Enrichment (Reqs 2-4, 6)
+This eliminates per-event field passing and guarantees consistency.
 
-Update `LLMClient.generate_structured()` to build richer metadata:
+### PostHog Event Helper
 
-```python
-metadata = {
-    **request.metadata,
-    **get_trace_context(),
-    # Descriptive name (Req 2)
-    "generation_name": request.generation_name or request.role,
-    # Session/user (Req 3)
-    "session_id": request.metadata.get("experiment_id", ""),
-    "trace_user_id": request.metadata.get("agent_name", request.role),
-    # Tags (Req 4)
-    "tags": request.metadata.get("tags", []),
-}
-```
-
-Add `generation_name` field to `LLMRequest` model. Update call sites:
-
-- `GMService.generate_plan()` → `generation_name="gm-plan"`
-- `AgentBrain.decide()` → `generation_name=f"agent:{agent_name}"`
-- `LLMService.classify_memory_event()` → `generation_name=f"memory:classify:{agent_name}"`
-- `LLMService.consolidate_memory_events()` → `generation_name=f"memory:consolidate:{agent_name}"`
-- `LLMService.consolidate_relationship_memory()` → `generation_name=f"memory:relationship:{agent_name}"`
-
-### Scores (Req 5)
-
-Add a `record_scores()` helper to `langfuse.py`:
+Add a helper that merges canonical context into PostHog event properties:
 
 ```python
-def record_scores(
-    trace_id: str,
-    scores: dict[str, float],
-) -> None:
-    if _client is None:
-        return
-    for name, value in scores.items():
-        try:
-            _client.score(
-                trace_id=trace_id,
-                name=name,
-                value=value,
-            )
-        except Exception:
-            logger.warning("langfuse score failed", exc_info=True)
+def capture_with_context(event: str, properties: dict[str, object]) -> None:
+    """Capture a PostHog event with canonical context from structlog contextvars."""
+    ctx = structlog.contextvars.get_contextvars()
+    merged = {
+        "environment": ctx.get("environment"),
+        "experiment_id": ctx.get("experiment_id"),
+        "round_number": ctx.get("round_number"),
+        "agent_id": ctx.get("agent_id"),
+        "agent_name": ctx.get("agent_name"),
+        **properties,
+    }
+    ph.capture(event, {k: v for k, v in merged.items() if v is not None})
 ```
 
-Called at the end of `run_round()` after trace update:
+### Langfuse Scores Completion
 
-```python
-if trace is not None:
-    lf.record_scores(
-        trace_id=self._obj_id(trace),
-        scores={
-            "cooperation_ratio": cooperation_ratio,
-            "threat_level": state.world_state.threat_level,
-            "total_cost_usd": total_round_cost,
-            "llm_call_count": total_llm_calls,
-        },
-    )
-```
-
-### Trace I/O (Req 7)
-
-Set input/output on the round trace:
-
-```python
-trace = lf.trace(
-    name=f"round-{round_number}",
-    session_id=state.experiment_id,
-    input={
-        "round": round_number,
-        "arc": state.arc.name,
-        "act": current_act.name,
-        "resources": state.world_state.resources,
-        "threat_level": state.world_state.threat_level,
-        "agent_count": len(state.agents),
-    },
-    metadata={...},
-)
-
-# After round completes:
-trace.update(
-    output={
-        "status": state.status,
-        "cooperation_ratio": cooperation_ratio,
-        "threat_level": state.world_state.threat_level,
-        "event_count": sum(len(pr.events) for pr in phases),
-    },
-)
-```
+In `engine/service.py`, compute `total_cost_usd` and `llm_call_count` from the usage tracker at end of round and add to the existing `record_scores()` call.
 
 ## Key Files
 
-- `backend/app/core/langfuse.py` — Add `record_scores()`, enhance `trace()` signature
-- `backend/app/llm/client.py` — Enrich metadata, add debug logging
-- `backend/app/llm/models.py` — Add `generation_name` to `LLMRequest`
-- `backend/app/llm/service.py` — Pass `generation_name`, `agent_name`, `experiment_id` to all memory calls
-- `backend/app/engine/service.py` — Pass agent context to memory calls, add scores, trace I/O
-- `backend/app/gm/service.py` — Add `generation_name` to GM metadata
-- `backend/app/agents/brain.py` — Add `generation_name` and `agent_name` to agent metadata
+- `backend/app/core/posthog.py` — Add `capture_with_context()` helper
+- `backend/app/core/langfuse.py` — Trace hierarchy investigation
+- `backend/app/llm/client.py` — Langfuse metadata, trace context debugging
+- `backend/app/engine/service.py` — Bind contextvars, add PostHog events, complete scores
+- `backend/app/agents/brain.py` — Add PostHog `agent_decision` and `agent_decision_fallback` events
+- `backend/app/api/runtime.py` — Update existing PostHog events to use canonical fields
 
 ## Rollout
 
-1. **Investigate** — Add debug logging, run one experiment, verify trace context values
-2. **Fix hierarchy** — Resolve root cause, verify nesting in Langfuse dashboard
-3. **Enrich** — Add names, tags, session/user IDs, memory context
-4. **Scores** — Add round-level scores
-5. **Validate** — Run a full 15-round experiment, verify dashboard shows clean hierarchy with all metadata
+1. **Fix trace hierarchy** — Investigate root cause, fix, verify with experiment run
+2. **Define canonical fields + structlog contextvars** — Bind at round/agent scope
+3. **Add PostHog helper + new events** — Agent decisions, fallbacks, phase timing, round cost
+4. **Complete Langfuse scores** — Add cost and call count
+5. **Validate** — Run full experiment, verify all three dashboards show consistent, filterable data

@@ -25,14 +25,14 @@ skipping the action animation entirely. Sprites are also too small to clearly re
 - **`AgentSpriteObject.playAnimation()`** — accepts any `SILLY_ANIMATIONS` entry and plays it
   with a completion callback
 - **Turn store** (PR #116) — sequential queue processing one agent at a time with phases:
-  `idle → moving → talking → hud-only`
+  `idle → thinking → moving → acting → hud-only`
 - **`TurnHandlers`** interface with `move`, `updateAgent`, `addConversation`, `getAgentLocation`
 - Sprites render at `PIXEL_SCALE = 2` (28x36px final size)
 
 ### The gap
 
-1. No `'acting'` phase — turns skip directly from movement to speech
-2. `ACTION_TO_ANIMATION` is defined but never wired into the turn lifecycle
+1. No `'thinking'` phase — inner thoughts appear during action execution
+2. Speech bubbles replace action-turn inner thoughts when dialogue arrives into the turn lifecycle
 3. No `playAction` handler in `TurnHandlers`
 4. Sprites too small to distinguish action poses at typical zoom
 5. No action label overlay during animations
@@ -43,16 +43,19 @@ skipping the action animation entirely. Sprites are also too small to clearly re
 ### 1. Acting Phase in Turn Lifecycle
 <!-- status: todo -->
 
-Insert an `'acting'` phase between `'moving'` and `'talking'` in the turn sequence.
+Insert a thought-first turn lifecycle where `'thinking'` precedes `'moving'`, followed by
+`'acting'`, then turn completion.
 
 **Acceptance criteria:**
-- [x] `TurnPhase` type includes `'acting'`: `'idle' | 'moving' | 'acting' | 'talking' | 'hud-only'`
+- [x] `TurnPhase` type includes `'thinking'` and `'acting'`: `'idle' | 'thinking' | 'moving' | 'acting' | 'hud-only'`
 <!-- canon:realized-in:PR#134 file:frontend/src/stores/turn.ts -->
 <!-- canon:realized-in:PR#116 file:frontend/src/stores/turn.ts -->
+- [x] Thought narration phase happens before movement begins when a turn has `inner_thought`
 - [x] `startActionPhase()` added to turn store, called after movement completes
+<!-- canon:realized-in:PR#190 file:frontend/src/stores/turn.ts -->
 - [x] Action phase looks up `ACTION_TO_ANIMATION[turn.actionType]` to resolve the animation
 - [x] Calls `playAction` handler with agent ID, animation name, and `onComplete` callback
-- [x] `onComplete` transitions to `startSpeechPhase()`
+- [x] `onComplete` transitions to turn completion (`hud-only` for silent turns, immediate advance for narrated turns)
 - [ ] Actions without a meaningful animation (e.g., `move`, `rest`, `explore` — where the
   mapped animation is `'idle'` or `'walk'`) skip directly to speech
 - [ ] Minimum acting duration of 1500ms — if animation completes sooner, hold the last
@@ -122,23 +125,22 @@ When an action has a target agent, visually highlight the target during the acti
 
 ```
 processNext()
-  → phase = 'moving'
-  → handlers.move(agentId, location, () => {
-      startActionPhase()
-    })
+  → if thought: startThoughtPhase()
+  → else: startMovementPhase()
+
+startThoughtPhase()
+  → phase = 'thinking'
+  → wait for audio completion or timeout
+  → startMovementPhase()
 
 startActionPhase()
   → animation = ACTION_TO_ANIMATION[turn.actionType]
-  → if animation is 'idle' or 'walk' → skip to startSpeechPhase()
+  → if animation is 'idle' or 'walk' → completeTurnPhase()
   → phase = 'acting'
   → handlers.playAction(agentId, animation, () => {
-      startSpeechPhase()
+      completeTurnPhase()
     })
   → apply minimum duration floor (800ms)
-
-startSpeechPhase()
-  → phase = 'talking'
-  → (existing logic)
 ```
 
 ### Animation skip list
@@ -191,10 +193,10 @@ changes.
 
 | Phase | Duration | What the player sees |
 |-------|----------|---------------------|
+| `thinking` | ~3-5s | Inner-thought bubble: "I know what you've been hiding..." |
 | `moving` | ~1.5s | Whistleblower walks tile-by-tile from jungle to beach camp |
 | `acting` | ~1.25s | Whistleblower plays stab animation (arm extends with weapon). "STAB" label in red above sprite. Con Artist gets a pulsing red highlight ring. |
-| `talking` | ~3-5s | Speech bubble: "I know what you've been hiding..." Con Artist highlight fades. |
-| `hud-only` | 1.5s | HUD status shown briefly (if no speech, otherwise skipped) |
+| `hud-only` | 1.5s | HUD status shown briefly for silent turns only |
 
 Total: ~6-7 seconds per agent turn.
 

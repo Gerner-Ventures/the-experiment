@@ -384,6 +384,7 @@ class NarrationAudioMetadata(APIRequestModel):
     experiment_id: str
     round_number: int
     text: str
+    narration_id: str | None = None
     voice_id: str
     model_id: str
     output_format: str
@@ -398,6 +399,7 @@ class AgentSpeechAudioMetadata(APIRequestModel):
     round_number: int
     index: int
     text: str
+    source: str = "dialogue"
     voice_id: str
     model_id: str
     output_format: str
