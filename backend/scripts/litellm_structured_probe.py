@@ -1,7 +1,7 @@
-"""Test script to explore litellm's native structured output behavior.
+"""Probe script to explore litellm's native structured output behavior.
 
 Run from backend/:
-    .venv/bin/python -m scripts.test_litellm_structured
+    .venv/bin/python -m scripts.litellm_structured_probe
 """
 
 from __future__ import annotations
