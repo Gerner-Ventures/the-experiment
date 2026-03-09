@@ -56,6 +56,7 @@ export function routeMessage(msg: WSMessage) {
     cult_activity: (m) => socialStore.onCultActivity(m),
     exile_vote: (m) => socialStore.onExileVote(m),
     exile_result: (m) => socialStore.onExileResult(m as unknown as WSMessage<ExileResultData>),
+    observer_event: () => { /* logged by addEvent above; no handler needed yet */ },
     experiment_end: (m) => experimentStore.onEnd(m),
     step_error: () => {
       useUIStore().clearStepping()

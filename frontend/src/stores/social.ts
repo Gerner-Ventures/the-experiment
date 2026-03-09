@@ -210,7 +210,7 @@ export const useSocialStore = defineStore('social', () => {
       agentName,
       round: msg.round,
       actionType: 'meeting_vote',
-      thought: `Vote: ${data.vote}`,
+      thought: locale.social.meetingScene.votePrefix.replace('{vote}', data.vote),
       thoughtSource: 'dialogue',
       fromSpeakEvent: false,
     })
@@ -263,12 +263,6 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
-  function closeMeetingScene() {
-    if (meeting.value) {
-      meeting.value.scenePhase = 'exiting'
-    }
-  }
-
   function dismissMeeting() {
     if (meeting.value) {
       meeting.value.active = false
@@ -289,6 +283,6 @@ export const useSocialStore = defineStore('social', () => {
     onSpeak, addConversation, onSpeechAudio,
     onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
     onFactionUpdate, onCultActivity, onExileVote, onExileResult,
-    advanceMeetingPhase, closeMeetingScene, dismissMeeting, $reset,
+    advanceMeetingPhase, dismissMeeting, $reset,
   }
 })

@@ -262,6 +262,7 @@ export default {
       stanceAbstain: 'Abstains',
       votePassed: 'The proposal passed',
       voteFailed: 'The proposal failed',
+      votePrefix: 'Vote: {vote}',
     },
   },
 

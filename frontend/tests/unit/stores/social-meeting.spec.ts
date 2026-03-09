@@ -14,6 +14,7 @@ jest.mock('@/locales', () => ({
         stanceSupport: 'I support this.',
         stanceOppose: 'I oppose this.',
         stanceAbstain: 'I abstain.',
+        votePrefix: 'Vote: {vote}',
       },
     },
   }),

@@ -1,6 +1,6 @@
 /**
  * Comprehensive tests for the social store beyond meeting basics.
- * Covers: closeMeetingScene, exile events, faction updates,
+ * Covers: advanceMeetingPhase, exile events, faction updates,
  * turn enqueue field verification, thoughtSource/fromSpeakEvent on meeting turns,
  * onSpeak / addConversation / onSpeechAudio, $reset.
  */
@@ -17,6 +17,7 @@ jest.mock('@/locales', () => ({
         stanceSupport: 'I support this.',
         stanceOppose: 'I oppose this.',
         stanceAbstain: 'I abstain.',
+        votePrefix: 'Vote: {vote}',
       },
       speech: {
         thoughtLabel: 'thinking',
@@ -36,21 +37,21 @@ describe('Social store – comprehensive', () => {
     setActivePinia(createPinia())
   })
 
-  // ─── closeMeetingScene ───
+  // ─── advanceMeetingPhase ───
 
-  describe('closeMeetingScene', () => {
+  describe('advanceMeetingPhase', () => {
     it('sets scenePhase to exiting', () => {
       const store = useSocialStore()
       store.onMeetingStart(makeMsg('meeting_start', { proposal: 'Test' }))
       expect(store.meeting!.scenePhase).toBe('entering')
 
-      store.closeMeetingScene()
+      store.advanceMeetingPhase('exiting')
       expect(store.meeting!.scenePhase).toBe('exiting')
     })
 
     it('is safe when meeting is null', () => {
       const store = useSocialStore()
-      expect(() => store.closeMeetingScene()).not.toThrow()
+      expect(() => store.advanceMeetingPhase('exiting')).not.toThrow()
     })
   })
 

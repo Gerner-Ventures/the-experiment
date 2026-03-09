@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { ExperimentStatus } from '@/types/experiment'
-import type { RoundPhase, WSMessage } from '@/types/websocket'
+import type { RoundEndData, RoundPhase, WSMessage } from '@/types/websocket'
 import { useWorldStore } from '@/stores/world'
 import { useAgentStore } from '@/stores/agent'
 import { useUIStore } from '@/stores/ui'
@@ -53,6 +53,9 @@ export const useExperimentStore = defineStore('experiment', () => {
   const currentPhase = ref<RoundPhase | null>(null)
   const completedRounds = ref(0)
   const events = ref<ExperimentEvent[]>([])
+
+  /** Guard against duplicate round_end processing (reconnect race, backend retry) */
+  let roundEndPending = false
 
   const isRunning = computed(() => status.value === 'running')
   const isComplete = computed(() => status.value === 'completed' || status.value === 'collapsed')
@@ -132,14 +135,10 @@ export const useExperimentStore = defineStore('experiment', () => {
   }
 
   function onRoundEnd(msg: WSMessage) {
-    const data = msg.data as {
-      status: string
-      current_round: number
-      total_rounds: number
-      threat_level: number
-      resources: Record<string, number>
-      agents: Record<string, unknown>[]
-    }
+    if (roundEndPending) return
+    roundEndPending = true
+
+    const data = msg.data as RoundEndData
     if (data.current_round != null) currentRound.value = data.current_round
     if (data.total_rounds != null) totalRounds.value = data.total_rounds
     if (data.status) status.value = data.status as ExperimentStatus
@@ -159,6 +158,7 @@ export const useExperimentStore = defineStore('experiment', () => {
 
     // Defer round finalization until turns drain AND meeting closes
     const finalize = () => {
+      roundEndPending = false
       if (data.agents?.length) useAgentStore().setAgents(data.agents)
       completedRounds.value++
       useUIStore().clearStepping()
@@ -217,6 +217,7 @@ export const useExperimentStore = defineStore('experiment', () => {
 
   function $reset() {
     clearAllIntervals()
+    roundEndPending = false
     id.value = null
     name.value = ''
     status.value = 'setup'
