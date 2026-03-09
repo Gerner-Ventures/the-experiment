@@ -94,7 +94,7 @@ async function syncRoundNarration(experimentId: string, round: number, fallbackT
       meta.round_number,
       meta.narration_id,
       meta.status,
-      meta.audio_url,
+      meta.audio_url ?? null,
     )
   } catch (err) {
     if (token !== narrationHydrationToken) return

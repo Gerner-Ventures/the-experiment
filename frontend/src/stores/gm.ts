@@ -74,7 +74,7 @@ export const useGMStore = defineStore('gm', () => {
       return
     }
 
-    if (narrationAudioStatus.value === 'pending' || queued.status === 'ready') {
+    if (narrationAudioStatus.value === 'pending' || queued.status !== 'pending') {
       applyAudioStatus(queued)
       return
     }

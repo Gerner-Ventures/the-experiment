@@ -99,6 +99,22 @@ describe('useGMStore', () => {
       expect(store.narrationAudioUrl).toBeNull()
     })
 
+    it('applies a queued error status after metadata hydrates with a cached ready URL', () => {
+      const store = useGMStore()
+      store.setNarrationFallback('Fallback narration.', 2)
+      store.onAudioStatus(makeMsg('gm_audio_status', {
+        status: 'error',
+        narration_id: 'narr-2',
+        error: 'Audio expired',
+      } as GMAudioStatusData, 2))
+
+      store.hydrateNarration('Resolved narration.', 2, 'narr-2', 'ready', '/audio/round2?v=narr-2')
+
+      expect(store.narrationAudioStatus).toBe('error')
+      expect(store.narrationAudioUrl).toBeNull()
+      expect(store.narrationAudioError).toBe('Audio expired')
+    })
+
     it('ignores stale audio status from a different round', () => {
       const store = useGMStore()
       store.hydrateNarration('Day two.', 2, 'narr-2', 'pending', null)
