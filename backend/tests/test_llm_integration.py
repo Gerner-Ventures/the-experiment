@@ -374,6 +374,123 @@ async def test_memory_classifier_raises_when_result_is_unparsed() -> None:
         )
 
 
+@pytest.mark.asyncio
+async def test_structural_repair_unnests_fields_from_action() -> None:
+    """When the model nests all fields inside 'action', the parser un-nests them."""
+    # This is the exact pattern from production: all fields wrapped inside "action"
+    nested_content = json.dumps(
+        {
+            "action": {
+                "inner_thought": "I need to investigate the tally marks.",
+                "suspicion": "Someone is counting people.",
+                "type": "explore",
+                "target": "locked_building",
+                "location": "town_square",
+                "dialogue": None,
+                "goal_progress": "Making progress on investigation.",
+                "cooperation_intent": "medium",
+            }
+        }
+    )
+    client = LLMClient()
+    client.router = _FakeRouter([_FakeResponse("openai/gpt-4o-mini", nested_content)])
+
+    result = await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-repair", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    assert result.parsed is not None
+    assert result.parsed["inner_thought"] == "I need to investigate the tally marks."
+    assert result.parsed["action"]["type"] == "explore"
+    assert result.parsed["action"]["target"] == "locked_building"
+    assert result.parsed["cooperation_intent"] == "medium"
+    # Only 1 call needed — repair fixed it without retry
+    assert len(client.tracker.all_records()) == 1
+
+
+@pytest.mark.asyncio
+async def test_structural_repair_does_not_fire_on_valid_response() -> None:
+    """Structural repair is not triggered when the response is already valid."""
+    valid_content = json.dumps(
+        {
+            "inner_thought": "I should keep quiet.",
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "No progress yet.",
+            "cooperation_intent": "medium",
+        }
+    )
+    client = LLMClient()
+    client.router = _FakeRouter([_FakeResponse("openai/gpt-4o-mini", valid_content)])
+
+    result = await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-no-repair", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    assert result.parsed is not None
+    assert result.parsed["inner_thought"] == "I should keep quiet."
+
+
+@pytest.mark.asyncio
+async def test_corrective_retry_includes_error_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When first attempt fails and repair fails, retry includes error context in messages."""
+    captured_events: list[tuple[str, dict[str, object]]] = []
+    monkeypatch.setattr(
+        "app.llm.client.ph.capture",
+        lambda event, properties: captured_events.append((event, properties)),
+    )
+
+    # First response: completely broken JSON (no repair possible)
+    broken = _FakeResponse("openai/gpt-4o-mini", "not-json-at-all")
+    # Second response: valid (model self-corrected after seeing the error)
+    valid_content = json.dumps(
+        {
+            "inner_thought": "I corrected my response.",
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "Fixed.",
+            "cooperation_intent": "high",
+        }
+    )
+    valid = _FakeResponse("openai/gpt-4o-mini", valid_content)
+    client = LLMClient()
+    fake_router = _FakeRouter([broken, valid])
+    client.router = fake_router
+
+    result = await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-corrective", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    assert result.parsed is not None
+    assert result.parsed["inner_thought"] == "I corrected my response."
+    # Verify the retry included corrective context in messages
+    retry_call = fake_router.calls[1]
+    retry_messages = retry_call["messages"]
+    # Should have: system, assistant (failed response), user (correction)
+    assert len(retry_messages) == 3
+    assert retry_messages[1]["role"] == "assistant"
+    assert retry_messages[1]["content"] == "not-json-at-all"
+    assert retry_messages[2]["role"] == "user"
+    assert "TOP LEVEL" in retry_messages[2]["content"]
+    assert len(captured_events) == 0  # No PostHog event on successful retry
+
+
 def client_request(
     role: str,
     response_format: type[Any],

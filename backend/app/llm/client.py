@@ -106,6 +106,22 @@ class LLMClient:
                     )
                     self._track_usage(request, result)
                     if not is_final_attempt:
+                        # Corrective retry: append the failed response and error
+                        # context so the model can self-correct instead of blind replay
+                        messages.append({"role": "assistant", "content": result.content})
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": (
+                                    "Your JSON response had incorrect structure. "
+                                    "All fields must be at the TOP LEVEL of the JSON object. "
+                                    "Do NOT nest fields like inner_thought, suspicion, "
+                                    "goal_progress, or cooperation_intent inside 'action'. "
+                                    "The 'action' object should ONLY contain 'type', 'target', "
+                                    "and 'location'. Please return the corrected JSON."
+                                ),
+                            }
+                        )
                         continue
                     ph.capture(
                         "llm_parse_failure",
@@ -241,9 +257,85 @@ class LLMClient:
                     errors=exc.error_count(),
                     detail=str(exc),
                 )
+                # Attempt structural repair before giving up
+                repaired = self._try_repair_nesting(payload, response_format)
+                if repaired is not None:
+                    return repaired
                 return None
 
         return payload if isinstance(payload, dict) else None
+
+    @staticmethod
+    def _try_repair_nesting(
+        payload: dict[str, Any],
+        response_format: type[BaseModel],
+    ) -> dict[str, Any] | None:
+        """Repair a common nesting failure where the model wraps all fields inside one key.
+
+        Haiku sometimes produces {"action": {"inner_thought": ..., "type": ..., ...}}
+        instead of {"inner_thought": ..., "action": {"type": ...}, ...}. Detect this
+        pattern and un-nest.
+        """
+        schema_fields = set(response_format.model_fields.keys())
+
+        # Find a key whose value is a dict containing most of the expected top-level fields
+        for wrapper_key in list(payload.keys()):
+            nested = payload.get(wrapper_key)
+            if not isinstance(nested, dict):
+                continue
+            nested_keys = set(nested.keys())
+            # The nested dict must contain at least 3 of the expected top-level fields
+            overlap = nested_keys & schema_fields
+            if len(overlap) < 3:
+                continue
+
+            # The wrapper key itself should be one of the schema fields (e.g. "action")
+            if wrapper_key not in schema_fields:
+                continue
+
+            # Determine which fields belong to the wrapper's own sub-schema
+            wrapper_field_info = response_format.model_fields.get(wrapper_key)
+            wrapper_sub_fields: set[str] = set()
+            if wrapper_field_info and wrapper_field_info.annotation is not None:
+                annotation = wrapper_field_info.annotation
+                # Unwrap Optional[X] to X
+                origin = getattr(annotation, "__origin__", None)
+                if origin is not None:
+                    args = getattr(annotation, "__args__", ())
+                    non_none = [a for a in args if a is not type(None)]
+                    if non_none:
+                        annotation = non_none[0]
+                if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+                    wrapper_sub_fields = set(annotation.model_fields.keys())
+
+            # Split: wrapper's own fields stay nested, everything else goes to top level
+            repaired: dict[str, Any] = {}
+            wrapper_contents: dict[str, Any] = {}
+            for k, v in nested.items():
+                if k in wrapper_sub_fields:
+                    wrapper_contents[k] = v
+                else:
+                    repaired[k] = v
+            repaired[wrapper_key] = wrapper_contents
+
+            # Also merge any other top-level keys from the original payload
+            for k, v in payload.items():
+                if k != wrapper_key and k not in repaired:
+                    repaired[k] = v
+
+            try:
+                result = response_format.model_validate(repaired).model_dump(mode="json")
+                log.info(
+                    "llm_structural_repair_succeeded",
+                    schema=response_format.__name__,
+                    wrapper_key=wrapper_key,
+                    fields_moved=sorted(overlap - wrapper_sub_fields),
+                )
+                return result
+            except ValidationError:
+                pass  # Repair didn't produce valid output, fall through
+
+        return None
 
     def _track_usage(self, request: LLMRequest, result: LLMResult) -> None:
         metadata = request.metadata
