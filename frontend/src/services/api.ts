@@ -1,4 +1,5 @@
 import type { PersonalityAxes, GoalArchetype } from '@/types/agent'
+import type { NarrationMetadata } from '@/types/gm'
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -96,18 +97,6 @@ export interface GMPlanRecord {
   plan: Record<string, unknown>
   approved: boolean
   modified: boolean
-}
-
-export interface NarrationMetadata {
-  experiment_id: string
-  round_number: number
-  text: string
-  voice_id: string
-  model_id: string
-  output_format: string
-  status: 'pending' | 'ready' | 'unavailable'
-  audio_url?: string
-  cache_hit: boolean
 }
 
 // ---------------------------------------------------------------------------
