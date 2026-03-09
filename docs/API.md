@@ -376,9 +376,10 @@ Connection semantics:
 | `gm_audio_status` | `{ "status": "pending|ready|error", "narration_id": "<id>", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
-| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought"?, "cooperation_intent"?, "goal_progress"?, "is_consequence", "source_agent_id"?, "source_agent_name"?, "source_action_type"? }` and the message envelope also carries `is_consequence` |
+| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought"?, "speech_text"?, "speech_source"?, "dialogue"?, "cooperation_intent"?, "goal_progress"?, "is_consequence", "source_agent_id"?, "source_agent_name"?, "source_action_type"? }` and the message envelope also carries `is_consequence` |
 | `agent_move` | `{ "agent_id", "location" }` |
-| `agent_speak` | `{ "kind", "speaker_id", "speaker_name", "listener_id", "listener_name", "tone", "location", "trust_delta" }` |
+| `agent_speak` | `{ "agent_id", "agent_name", "message", "target", "source"?, "speaker_id"?, "speaker_name"?, "listener_id"?, "listener_name"?, "tone"?, "location"?, "trust_delta"? }` |
+| `agent_speech_audio` | `{ "agent_id", "round", "index", "status", "audio_url"?, "source"? }` |
 | `meeting_start` | `{ "kind", "proposal" }` |
 | `meeting_speech` | `{ "kind", "agent_id", "agent_name", "stance", "content" }` |
 | `meeting_vote` | `{ "kind", "agent_id", "agent_name", "vote" }` |

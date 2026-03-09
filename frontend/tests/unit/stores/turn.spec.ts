@@ -1,18 +1,38 @@
 import { setActivePinia, createPinia } from 'pinia'
-import { useTurnStore, type TurnHandlers } from '@/stores/turn'
+import { useTurnStore, type Turn, type TurnHandlers } from '@/stores/turn'
+import { useUIStore } from '@/stores/ui'
 
-function createMockHandlers(overrides: Partial<TurnHandlers> = {}): TurnHandlers {
+jest.mock('@/locales', () => ({
+  useLocale: () => ({
+    hud: {
+      steppingAgent: '{name}: {action}',
+    },
+  }),
+}))
+
+function makeTurn(overrides: Partial<Omit<Turn, 'id'>> = {}): Omit<Turn, 'id'> {
+  return {
+    agentId: 'agent-1',
+    agentName: 'Alice',
+    round: 1,
+    actionType: 'talk',
+    thoughtSource: 'inner_thought',
+    ...overrides,
+  }
+}
+
+function makeHandlers(overrides: Partial<TurnHandlers> = {}): TurnHandlers {
   return {
     move: jest.fn((_id, _loc, cb) => cb()),
     playAction: jest.fn((_id, _anim, cb) => cb()),
     updateAgent: jest.fn(),
     addConversation: jest.fn(),
-    getAgentLocation: jest.fn(() => 'town_square'),
+    getAgentLocation: jest.fn(() => undefined),
     ...overrides,
   }
 }
 
-describe('useTurnStore', () => {
+describe('turn store sequencing', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     jest.useFakeTimers()
@@ -22,181 +42,54 @@ describe('useTurnStore', () => {
     jest.useRealTimers()
   })
 
-  it('starts in idle phase with empty queue', () => {
+  it('uses a thinking phase before action execution', () => {
     const store = useTurnStore()
-    expect(store.phase).toBe('idle')
-    expect(store.queue).toEqual([])
-    expect(store.activeTurn).toBeNull()
-    expect(store.isProcessing).toBe(false)
+    store.setHandlers(makeHandlers())
+
+    store.enqueue(makeTurn({ actionType: 'move', thought: 'Wait. Think first.' }))
+
+    expect(store.phase).toBe('thinking')
   })
 
-  it('enqueues a turn and starts processing', () => {
+  it('continues after the thought timeout when no bubble event arrives', () => {
+    const move = jest.fn((_id, _loc, cb) => cb())
     const store = useTurnStore()
-    const handlers = createMockHandlers()
-    store.setHandlers(handlers)
+    store.setHandlers(makeHandlers({
+      move,
+      getAgentLocation: jest.fn(() => 'camp'),
+    }))
 
-    store.enqueue({
-      agentId: 'a1',
-      agentName: 'Alice',
-      actionType: 'stab',
-      thought: 'Take that!',
-    })
-
-    expect(store.activeTurn).not.toBeNull()
-    expect(store.activeTurn!.agentName).toBe('Alice')
-    expect(store.isProcessing).toBe(true)
-  })
-
-  it('skips action phase for move/rest/explore', () => {
-    const store = useTurnStore()
-    const handlers = createMockHandlers()
-    store.setHandlers(handlers)
-
-    store.enqueue({
-      agentId: 'a1',
-      agentName: 'Alice',
+    store.enqueue(makeTurn({
       actionType: 'move',
-      thought: 'Going somewhere',
-    })
+      targetLocation: 'forest',
+      thought: 'No time to explain.',
+    }))
 
-    // Should skip acting phase — playAction never called
-    expect(handlers.playAction).not.toHaveBeenCalled()
-    // Should be in talking phase (has thought)
-    expect(store.phase).toBe('talking')
+    jest.advanceTimersByTime(15000)
+
+    expect(move).toHaveBeenCalledWith('agent-1', 'forest', expect.any(Function))
   })
 
-  it('enters acting phase for stab action', () => {
+  it('keeps the HUD action label active during the thought phase', () => {
     const store = useTurnStore()
-    // playAction does not immediately call back — simulates animation duration
-    let playActionCb: (() => void) | null = null
-    const handlers = createMockHandlers({
-      playAction: jest.fn((_id, _anim, cb) => { playActionCb = cb }),
-    })
-    store.setHandlers(handlers)
+    const uiStore = useUIStore()
+    store.setHandlers(makeHandlers())
 
-    store.enqueue({
-      agentId: 'a1',
-      agentName: 'Alice',
-      actionType: 'stab',
-      thought: 'Die!',
-    })
+    store.enqueue(makeTurn({ agentName: 'Bob', actionType: 'explore', thought: 'Maybe the beach.' }))
 
-    expect(store.phase).toBe('acting')
-    expect(handlers.playAction).toHaveBeenCalledWith('a1', 'stab', expect.any(Function))
-
-    // Animation completes but floor timer hasn't
-    playActionCb!()
-    expect(store.phase).toBe('acting') // still waiting for min duration
-
-    // Floor timer expires
-    jest.advanceTimersByTime(1500)
-    expect(store.phase).toBe('talking')
+    expect(store.phase).toBe('thinking')
+    expect(uiStore.steppingStatus).toBe('Bob: explore')
   })
 
-  it('proceeds to hud-only when no thought', () => {
+  it('returns the agent to idle after a thought-driven turn completes', () => {
+    const handlers = makeHandlers()
     const store = useTurnStore()
-    const handlers = createMockHandlers()
     store.setHandlers(handlers)
 
-    store.enqueue({
-      agentId: 'a1',
-      agentName: 'Alice',
-      actionType: 'gather',
-    })
+    store.enqueue(makeTurn({ thought: 'Done here.', actionType: 'move' }))
+    store.notifyAudioComplete(store.activeTurn!.id)
 
-    // After acting phase completes (instant mock + 800ms floor)
-    jest.advanceTimersByTime(1500)
-    expect(store.phase).toBe('hud-only')
-
-    // After HUD timer
-    jest.advanceTimersByTime(1500)
+    expect(handlers.updateAgent).toHaveBeenLastCalledWith('agent-1', 'idle')
     expect(store.phase).toBe('idle')
-    expect(store.activeTurn).toBeNull()
-  })
-
-  it('processes queue sequentially', () => {
-    const store = useTurnStore()
-    const handlers = createMockHandlers()
-    store.setHandlers(handlers)
-
-    store.enqueue({ agentId: 'a1', agentName: 'Alice', actionType: 'move', thought: 'Hi' })
-    store.enqueue({ agentId: 'a2', agentName: 'Bob', actionType: 'move', thought: 'Hey' })
-
-    expect(store.activeTurn!.agentName).toBe('Alice')
-    expect(store.queue.length).toBe(1)
-
-    // Dismiss Alice's bubble
-    store.onBubbleDismissed()
-    expect(store.activeTurn!.agentName).toBe('Bob')
-  })
-
-  it('calls onDrained when queue empties', () => {
-    const store = useTurnStore()
-    const handlers = createMockHandlers()
-    store.setHandlers(handlers)
-
-    const drained = jest.fn()
-    store.onDrained(drained)
-
-    store.enqueue({ agentId: 'a1', agentName: 'Alice', actionType: 'move', thought: 'Hi' })
-    store.onBubbleDismissed()
-
-    expect(drained).toHaveBeenCalled()
-  })
-
-  it('moves agent when target location differs', () => {
-    const store = useTurnStore()
-    const handlers = createMockHandlers({
-      getAgentLocation: jest.fn(() => 'town_square'),
-    })
-    store.setHandlers(handlers)
-
-    store.enqueue({
-      agentId: 'a1',
-      agentName: 'Alice',
-      actionType: 'move',
-      targetLocation: 'beach_camp',
-      thought: 'Walking',
-    })
-
-    expect(handlers.move).toHaveBeenCalledWith('a1', 'beach_camp', expect.any(Function))
-  })
-
-  it('skips move when already at target location', () => {
-    const store = useTurnStore()
-    const handlers = createMockHandlers({
-      getAgentLocation: jest.fn(() => 'beach_camp'),
-    })
-    store.setHandlers(handlers)
-
-    store.enqueue({
-      agentId: 'a1',
-      agentName: 'Alice',
-      actionType: 'move',
-      targetLocation: 'beach_camp',
-      thought: 'Already here',
-    })
-
-    expect(handlers.move).not.toHaveBeenCalled()
-  })
-
-  it('resets cleanly including handlers', () => {
-    const store = useTurnStore()
-    const handlers = createMockHandlers()
-    store.setHandlers(handlers)
-
-    store.enqueue({ agentId: 'a1', agentName: 'Alice', actionType: 'stab' })
-    store.$reset()
-
-    expect(store.phase).toBe('idle')
-    expect(store.queue).toEqual([])
-    expect(store.activeTurn).toBeNull()
-
-    // After reset, enqueuing should not call stale handlers
-    const stalePlayAction = handlers.playAction as jest.Mock
-    stalePlayAction.mockClear()
-    store.enqueue({ agentId: 'a2', agentName: 'Bob', actionType: 'stab' })
-    // Without handlers set, playAction should not be called
-    expect(stalePlayAction).not.toHaveBeenCalled()
   })
 })

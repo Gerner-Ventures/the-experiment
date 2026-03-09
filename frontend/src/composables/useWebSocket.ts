@@ -1,5 +1,12 @@
 import { ref, type Ref } from 'vue'
-import type { WSMessage, WSMessageType, GMAudioStatusData, AgentSpeechAudioData } from '@/types/websocket'
+import type {
+  AgentActionData,
+  AgentSpeakData,
+  AgentSpeechAudioData,
+  GMAudioStatusData,
+  WSMessage,
+  WSMessageType,
+} from '@/types/websocket'
 import { useExperimentStore } from '@/stores/experiment'
 import { useAgentStore } from '@/stores/agent'
 import { useWorldStore } from '@/stores/world'
@@ -115,8 +122,8 @@ function routeMessage(msg: WSMessage) {
     gm_plan: (m) => gmStore.onPlan(m),
     gm_narration: (m) => gmStore.onNarration(m),
     gm_audio_status: (m) => gmStore.onAudioStatus(m as unknown as WSMessage<GMAudioStatusData>),
-    agent_action: (m) => agentStore.onAction(m),
-    agent_speak: (m) => socialStore.onSpeak(m),
+    agent_action: (m) => agentStore.onAction(m as unknown as WSMessage<AgentActionData>),
+    agent_speak: (m) => socialStore.onSpeak(m as unknown as WSMessage<AgentSpeakData>),
     agent_speech_audio: (m) => socialStore.onSpeechAudio(m as unknown as WSMessage<AgentSpeechAudioData>),
     crisis_event: (m) => worldStore.onCrisis(m),
     threat_update: (m) => worldStore.onThreatUpdate(m),

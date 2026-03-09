@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
-import type { WSMessage } from '@/types/websocket'
+import type { AgentActionData, WSMessage } from '@/types/websocket'
 import { useTurnStore } from '@/stores/turn'
 
 export const useAgentStore = defineStore('agent', () => {
@@ -48,47 +48,36 @@ export const useAgentStore = defineStore('agent', () => {
    * Parses the action and enqueues a turn — all side effects (movement, bubbles, HUD)
    * are handled by the turn store in sequence.
    */
-  function onAction(msg: WSMessage) {
-    const data = msg.data as {
-      agent_id: string
-      agent_name?: string
-      action: Record<string, unknown> | string
-      inner_thought?: string
-      dialogue?: string | null
-      cooperation_intent?: string
-    }
+  function onAction(msg: WSMessage<AgentActionData>) {
+    const data = msg.data
     const agent = agents.value.get(data.agent_id)
     const actionType = typeof data.action === 'string'
       ? data.action
       : (data.action?.type as string) ?? 'observe'
-    const actionLocation = typeof data.action === 'string'
-      ? undefined
-      : (data.action?.location as string | undefined)
-    if (agent) {
-      if (actionLocation) {
-        agent.location = actionLocation
-      }
-      agent.status = actionToStatus(actionType)
-    }
     const agentName = data.agent_name ?? agent?.name ?? 'Agent'
 
     // Extract target location from action (turn store decides if movement is needed at processing time)
     const targetLocation = typeof data.action === 'object'
       ? (data.action.location as string | undefined)
       : undefined
+    const innerThought = normalizeLine(data.inner_thought)
+    const speechText = normalizeLine(data.speech_text)
+    const dialogueText = extractDialogueText(data.dialogue)
+    const thought = data.speech_source === 'inner_thought'
+      ? speechText ?? innerThought
+      : innerThought ?? speechText
 
     console.debug(`[AgentStore] onAction: ${agentName} → ${actionType}${targetLocation ? ` @ ${targetLocation}` : ''}`)
 
-    // Enqueue in the turn store — it handles movement, bubbles, and HUD in sequence
-    const hasDialogue = !!data.dialogue?.trim()
     useTurnStore().enqueue({
       agentId: data.agent_id,
       agentName,
+      round: msg.round,
       actionType,
       targetLocation,
-      thought: hasDialogue ? data.dialogue ?? undefined : data.inner_thought,
-      // Dialogue was already added to conversation log via agent_speak WS event
-      fromSpeakEvent: hasDialogue,
+      thought,
+      thoughtSource: 'inner_thought',
+      fromSpeakEvent: data.speech_source === 'inner_thought' || !!dialogueText,
     })
   }
 
@@ -155,12 +144,14 @@ function parseAgent(a: Record<string, unknown>): Agent {
   }
 }
 
-function actionToStatus(action: string): AgentStatus {
-  switch (action) {
-    case 'talk': case 'trade': case 'accuse': return 'talking'
-    case 'move': case 'explore': return 'moving'
-    case 'gather': case 'repair': return 'working'
-    case 'hoard': case 'sabotage': return 'sneaking'
-    default: return 'idle'
+function normalizeLine(value: string | null | undefined): string | undefined {
+  const text = value?.trim()
+  return text ? text : undefined
+}
+
+function extractDialogueText(dialogue: AgentActionData['dialogue']): string | undefined {
+  if (typeof dialogue === 'string') {
+    return normalizeLine(dialogue)
   }
+  return normalizeLine(dialogue?.message ?? undefined)
 }

@@ -246,22 +246,26 @@ describe('agentStore', () => {
       expect(store.agentCount).toBe(2)
     })
 
-    it('updates agent location from structured action payloads', () => {
+    it('defers structured action location updates to the turn executor', () => {
       const store = useAgentStore()
+      const turnStore = useTurnStore()
       store.setAgents(sampleAgents)
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'gather', location: 'beach' }, summary: '' } }))
       const agent = store.getAgent('a1')!
-      expect(agent.location).toBe('beach')
-      expect(agent.status).toBe('working')
+      expect(agent.location).toBe('town_square')
+      expect(agent.status).toBe('idle')
+      expect(turnStore.activeTurn?.targetLocation).toBe('beach')
     })
 
-    it('updates move actions from structured action payloads', () => {
+    it('keeps move actions queued until the turn store advances them', () => {
       const store = useAgentStore()
+      const turnStore = useTurnStore()
       store.setAgents(sampleAgents)
       store.onAction(makeMsg({ type: 'agent_action', data: { agent_id: 'a1', action: { type: 'move', location: 'beach' }, summary: '' } }))
       const agent = store.getAgent('a1')!
-      expect(agent.location).toBe('beach')
-      expect(agent.status).toBe('moving')
+      expect(agent.location).toBe('town_square')
+      expect(agent.status).toBe('idle')
+      expect(turnStore.activeTurn?.targetLocation).toBe('beach')
     })
   })
 

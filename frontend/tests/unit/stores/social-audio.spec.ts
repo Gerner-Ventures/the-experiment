@@ -22,21 +22,23 @@ describe('Social store audio state tracking', () => {
       agent_name: 'Alice',
       target: 'all',
       message: 'Hello',
+      source: 'dialogue',
     }))
     expect(store.conversations).toHaveLength(1)
     expect(store.conversations[0].audioStatus).toBe('idle')
     expect(store.conversations[0].audioUrl).toBeNull()
     expect(store.conversations[0].round).toBe(1)
     expect(store.conversations[0].index).toBe(0)
+    expect(store.conversations[0].source).toBe('dialogue')
   })
 
   it('computes index as count of same-agent same-round messages', () => {
     const store = useSocialStore()
     store.onSpeak(makeMsg('agent_speak', {
-      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'First',
+      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'First', source: 'inner_thought',
     }))
     store.onSpeak(makeMsg('agent_speak', {
-      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'Second',
+      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'Second', source: 'dialogue',
     }))
     store.onSpeak(makeMsg('agent_speak', {
       agent_id: 'a2', agent_name: 'Bob', target: 'all', message: 'Hi',
@@ -62,6 +64,7 @@ describe('Social store audio state tracking', () => {
     const store = useSocialStore()
     store.onSpeak(makeMsg('agent_speak', {
       agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'Hello',
+      source: 'inner_thought',
     }))
 
     const audioMsg: WSMessage<AgentSpeechAudioData> = {
@@ -72,6 +75,7 @@ describe('Social store audio state tracking', () => {
         agent_id: 'a1',
         round: 1,
         index: 0,
+        source: 'inner_thought',
         status: 'ready',
         audio_url: 'https://example.com/audio.mp3',
       },
@@ -80,12 +84,14 @@ describe('Social store audio state tracking', () => {
 
     expect(store.conversations[0].audioStatus).toBe('ready')
     expect(store.conversations[0].audioUrl).toBe('https://example.com/audio.mp3')
+    expect(store.conversations[0].source).toBe('inner_thought')
   })
 
   it('onSpeechAudio handles error status', () => {
     const store = useSocialStore()
     store.onSpeak(makeMsg('agent_speak', {
       agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'Hello',
+      source: 'dialogue',
     }))
 
     const audioMsg: WSMessage<AgentSpeechAudioData> = {
@@ -127,10 +133,10 @@ describe('Social store audio state tracking', () => {
     const store = useSocialStore()
     // Two messages from same agent in same round
     store.onSpeak(makeMsg('agent_speak', {
-      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'First',
+      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'First', source: 'inner_thought',
     }))
     store.onSpeak(makeMsg('agent_speak', {
-      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'Second',
+      agent_id: 'a1', agent_name: 'Alice', target: 'all', message: 'Second', source: 'dialogue',
     }))
 
     // Update only the second one
@@ -142,6 +148,7 @@ describe('Social store audio state tracking', () => {
         agent_id: 'a1',
         round: 1,
         index: 1,
+        source: 'dialogue',
         status: 'ready',
         audio_url: 'https://example.com/audio2.mp3',
       },
