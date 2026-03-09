@@ -4,6 +4,11 @@ import type {
   AgentSpeakData,
   AgentSpeechAudioData,
   AgentSpeechSource,
+  ExileResultData,
+  MeetingResultData,
+  MeetingSpeechData,
+  MeetingStartData,
+  MeetingVoteData,
   WSMessage,
 } from '@/types/websocket'
 import { useTurnStore } from '@/stores/turn'
@@ -135,8 +140,8 @@ export const useSocialStore = defineStore('social', () => {
   // but each speech/vote also becomes a turn so animations and bubbles
   // are paced correctly.
 
-  function onMeetingStart(msg: WSMessage) {
-    const data = msg.data as { proposal: string }
+  function onMeetingStart(msg: WSMessage<MeetingStartData>) {
+    const data = msg.data
     // Initialize meeting state — the MeetingScene reacts to this
     meeting.value = {
       proposal: data.proposal,
@@ -153,8 +158,8 @@ export const useSocialStore = defineStore('social', () => {
     console.debug('[Social] Meeting started:', data.proposal)
   }
 
-  function onMeetingSpeech(msg: WSMessage) {
-    const data = msg.data as { agent_id: string; agent_name?: string; content: string; text?: string; stance?: string }
+  function onMeetingSpeech(msg: WSMessage<MeetingSpeechData>) {
+    const data = msg.data
     const agentName = data.agent_name ?? data.agent_id
     // Accept both 'content' (correct) and 'text' (legacy) field names
     const speechText = data.content || data.text || ''
@@ -189,8 +194,8 @@ export const useSocialStore = defineStore('social', () => {
     })
   }
 
-  function onMeetingVote(msg: WSMessage) {
-    const data = msg.data as { agent_id: string; agent_name?: string; vote: string }
+  function onMeetingVote(msg: WSMessage<MeetingVoteData>) {
+    const data = msg.data
     const agentName = data.agent_name ?? data.agent_id
 
     // Record vote in meeting state
@@ -211,13 +216,8 @@ export const useSocialStore = defineStore('social', () => {
     })
   }
 
-  function onMeetingResult(msg: WSMessage) {
-    const data = msg.data as {
-      summary: string
-      votes: Record<string, string>
-      tally?: Record<string, number>
-      passed?: boolean
-    }
+  function onMeetingResult(msg: WSMessage<MeetingResultData>) {
+    const data = msg.data
     if (meeting.value) {
       meeting.value.result = data.summary
       meeting.value.votes = data.votes
@@ -245,14 +245,14 @@ export const useSocialStore = defineStore('social', () => {
     exileEvents.value.push({ ...msg.data as Record<string, unknown>, phase: 'vote' })
   }
 
-  function onExileResult(msg: WSMessage) {
-    const data = msg.data as Record<string, unknown>
+  function onExileResult(msg: WSMessage<ExileResultData>) {
+    const data = msg.data
     exileEvents.value.push({ ...data, phase: 'result' })
 
     // If meeting is in result phase, transition to exile
     if (meeting.value && data.exiled_agent_id) {
-      meeting.value.exileTarget = data.exiled_agent_id as string
-      meeting.value.exileOutcome = (data.outcome as string) ?? 'exiled'
+      meeting.value.exileTarget = data.exiled_agent_id
+      meeting.value.exileOutcome = data.outcome ?? 'exiled'
       meeting.value.scenePhase = 'exile'
     }
   }

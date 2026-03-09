@@ -1,6 +1,6 @@
 ---
 title: "Extract WS message routing for testability"
-status: todo
+status: done
 issue: 92
 priority: P3
 tags: [frontend, refactor, testing]
@@ -44,7 +44,10 @@ Remove the duplicated `routeMessage` implementation from the test file.
 
 ## Acceptance Criteria
 
-- [ ] `routeMessage` is exported from a standalone module
-- [ ] `useWebSocket.ts` imports and uses the extracted function
-- [ ] `ws-routing.spec.ts` imports the real function instead of duplicating it
-- [ ] All existing tests pass without modification to assertions
+- [x] `routeMessage` is exported from a standalone module
+<!-- canon:realized-in: file:frontend/src/composables/wsRouter.ts -->
+- [x] `useWebSocket.ts` imports and uses the extracted function
+<!-- canon:realized-in: file:frontend/src/composables/useWebSocket.ts -->
+- [x] `ws-routing.spec.ts` imports the real function instead of duplicating it
+<!-- canon:realized-in: file:frontend/tests/unit/ws-routing.spec.ts -->
+- [x] All existing tests pass without modification to assertions

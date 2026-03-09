@@ -1,6 +1,6 @@
 ---
 title: "[P1] Sprite action visualization during turns"
-status: todo
+status: done
 issue: 109
 priority: P1
 tags: [stream-1, frontend, pixi, animation, turn-lifecycle]
@@ -41,7 +41,7 @@ skipping the action animation entirely. Sprites are also too small to clearly re
 ## Requirements
 
 ### 1. Acting Phase in Turn Lifecycle
-<!-- status: todo -->
+<!-- status: done -->
 
 Insert a thought-first turn lifecycle where `'thinking'` precedes `'moving'`, followed by
 `'acting'`, then turn completion.
@@ -56,13 +56,15 @@ Insert a thought-first turn lifecycle where `'thinking'` precedes `'moving'`, fo
 - [x] Action phase looks up `ACTION_TO_ANIMATION[turn.actionType]` to resolve the animation
 - [x] Calls `playAction` handler with agent ID, animation name, and `onComplete` callback
 - [x] `onComplete` transitions to turn completion (`hud-only` for silent turns, immediate advance for narrated turns)
-- [ ] Actions without a meaningful animation (e.g., `move`, `rest`, `explore` — where the
-  mapped animation is `'idle'` or `'walk'`) skip directly to speech
-- [ ] Minimum acting duration of 1500ms — if animation completes sooner, hold the last
+- [x] Actions without a meaningful animation (e.g., `move`, `rest`, `explore` — where the
+  mapped animation is `'idle'` or `'walk'`) skip directly to completion
+<!-- canon:realized-in: file:frontend/src/stores/turn.ts func:startActionPhase SKIP_ACTION_PHASE guard -->
+- [x] Minimum acting duration of 1500ms — if animation completes sooner, hold the last
   meaningful pose until the floor expires
+<!-- canon:realized-in: file:frontend/src/stores/turn.ts MIN_ACTION_DURATION_MS=1500 dual gate -->
 
 ### 2. playAction Turn Handler
-<!-- status: todo -->
+<!-- status: done -->
 
 Add a `playAction` callback to the `TurnHandlers` interface so the turn store can trigger
 PixiJS animations without importing PixiJS code.
@@ -77,7 +79,7 @@ PixiJS animations without importing PixiJS code.
 - [x] Turn data model (`Turn` interface) supports optional `targetAgentId` field
 
 ### 3. Sprite Scale Increase
-<!-- status: todo -->
+<!-- status: done -->
 
 Increase agent sprite render scale so action poses are clearly readable at default zoom.
 
@@ -88,25 +90,28 @@ Increase agent sprite render scale so action poses are clearly readable at defau
 - [x] Name labels scale proportionally
 - [x] Selection ring scales proportionally
 - [x] Camera default zoom adjusted if needed to accommodate larger sprites
-- [ ] Zoom min/max bounds reviewed and adjusted if needed
+- [x] Zoom min/max bounds reviewed and adjusted if needed
+<!-- canon:realized-in: file:frontend/src/components/world/pixi/CameraController.ts MIN_ZOOM=0.3 MAX_ZOOM=3 -->
 
 ### 4. Action Label Overlay
-<!-- status: todo -->
+<!-- status: done -->
 
 Show the action type as a label near the sprite during the acting phase.
 
 **Acceptance criteria:**
-- [ ] Vue overlay component positioned using `getAgentScreenPosition()` (same pattern as
+- [x] Vue overlay component positioned using `getAgentScreenPosition()` (same pattern as
   conversation bubbles)
+<!-- canon:realized-in: file:frontend/src/components/hud/ActionLabel.vue -->
 - [x] Label shows the action type in uppercase (e.g., "STAB", "GATHER", "SABOTAGE")
 <!-- canon:realized-in:PR#134 file:frontend/src/components/hud/ActionLabel.vue -->
-- [ ] Aggressive actions (`attack`, `stab`, `shoot`, `threaten`, `poison`) use an emphasized
+- [x] Aggressive actions (`attack`, `stab`, `shoot`, `threaten`, `poison`) use an emphasized
   style (red/bold or similar)
+<!-- canon:realized-in: file:frontend/src/components/hud/ActionLabel.vue .action-label--aggressive #ff4444 -->
 - [x] Label appears when phase enters `'acting'`, disappears when phase leaves `'acting'`
 - [x] Label does not appear for skipped (no-animation) actions
 
 ### 5. Target Agent Highlighting
-<!-- status: todo -->
+<!-- status: done -->
 
 When an action has a target agent, visually highlight the target during the acting phase.
 
@@ -114,8 +119,9 @@ When an action has a target agent, visually highlight the target during the acti
 - [x] `AgentSpriteObject` supports a `setHighlight(color)` / `clearHighlight()` method
 <!-- canon:realized-in:PR#116 file:frontend/src/components/world/pixi/AgentSprite.ts -->
   (draws a colored ring, similar to the existing selection ring)
-- [ ] Target agent gets a highlight ring during the acting phase — red for aggressive actions,
+- [x] Target agent gets a highlight ring during the acting phase — red for aggressive actions,
   neutral/white for social actions
+<!-- canon:realized-in: file:frontend/src/views/SimulationView.vue watcher on turnStore.phase lines 344-364 -->
 - [x] Highlight appears at start of acting phase, fades/clears when acting phase ends
 - [x] No highlight if the action has no target
 

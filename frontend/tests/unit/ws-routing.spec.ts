@@ -3,6 +3,8 @@
  *
  * Verifies that all message types defined in WSMessageType are routed
  * to the correct store handler via the routeMessage function.
+ *
+ * Uses the real extracted routeMessage from wsRouter.ts — no duplication.
  */
 import { setActivePinia, createPinia } from 'pinia'
 import { useExperimentStore } from '@/stores/experiment'
@@ -11,49 +13,9 @@ import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
-import type { GMAudioStatusData, WSMessage, WSMessageType } from '@/types/websocket'
-
-// We can't import useWebSocket directly (it creates a real WebSocket),
-// so we re-implement routeMessage to test routing logic in isolation.
-function routeMessage(msg: WSMessage) {
-  const experimentStore = useExperimentStore()
-  const agentStore = useAgentStore()
-  const worldStore = useWorldStore()
-  const gmStore = useGMStore()
-  const socialStore = useSocialStore()
-
-  experimentStore.addEvent(msg)
-
-  const router: Partial<Record<WSMessageType, (m: WSMessage) => void>> = {
-    connected: () => { /* no-op */ },
-    round_start: (m) => experimentStore.onRoundStart(m),
-    round_end: (m) => experimentStore.onRoundEnd(m),
-    phase_change: (m) => experimentStore.onPhaseChange(m),
-    gm_plan: (m) => gmStore.onPlan(m),
-    gm_narration: (m) => gmStore.onNarration(m),
-    gm_audio_status: (m) => gmStore.onAudioStatus(m as WSMessage<GMAudioStatusData>),
-    agent_action: (m) => agentStore.onAction(m),
-    agent_speak: (m) => socialStore.onSpeak(m),
-    agent_speech_audio: (m) => socialStore.onSpeechAudio(m),
-    crisis_event: (m) => worldStore.onCrisis(m),
-    threat_update: (m) => worldStore.onThreatUpdate(m),
-    resource_update: (m) => worldStore.onResourceUpdate(m),
-    meeting_start: (m) => socialStore.onMeetingStart(m),
-    meeting_speech: (m) => socialStore.onMeetingSpeech(m),
-    meeting_vote: (m) => socialStore.onMeetingVote(m),
-    meeting_result: (m) => socialStore.onMeetingResult(m),
-    faction_update: (m) => socialStore.onFactionUpdate(m),
-    cult_activity: (m) => socialStore.onCultActivity(m),
-    exile_vote: (m) => socialStore.onExileVote(m),
-    exile_result: (m) => socialStore.onExileResult(m),
-    experiment_end: (m) => experimentStore.onEnd(m),
-  }
-
-  const handler = router[msg.type as WSMessageType]
-  if (handler) {
-    handler(msg)
-  }
-}
+import { useUIStore } from '@/stores/ui'
+import { routeMessage } from '@/composables/wsRouter'
+import type { WSMessage, WSMessageType } from '@/types/websocket'
 
 function makeMsg(type: WSMessageType, data: Record<string, unknown> = {}, phase?: string, round = 1): WSMessage {
   return { type, round, phase, timestamp: '2026-03-07T00:00:00Z', data }
@@ -213,7 +175,8 @@ describe('WebSocket message routing', () => {
     routeMessage(makeMsg('meeting_start', { proposal: 'test' }))
     routeMessage(makeMsg('meeting_result', { summary: 'Passed', votes: { a1: 'agree' } }))
     expect(socialStore.meeting!.result).toBe('Passed')
-    expect(socialStore.isMeetingActive).toBe(false)
+    // Meeting stays active until explicitly dismissed
+    expect(socialStore.isMeetingActive).toBe(true)
   })
 
   it('routes faction_update to socialStore', () => {
@@ -263,6 +226,13 @@ describe('WebSocket message routing', () => {
     const experimentStore = useExperimentStore()
     routeMessage(makeMsg('experiment_end', { summary: 'Society collapsed' }))
     expect(experimentStore.status).toBe('completed')
+  })
+
+  it('routes step_error to uiStore (clears stepping)', () => {
+    const uiStore = useUIStore()
+    uiStore.setSteppingStatus('Running...')
+    routeMessage(makeMsg('step_error', { error: 'timeout' }))
+    expect(uiStore.steppingStatus).toBe('')
   })
 
   it('ignores unknown message types gracefully', () => {

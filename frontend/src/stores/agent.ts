@@ -79,6 +79,8 @@ export const useAgentStore = defineStore('agent', () => {
       // Only skip the fallback row when the backend explicitly routed this turn through
       // the inner-thought speech pipeline. Dialogue events are tracked separately.
       fromSpeakEvent: data.speech_source === 'inner_thought',
+      isConsequence: data.is_consequence ?? false,
+      causedBy: data.caused_by,
     })
   }
 

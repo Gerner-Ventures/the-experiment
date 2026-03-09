@@ -24,6 +24,24 @@ export interface ExperimentEvent {
 
 let eventCounter = 0
 
+/** Track active polling intervals so they can be cleaned up on $reset() */
+const activeIntervals = new Set<ReturnType<typeof setInterval>>()
+
+function trackInterval(id: ReturnType<typeof setInterval>): ReturnType<typeof setInterval> {
+  activeIntervals.add(id)
+  return id
+}
+
+function clearTrackedInterval(id: ReturnType<typeof setInterval>) {
+  clearInterval(id)
+  activeIntervals.delete(id)
+}
+
+function clearAllIntervals() {
+  activeIntervals.forEach(id => clearInterval(id))
+  activeIntervals.clear()
+}
+
 export const useExperimentStore = defineStore('experiment', () => {
   const locale = useLocale()
   const id = ref<string | null>(null)
@@ -99,12 +117,12 @@ export const useExperimentStore = defineStore('experiment', () => {
       if (socialStore.isMeetingActive) {
         console.debug(`[Experiment] ${label} deferred — waiting for meeting dismissal`)
         // Poll for meeting dismissal (watch isn't available in store context)
-        const checkMeeting = setInterval(() => {
+        const checkMeeting = trackInterval(setInterval(() => {
           if (!socialStore.isMeetingActive) {
-            clearInterval(checkMeeting)
+            clearTrackedInterval(checkMeeting)
             tryProceed()
           }
-        }, 200)
+        }, 200))
         return
       }
       callback()
@@ -183,12 +201,12 @@ export const useExperimentStore = defineStore('experiment', () => {
       }
       if (socialStore.isMeetingActive) {
         // Defer HUD label until meeting dismisses
-        const check = setInterval(() => {
+        const check = trackInterval(setInterval(() => {
           if (!socialStore.isMeetingActive) {
-            clearInterval(check)
+            clearTrackedInterval(check)
             useUIStore().setSteppingStatus(labels[phase] ?? phase)
           }
-        }, 200)
+        }, 200))
       } else {
         useUIStore().setSteppingStatus(labels[phase] ?? phase)
       }
@@ -203,6 +221,7 @@ export const useExperimentStore = defineStore('experiment', () => {
   }
 
   function $reset() {
+    clearAllIntervals()
     id.value = null
     name.value = ''
     status.value = 'setup'

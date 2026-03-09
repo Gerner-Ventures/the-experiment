@@ -110,6 +110,35 @@ const filteredEvents = computed(() => {
   return result.slice(0, 200)
 })
 
+// ─── Round-grouped events ───
+
+interface RoundGroup {
+  round: number
+  phase: string | null
+  events: ExperimentEvent[]
+}
+
+const groupedEvents = computed<RoundGroup[]>(() => {
+  const events = filteredEvents.value
+  if (events.length === 0) return []
+
+  const groups: RoundGroup[] = []
+  let currentRound = -1
+
+  for (const event of events) {
+    if (event.round !== currentRound) {
+      currentRound = event.round
+      groups.push({ round: currentRound, phase: event.phase ?? null, events: [] })
+    }
+    groups[groups.length - 1].events.push(event)
+    // Track latest phase for the group header
+    if (event.phase) {
+      groups[groups.length - 1].phase = event.phase
+    }
+  }
+  return groups
+})
+
 // ─── Turn queue stats ───
 
 const queueLength = computed(() => turnStore.queue.length)
@@ -183,6 +212,14 @@ function turnPhaseLabel(phase: TurnPhase): string {
   }
 }
 
+function actionLabel(action: string): string {
+  return (locale.actions as Record<string, string>)[action] ?? action
+}
+
+function eventTypeLabel(type: string): string {
+  return (locale.eventTypes as Record<string, string>)[type] ?? type
+}
+
 function formatEventHeadline(event: ExperimentEvent): string {
   const d = event.data
   switch (event.type) {
@@ -191,9 +228,11 @@ function formatEventHeadline(event: ExperimentEvent): string {
       const loc = typeof d.action === 'object' ? (d.action as Record<string, unknown>)?.location ?? '' : ''
       const name = (d.agent_name as string) ?? (d.agent_id as string) ?? ''
       const target = typeof d.action === 'object' ? (d.action as Record<string, unknown>)?.target ?? '' : ''
-      let s = `${name} → ${action}`
-      if (target) s += ` (${target})`
-      if (loc) s += ` @ ${loc}`
+      const label = actionLabel(String(action)).toLowerCase()
+      let s = `${name} ${label}`
+      if (target) s += ` → ${target}`
+      if (loc) s += ` at ${loc}`
+      if (d.is_consequence) s = `⚡ ${s}`
       return s
     }
     case 'agent_speak': {
@@ -333,54 +372,20 @@ function getEventActionLabel(event: ExperimentEvent): string {
   switch (event.type) {
     case 'agent_action': {
       const action = typeof d.action === 'string' ? d.action : (d.action as Record<string, unknown>)?.type ?? 'action'
-      return String(action)
+      return actionLabel(String(action))
     }
-    case 'agent_speak':
-      return 'speak'
-    case 'agent_speech_audio':
-      return `audio ${(d.status as string) ?? ''}`
-    case 'phase_change':
-      return `phase → ${event.phase ?? (d.phase as string) ?? '?'}`
-    case 'round_start':
-      return `round ${event.round} start`
-    case 'round_end':
-      return `round ${event.round} end`
-    case 'gm_plan':
-      return 'gm plan'
-    case 'gm_narration':
-      return 'narration'
-    case 'gm_audio_status':
-      return `narration audio`
     case 'crisis_event':
-      return `crisis [${(d.severity as string) ?? '?'}]`
+      return `${eventTypeLabel('crisis_event')} [${(d.severity as string) ?? '?'}]`
     case 'threat_update':
-      return `threat → ${d.threat_level ?? '?'}`
-    case 'resource_update':
-      return 'resource update'
-    case 'meeting_start':
-      return 'meeting start'
-    case 'meeting_speech':
-      return 'meeting speech'
+      return `${eventTypeLabel('threat_update')} → ${d.threat_level ?? '?'}`
     case 'meeting_vote':
-      return `vote: ${(d.vote as string) ?? '?'}`
-    case 'meeting_result':
-      return 'meeting result'
-    case 'faction_update':
-      return 'faction update'
-    case 'cult_activity':
-      return 'cult activity'
+      return `${eventTypeLabel('meeting_vote')}: ${(d.vote as string) ?? '?'}`
     case 'exile_vote':
-      return `exile vote → ${(d.target as string) ?? '?'}`
-    case 'exile_result':
-      return 'exile result'
-    case 'experiment_end':
-      return 'experiment end'
-    case 'step_error':
-      return 'error'
-    case 'connected':
-      return 'connected'
+      return `${eventTypeLabel('exile_vote')} → ${(d.target as string) ?? '?'}`
+    case 'phase_change':
+      return `${eventTypeLabel('phase_change')} → ${event.phase ?? (d.phase as string) ?? '?'}`
     default:
-      return event.type
+      return eventTypeLabel(event.type)
   }
 }
 </script>
@@ -552,105 +557,117 @@ function getEventActionLabel(event: ExperimentEvent): string {
         </div>
       </div>
 
-      <!-- Event list -->
-      <div v-if="filteredEvents.length > 0" ref="scrollContainer" class="space-y-1">
-        <Collapse v-model:activeKey="expandedKeys" ghost class="event-log-collapse">
-          <CollapsePanel
-            v-for="(event, idx) in filteredEvents"
-            :key="String(event.id)"
-            class="!border-white/[0.04] !rounded !mb-1"
-          >
-            <template #header>
-              <div class="event-header-content">
-                <!-- Row 1: agent name (if any) + action label + timestamp -->
-                <div class="flex items-center gap-1.5 mb-0.5">
-                  <Typography.Text
-                    v-if="getEventAgentName(event)"
-                    class="!text-xs !text-white/70 font-semibold truncate max-w-[120px]"
-                  >
-                    {{ getEventAgentName(event) }}
-                  </Typography.Text>
-                  <Tag :color="typeColor(event.type)" class="!text-[10px] !px-1 !py-0 !leading-tight !m-0">
-                    {{ getEventActionLabel(event) }}
-                  </Tag>
-                  <Typography.Text class="!text-[10px] !text-white/25 font-mono">
-                    R{{ event.round }}
-                  </Typography.Text>
-                  <Typography.Text v-if="event.phase" class="!text-[10px] !text-white/20 font-mono">
-                    {{ event.phase }}
-                  </Typography.Text>
-                  <span class="flex-1" />
-                  <Typography.Text class="!text-[10px] !text-white/30 font-mono flex items-center gap-1">
-                    <ClockCircleOutlined class="!text-[8px]" />
-                    {{ formatReceivedTime(event.receivedAt) }}
-                  </Typography.Text>
-                  <Typography.Text
-                    v-if="formatTimeDelta(event, idx, filteredEvents)"
-                    class="!text-[10px] !text-white/10 font-mono"
-                  >
-                    {{ formatTimeDelta(event, idx, filteredEvents) }}
-                  </Typography.Text>
-                </div>
-                <!-- Row 2: detail headline -->
-                <Typography.Text class="!text-[11px] !text-white/45 block">
-                  {{ formatEventHeadline(event) }}
-                </Typography.Text>
-              </div>
-            </template>
+      <!-- Event list — grouped by round -->
+      <div v-if="filteredEvents.length > 0" ref="scrollContainer" class="space-y-3">
+        <div v-for="group in groupedEvents" :key="`r${group.round}`">
+          <!-- Round header -->
+          <div class="flex items-center gap-2 mb-1.5 px-1">
+            <div class="w-5 h-px bg-white/10" />
+            <Typography.Text class="!text-[10px] !text-white/40 font-mono uppercase tracking-widest whitespace-nowrap">
+              Round {{ group.round }}{{ group.phase ? ` — ${group.phase}` : '' }}
+            </Typography.Text>
+            <div class="flex-1 h-px bg-white/10" />
+            <Badge
+              :count="group.events.length"
+              :number-style="{ backgroundColor: '#374151', fontSize: '9px' }"
+            />
+          </div>
 
-            <!-- Expanded: full data fields -->
-            <div class="space-y-1.5 -mt-1">
-              <!-- Server timestamp -->
-              <div class="flex gap-2">
-                <Typography.Text class="!text-[10px] !text-white/25 font-mono w-28 shrink-0 text-right">
-                  server_time
-                </Typography.Text>
-                <Typography.Text class="!text-[10px] !text-white/50 font-mono">
-                  {{ event.timestamp }}
-                </Typography.Text>
-              </div>
-
-              <!-- All data fields -->
-              <template v-for="field in getDataFields(event)" :key="field.key">
-                <div class="flex gap-2">
-                  <Typography.Text
-                    class="!text-[10px] font-mono w-28 shrink-0 text-right"
-                    :class="field.important ? '!text-white/40' : '!text-white/20'"
-                  >
-                    {{ field.key }}
-                  </Typography.Text>
-                  <div class="flex-1 min-w-0">
-                    <!-- Short scalar values inline -->
+          <Collapse v-model:activeKey="expandedKeys" ghost class="event-log-collapse">
+            <CollapsePanel
+              v-for="(event, idx) in group.events"
+              :key="String(event.id)"
+              class="!border-white/[0.04] !rounded !mb-1"
+            >
+              <template #header>
+                <div class="event-header-content">
+                  <!-- Row 1: agent name (if any) + action label + timestamp -->
+                  <div class="flex items-center gap-1.5 mb-0.5">
                     <Typography.Text
-                      v-if="typeof field.value === 'string' && field.value.length <= 200"
-                      class="!text-[10px] !text-white/50 font-mono break-all"
+                      v-if="getEventAgentName(event)"
+                      class="!text-xs !text-white/70 font-semibold truncate max-w-[120px]"
                     >
-                      {{ field.value }}
+                      {{ getEventAgentName(event) }}
+                    </Typography.Text>
+                    <Tag :color="typeColor(event.type)" class="!text-[10px] !px-1 !py-0 !leading-tight !m-0">
+                      {{ getEventActionLabel(event) }}
+                    </Tag>
+                    <Typography.Text v-if="event.phase" class="!text-[10px] !text-white/20 font-mono">
+                      {{ event.phase }}
+                    </Typography.Text>
+                    <span class="flex-1" />
+                    <Typography.Text class="!text-[10px] !text-white/30 font-mono flex items-center gap-1">
+                      <ClockCircleOutlined class="!text-[8px]" />
+                      {{ formatReceivedTime(event.receivedAt) }}
                     </Typography.Text>
                     <Typography.Text
-                      v-else-if="typeof field.value === 'number' || typeof field.value === 'boolean'"
-                      class="!text-[10px] !text-amber-400/70 font-mono"
+                      v-if="formatTimeDelta(event, idx, group.events)"
+                      class="!text-[10px] !text-white/10 font-mono"
                     >
-                      {{ field.value }}
+                      {{ formatTimeDelta(event, idx, group.events) }}
                     </Typography.Text>
-                    <!-- Long strings wrapped -->
-                    <Typography.Text
-                      v-else-if="typeof field.value === 'string'"
-                      class="!text-[10px] !text-white/50 font-mono break-all"
-                    >
-                      {{ field.value }}
-                    </Typography.Text>
-                    <!-- Objects/arrays as formatted JSON -->
-                    <pre
-                      v-else
-                      class="!text-[10px] !text-white/40 font-mono bg-white/[0.02] rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-all m-0 max-h-48 overflow-y-auto"
-                    >{{ formatDataValue(field.value) }}</pre>
                   </div>
+                  <!-- Row 2: detail headline -->
+                  <Typography.Text class="!text-[11px] !text-white/45 block">
+                    {{ formatEventHeadline(event) }}
+                  </Typography.Text>
                 </div>
               </template>
-            </div>
-          </CollapsePanel>
-        </Collapse>
+
+              <!-- Expanded: full data fields -->
+              <div class="space-y-1.5 -mt-1">
+                <!-- Server timestamp -->
+                <div class="flex gap-2">
+                  <Typography.Text class="!text-[10px] !text-white/25 font-mono w-28 shrink-0 text-right">
+                    server_time
+                  </Typography.Text>
+                  <Typography.Text class="!text-[10px] !text-white/50 font-mono">
+                    {{ event.timestamp }}
+                  </Typography.Text>
+                </div>
+
+                <!-- All data fields -->
+                <template v-for="field in getDataFields(event)" :key="field.key">
+                  <div class="flex gap-2">
+                    <Typography.Text
+                      class="!text-[10px] font-mono w-28 shrink-0 text-right"
+                      :class="field.important ? '!text-white/40' : '!text-white/20'"
+                    >
+                      {{ field.key }}
+                    </Typography.Text>
+                    <div class="flex-1 min-w-0">
+                      <!-- Short scalar values inline -->
+                      <Typography.Text
+                        v-if="typeof field.value === 'string' && field.value.length <= 200"
+                        class="!text-[10px] !text-white/50 font-mono break-all"
+                      >
+                        {{ field.value }}
+                      </Typography.Text>
+                      <Typography.Text
+                        v-else-if="typeof field.value === 'number' || typeof field.value === 'boolean'"
+                        class="!text-[10px] !text-amber-400/70 font-mono"
+                      >
+                        {{ field.value }}
+                      </Typography.Text>
+                      <!-- Long strings wrapped -->
+                      <Typography.Text
+                        v-else-if="typeof field.value === 'string'"
+                        class="!text-[10px] !text-white/50 font-mono break-all"
+                      >
+                        {{ field.value }}
+                      </Typography.Text>
+                      <!-- Objects/arrays as formatted JSON -->
+                      <pre
+                        v-else
+                        class="!text-[10px] !text-white/40 font-mono bg-white/[0.02] rounded px-2 py-1 overflow-x-auto whitespace-pre-wrap break-all m-0 max-h-48 overflow-y-auto"
+                      >{{ formatDataValue(field.value) }}</pre>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </CollapsePanel>
+          </Collapse>
+        </div>
       </div>
       <Empty v-else :description="locale.log.empty" />
     </template>

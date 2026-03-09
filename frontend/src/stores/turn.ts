@@ -19,6 +19,10 @@ export interface Turn {
   thoughtSource?: AgentSpeechSource
   /** When true, the speech row was already added by agent_speak — skip addConversation */
   fromSpeakEvent?: boolean
+  /** True when this turn is a system-generated consequence, not an agent decision */
+  isConsequence?: boolean
+  /** Agent who caused this consequence (for highlighting/targeting) */
+  causedBy?: string
 }
 
 export type TurnPhase = 'idle' | 'thinking' | 'moving' | 'acting' | 'hud-only'

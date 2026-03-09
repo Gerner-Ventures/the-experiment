@@ -634,8 +634,9 @@ describe('socialStore', () => {
       }))
       expect(store.meeting!.result).toBe('Proposal passed')
       expect(store.meeting!.votes).toEqual({ a1: 'agree', a2: 'disagree' })
-      expect(store.meeting!.active).toBe(false)
-      expect(store.isMeetingActive).toBe(false)
+      // Meeting stays active until explicitly dismissed
+      expect(store.meeting!.active).toBe(true)
+      expect(store.isMeetingActive).toBe(true)
     })
   })
 

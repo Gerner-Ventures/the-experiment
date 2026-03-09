@@ -56,8 +56,9 @@ The engine's action resolution in `backend/app/engine/service.py` already proces
 > See `hd-sprite-system.md` Section 4 "Consequence Actions" for the full animation plan.
 > The HD composable system defines distinct poses for all 8 consequence types.
 
-- [ ] Add consequence animations to `ACTION_TO_ANIMATION` mapping in `frontend/src/types/sprite.ts`
-- [ ] All 8 consequences get distinct visual poses in HD sprite system:
+- [x] Add consequence animations to `ACTION_TO_ANIMATION` mapping in `frontend/src/types/sprite.ts`
+<!-- canon:realized-in: file:frontend/src/config/sprites/hd/animations.ts section:ACTION_TO_ANIMATION -->
+- [x] All 8 consequences get distinct visual poses in HD sprite system:
   - `bleeding` — injured lean + red drip pixels
   - `injured` — hunched/limping pose
   - `stunned` — swaying idle + dizzy stars circling head
@@ -68,12 +69,16 @@ The engine's action resolution in `backend/app/engine/service.py` already proces
   - `fleeing` — fast walk + panic face
 - [ ] Consequence actions render with distinct visual treatment (e.g., red flash, injury overlay)
 - [ ] Bleeding/injured states persist visually beyond the single turn (status effect indicator)
+- [x] Consequence action labels added to locale strings
+<!-- canon:realized-in: file:frontend/src/locales/en.ts section:actions -->
 
 ### Schema Updates
 
 - [x] `shared/schemas/agent_decision.json` — add consequence enum values (via backend/app/schemas/agent_decision.py)
-- [ ] `shared/schemas/ws_message.json` — add `is_consequence` field to `agent_action` payload
-- [ ] `frontend/src/types/agent-decision.ts` — sync with schema changes
+- [x] `shared/schemas/ws_message.json` — add `is_consequence` field to `agent_action` payload
+<!-- canon:realized-in: file:shared/schemas/ws_message.json -->
+- [x] `frontend/src/types/agent-decision.ts` — sync with schema changes
+<!-- canon:realized-in: file:frontend/src/types/websocket.ts interface:AgentActionData -->
 - [ ] `backend/app/db/models.py` — consider adding `INJURED`, `POISONED` to `AgentStatus` enum
 
 ## 3. Design

@@ -1,6 +1,6 @@
 ---
 title: "[P0] Wire stores & HUD to real backend data (remove mocks)"
-status: in_progress
+status: done
 issue: 42
 priority: P0
 tags: [stream-1, frontend, backend, data-wiring]
@@ -28,14 +28,19 @@ Audit all components for hardcoded/mock data and wire to real backend API/WebSoc
 
 ## Acceptance Criteria
 
-- [ ] Stores initialize from API data
+- [x] Stores initialize from API data
 <!-- specwright:realized-in:PR#69 file:frontend/src/stores/experiment.ts -->
-- [ ] HUD displays live store data
-- [ ] API endpoints match backend routes
-- [ ] WebSocket handles all message types
+- [x] HUD displays live store data
+<!-- canon:realized-in: file:frontend/src/views/SimulationView.vue (ThreatMeter, ResourceBars, RoundCounter all receive props from stores) -->
+- [x] API endpoints match backend routes
+<!-- specwright:realized-in:PR#69 -->
+- [x] WebSocket handles all message types
 <!-- specwright:realized-in:PR#69 file:frontend/tests/unit/ws-routing.spec.ts -->
-- [ ] No placeholder data in production paths
-- [ ] Demo mode still works as opt-in
+<!-- canon:realized-in: file:frontend/src/composables/wsRouter.ts (all 22 message types routed) -->
+- [x] No placeholder data in production paths
+<!-- canon:realized-in: file:frontend/src/views/SimulationView.vue (production paths load from API, no hardcoded mock data) -->
+- [x] Demo mode still works as opt-in
+<!-- canon:realized-in: file:frontend/src/views/SimulationView.vue route.params.id === 'demo' -->
 
 ## Key Files
 
