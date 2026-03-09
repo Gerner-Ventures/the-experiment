@@ -7,7 +7,7 @@ tags: [stream-1, frontend, backend, audio, tts, agents]
 
 # Agent Voice Narration
 
-When an agent's speech bubble appears during the talking phase, the dialogue should be spoken aloud
+When an agent's speech bubble appears during the talking phase, the narrated line should be spoken aloud
 using a voice unique to that character. Voice IDs are mapped per character sprite in backend config.
 
 ## Background
@@ -16,8 +16,15 @@ The backend already has ElevenLabs TTS infrastructure for GM narration (`Narrati
 `ElevenLabsNarrationProvider`). Agent speech is currently text-only — the `agent_speak` WebSocket
 event drives `ConversationBubble.vue` which displays dialogue as floating text bubbles.
 
-This spec extends TTS to agent dialogue, reusing the existing provider and adding per-character
-voice selection via `CHARACTER_VOICE_IDS` in `backend/app/core/config.py`.
+This spec extends TTS to agent speech, reusing the existing provider and adding per-character voice
+selection via `CHARACTER_VOICE_IDS` in `backend/app/core/config.py`.
+
+Current backend behavior:
+
+- action-turn narration uses the agent's `inner_thought`
+- social conversation speech uses dialogue text
+- `agent_speak` and speech metadata expose a `source` discriminator so frontend code can branch on
+  `inner_thought` vs `dialogue`
 
 ## Design Constraints
 
@@ -51,8 +58,8 @@ Files: `backend/app/api/routes/narration.py`, `backend/app/api/runtime.py`
 
 Add REST endpoints for agent speech audio:
 
-- `GET /api/experiments/{experiment_id}/agents/{agent_id}/speech` — metadata (text, voice_id,
-  status, audio_url)
+- `GET /api/experiments/{experiment_id}/agents/{agent_id}/speech` — metadata (text, source,
+  voice_id, status, audio_url)
 - `GET /api/experiments/{experiment_id}/agents/{agent_id}/speech/audio?round={n}&index={i}` —
   audio stream
 
@@ -60,7 +67,7 @@ The `round` + `index` params identify which utterance (an agent may speak multip
 
 Acceptance criteria:
 
-- [ ] speech metadata endpoint returns agent's dialogue text, resolved voice_id, and status
+- [ ] speech metadata endpoint returns agent speech text, source, resolved voice_id, and status
 - [ ] speech audio endpoint streams MP3 audio for the requested utterance
 - [ ] 404 when experiment, agent, or utterance index not found
 - [ ] 409 when audio is not yet generated
@@ -70,13 +77,15 @@ Acceptance criteria:
 
 Files: `backend/app/api/runtime.py`, `backend/app/tts/service.py`
 
-When agent decisions are resolved for a round, the runtime should kick off TTS generation for all
-agent dialogue in parallel (background tasks), before the frontend enters the talking phase.
+When agent speech events are resolved for a round, the runtime should kick off TTS generation for
+all of them in parallel (background tasks), before the frontend enters the talking phase. This
+includes both action-turn inner-thought narration and social conversation dialogue.
 
 Acceptance criteria:
 
-- [ ] agent speech audio is pregenerated when decisions are resolved for the round
+- [x] agent speech audio is pregenerated when decisions are resolved for the round
 <!-- canon:realized-in:PR#164 file:backend/app/engine/service.py -->
+<!-- canon:realized-in:PR#185 file:backend/app/api/services/streaming.py -->
 - [ ] pregeneration runs concurrently across agents (not sequential)
 - [ ] pregeneration failures are logged but do not block the round
 - [ ] generated audio is cached using the same LRU/TTL cache as GM narration

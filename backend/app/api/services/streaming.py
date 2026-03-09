@@ -230,6 +230,7 @@ class StreamingHook:
                 "round_number": round_number,
                 "index": index,
                 "text": message_text,
+                "source": str(event.data.get("source", "dialogue")),
             }
             self._broadcaster.agent_speech_log[eid].append(entry)
             new_speech_entries.append(entry)
@@ -258,6 +259,8 @@ class StreamingHook:
                     "action": turn.decision.action.model_dump(mode="json"),
                     "is_consequence": False,
                     "inner_thought": turn.decision.inner_thought,
+                    "speech_text": turn.decision.inner_thought,
+                    "speech_source": "inner_thought",
                     "dialogue": turn.decision.dialogue.message if turn.decision.dialogue else None,
                     "cooperation_intent": turn.decision.cooperation_intent,
                     "goal_progress": turn.decision.goal_progress,

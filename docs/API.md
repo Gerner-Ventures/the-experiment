@@ -376,9 +376,10 @@ Connection semantics:
 | `gm_audio_status` | `{ "status": "pending|ready|error", "narration_id": "<id>", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
-| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought"?, "cooperation_intent"?, "goal_progress"?, "is_consequence", "source_agent_id"?, "source_agent_name"?, "source_action_type"? }` and the message envelope also carries `is_consequence` |
+| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought"?, "speech_text"?, "speech_source"?, "dialogue"?, "cooperation_intent"?, "goal_progress"?, "is_consequence", "source_agent_id"?, "source_agent_name"?, "source_action_type"? }` and the message envelope also carries `is_consequence` |
+Use `speech_text` as the canonical narrated line for turn presentation; `inner_thought` is preserved as the raw decision field for compatibility and diagnostics.
 | `agent_move` | `{ "agent_id", "location" }` |
-| `agent_speak` | `{ "kind", "speaker_id", "speaker_name", "listener_id", "listener_name", "tone", "location", "trust_delta" }` |
+| `agent_speak` | Action-turn narration currently uses `{ "kind", "agent_id", "agent_name", "message", "target", "source" }` with `source="inner_thought"`. Social conversation events also include their richer conversation fields such as `speaker_id`, `speaker_name`, `listener_id`, `listener_name`, `tone`, `location`, and `trust_delta`, and set `source="dialogue"`. |
 | `meeting_start` | `{ "kind", "proposal" }` |
 | `meeting_speech` | `{ "kind", "agent_id", "agent_name", "stance", "content" }` |
 | `meeting_vote` | `{ "kind", "agent_id", "agent_name", "vote" }` |
