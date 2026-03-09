@@ -8,16 +8,16 @@ tags: [stream-1, frontend, backend, narration, audio]
 
 # Frontend Audio Narration Playback
 
-Backend narration audio is now available in PR #101. The frontend needs to consume the new
+Backend narration audio is now available in PR #101 and extended in PR #183. The frontend needs to consume the new
 narration metadata/audio endpoints and `gm_audio_status` websocket event so narration becomes
 playable in the live simulation UI.
 
 ## Backend Status
 
-Backend implementation complete (PR #101):
+Backend implementation complete (PR #101, #183):
 
-- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration` — narration metadata
-- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio` — audio stream
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration` — narration metadata with `narration_id` and versioned `audio_url`
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio?v=<narration_id>` — versioned audio stream with immutable cache headers
 - websocket `gm_audio_status` — readiness events
 - ElevenLabs TTS with in-memory caching
 - Per-map voice selection scaffolding
@@ -27,8 +27,9 @@ Backend implementation complete (PR #101):
 Important contract note:
 
 - the backend does not emit a dedicated `gm_narration` message in the active runtime path
-- narration text should come from `gm_plan.plan.narration`
+- narration text should come from resolved narration metadata when available, not only `gm_plan.plan.narration`
 - audio readiness should come from `gm_audio_status` plus `GET /narration`
+- `gm_audio_status` includes `narration_id`, so the frontend should key playback state by `(round, narration_id)`
 
 ## Current Frontend Gap
 
@@ -59,7 +60,7 @@ Changes:
 
 Add frontend helpers for:
 
-- `getRoundNarration(experimentId, roundNumber)`
+- `getRoundNarration(experimentId, roundNumber)` returning metadata with `narration_id` and versioned `audio_url`
 - normalized backend `audio_url` usage for playback
 
 The frontend should play the backend URL directly. Do not add a frontend proxy layer.
@@ -72,11 +73,12 @@ Files:
 
 Expected responsibilities:
 
-- take narration text from `gm_plan.plan.narration`
-- store narration round, text, audio URL, and audio error
+- take narration text from `GET /rounds/{round}/narration` when available and fall back to `gm_plan.plan.narration` only when metadata is unavailable
+- store narration round, `narration_id`, text, audio URL, and audio error
 - track narration audio state: `idle | pending | ready | unavailable | error`
 - hydrate from `GET /rounds/{round}/narration` when needed
 - react to websocket `gm_audio_status`
+- ignore stale `gm_audio_status` events for the same round when `narration_id` does not match
 - coordinate playback state cleanly enough that the overlay does not spawn duplicate players
 
 ### 4. Route `gm_audio_status`
@@ -114,8 +116,8 @@ already sent.
 
 Expected behavior:
 
-- if `experiment.gm_plan` exists and is applied, hydrate narration text from the plan
-- call `GET /rounds/{round}/narration` for the current round to recover readiness and `audio_url`
+- if `experiment.gm_plan` exists and is applied, use it as a fallback only until narration metadata is loaded
+- call `GET /rounds/{round}/narration` for the current round to recover resolved text, readiness, `narration_id`, and `audio_url`
 - do not rely purely on live websocket delivery
 
 ## UX Requirements
@@ -132,6 +134,7 @@ Expected behavior:
 - [ ] the frontend no longer depends on `gm_narration` for live narration text
 - [ ] `gm_plan.plan.narration` populates GM narration text
 - [ ] `GET /rounds/{round}/narration` is wired into the API client
+- [ ] the frontend treats `(round, narration_id)` as the identity for narration playback state
 - [ ] the narration overlay can play audio from backend `audio_url`
 - [x] text narration still appears immediately while audio is pending
 <!-- canon:realized-in:PR#114 file:frontend/src/components/hud/NarrationOverlay.vue -->
