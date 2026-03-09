@@ -486,6 +486,50 @@ async def test_router_receives_json_schema_dict_not_basemodel() -> None:
     assert rf["json_schema"]["name"] == "AgentDecision"
 
 
+@pytest.mark.asyncio
+async def test_retry_usage_record_includes_corrective_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Usage records should snapshot the actual messages sent, including corrective context."""
+    monkeypatch.setattr(
+        "app.llm.client.ph.capture",
+        lambda event, properties: None,
+    )
+
+    broken = _FakeResponse("openai/gpt-4o-mini", "not-json")
+    valid_content = json.dumps(
+        {
+            "inner_thought": "Fixed.",
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "Done.",
+            "cooperation_intent": "medium",
+        }
+    )
+    valid = _FakeResponse("openai/gpt-4o-mini", valid_content)
+    client = LLMClient()
+    client.router = _FakeRouter([broken, valid])
+
+    await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-usage", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    records = client.tracker.all_records()
+    assert len(records) == 2
+    # First attempt: original messages only
+    assert len(records[0].prompt_messages) == 1
+    # Second attempt: original + assistant (failed) + user (correction) = 3
+    assert len(records[1].prompt_messages) == 3
+    assert records[1].prompt_messages[-2]["role"] == "assistant"
+    assert records[1].prompt_messages[-1]["role"] == "user"
+    assert "expected schema" in records[1].prompt_messages[-1]["content"]
+
+
 def test_to_json_schema_format_raises_for_unsupported_type() -> None:
     """Unsupported response_format type raises TypeError."""
     with pytest.raises(TypeError, match="Unsupported response_format type"):

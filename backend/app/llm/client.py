@@ -93,7 +93,7 @@ class LLMClient:
                         attempt=attempt + 1,
                         max_attempts=max_attempts,
                     )
-                    self._track_usage(request, result)
+                    self._track_usage(request, result, actual_messages=messages)
                     if not is_final_attempt:
                         # Corrective retry: append the failed response and error
                         # context so the model can self-correct instead of blind replay
@@ -128,7 +128,7 @@ class LLMClient:
                 else:
                     result.parsed = parsed
 
-            self._track_usage(request, result)
+            self._track_usage(request, result, actual_messages=messages)
             break
 
         # unreachable: loop always returns via break or raises
@@ -277,8 +277,14 @@ class LLMClient:
             return payload, None
         return None, "JSON payload is not a dict"
 
-    def _track_usage(self, request: LLMRequest, result: LLMResult) -> None:
+    def _track_usage(
+        self,
+        request: LLMRequest,
+        result: LLMResult,
+        actual_messages: list[dict[str, Any]] | None = None,
+    ) -> None:
         metadata = request.metadata
+        prompt_msgs = actual_messages or list(request.messages)
         self.tracker.record(
             UsageRecord(
                 role=request.role,
@@ -287,7 +293,7 @@ class LLMClient:
                 experiment_id=_string_or_none(metadata.get("experiment_id")),
                 round_number=_int_or_none(metadata.get("round_number")),
                 agent_id=_string_or_none(metadata.get("agent_id")),
-                prompt_messages=[dict(message) for message in request.messages],
+                prompt_messages=[dict(m) for m in prompt_msgs],
                 response_content=result.content,
                 parsed_response=result.parsed,
                 raw_response=result.raw_response,
