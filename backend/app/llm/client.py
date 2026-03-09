@@ -78,7 +78,7 @@ class LLMClient:
             )
 
             if request.response_format is not None:
-                parsed = self._try_parse(result.content, request.response_format)
+                parsed, parse_error = self._try_parse(result.content, request.response_format)
                 if parsed is None:
                     is_final_attempt = attempt == max_attempts - 1
                     log.warning(
@@ -86,7 +86,7 @@ class LLMClient:
                         role=request.role,
                         model=result.model,
                         experiment_id=request.metadata.get("experiment_id"),
-                        content_preview=result.content,
+                        content_preview=result.content[:1000],
                         finish_reason=finish_reason,
                         completion_tokens=result.usage.completion_tokens,
                         max_tokens_requested=request.max_tokens,
@@ -97,6 +97,7 @@ class LLMClient:
                     if not is_final_attempt:
                         # Corrective retry: append the failed response and error
                         # context so the model can self-correct instead of blind replay
+                        error_hint = f" Validation error: {parse_error}" if parse_error else ""
                         messages.append({"role": "assistant", "content": result.content})
                         messages.append(
                             {
@@ -104,6 +105,7 @@ class LLMClient:
                                 "content": (
                                     "Your JSON response could not be parsed. "
                                     "Please return valid JSON matching the expected schema."
+                                    f"{error_hint}"
                                 ),
                             }
                         )
@@ -121,7 +123,7 @@ class LLMClient:
                     )
                     raise ValueError(
                         f"model response did not match expected structured format. "
-                        f"Raw content: {result.content}"
+                        f"Raw content: {result.content[:1000]}"
                     )
                 else:
                     result.parsed = parsed
@@ -201,7 +203,12 @@ class LLMClient:
         try:
             cost = litellm.cost_calculator.completion_cost(completion_response=response)
             return round(float(cost), 6)
-        except Exception:
+        except (ValueError, KeyError, TypeError) as exc:
+            log.warning(
+                "cost_calculation_failed",
+                error=str(exc),
+                model=getattr(response, "model", "unknown"),
+            )
             return 0.0
 
     @staticmethod
@@ -229,24 +236,46 @@ class LLMClient:
                     "strict": True,
                 },
             }
-        return response_format
+        raise TypeError(
+            f"Unsupported response_format type: {type(response_format).__name__}. "
+            f"Expected dict, BaseModel subclass, or None."
+        )
 
     @staticmethod
     def _try_parse(
         content: str,
         response_format: dict[str, Any] | type[BaseModel],
-    ) -> dict[str, Any] | None:
+    ) -> tuple[dict[str, Any] | None, str | None]:
+        """Try to parse content against the response format.
+
+        Returns (parsed_dict, error_detail). On success error_detail is None.
+        """
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             try:
-                return response_format.model_validate_json(content).model_dump(mode="json")
-            except (ValidationError, ValueError):
-                return None
+                return response_format.model_validate_json(content).model_dump(mode="json"), None
+            except ValidationError as exc:
+                log.warning(
+                    "llm_pydantic_validation_failed",
+                    schema=response_format.__name__,
+                    errors=exc.error_count(),
+                    detail=str(exc),
+                )
+                return None, str(exc)
+            except ValueError as exc:
+                log.warning(
+                    "llm_json_decode_failed",
+                    schema=response_format.__name__,
+                    error=str(exc),
+                )
+                return None, str(exc)
 
         try:
             payload = json.loads(content)
-        except json.JSONDecodeError:
-            return None
-        return payload if isinstance(payload, dict) else None
+        except json.JSONDecodeError as exc:
+            return None, str(exc)
+        if isinstance(payload, dict):
+            return payload, None
+        return None, "JSON payload is not a dict"
 
     def _track_usage(self, request: LLMRequest, result: LLMResult) -> None:
         metadata = request.metadata

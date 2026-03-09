@@ -416,12 +416,12 @@ async def test_corrective_retry_includes_error_context(
     # Verify the retry included corrective context in messages
     retry_call = fake_router.calls[1]
     retry_messages = retry_call["messages"]
-    # Should have: system, assistant (failed response), user (correction)
-    assert len(retry_messages) == 3
-    assert retry_messages[1]["role"] == "assistant"
-    assert retry_messages[1]["content"] == "not-json-at-all"
-    assert retry_messages[2]["role"] == "user"
-    assert "expected schema" in retry_messages[2]["content"]
+    # Last two messages should be: assistant (failed response), user (correction with error detail)
+    assert retry_messages[-2]["role"] == "assistant"
+    assert retry_messages[-2]["content"] == "not-json-at-all"
+    assert retry_messages[-1]["role"] == "user"
+    assert "expected schema" in retry_messages[-1]["content"]
+    assert "Validation error:" in retry_messages[-1]["content"]
     assert len(captured_events) == 0  # No PostHog event on successful retry
 
 
@@ -484,6 +484,45 @@ async def test_router_receives_json_schema_dict_not_basemodel() -> None:
     assert isinstance(rf, dict)
     assert rf["type"] == "json_schema"
     assert rf["json_schema"]["name"] == "AgentDecision"
+
+
+def test_add_additional_properties_false_handles_anyof_variants() -> None:
+    """anyOf variants with object types get additionalProperties: false."""
+    from app.llm.client import _add_additional_properties_false
+
+    schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "field": {
+                "anyOf": [
+                    {"type": "object", "properties": {"x": {"type": "string"}}},
+                    {"type": "null"},
+                ]
+            }
+        },
+    }
+    _add_additional_properties_false(schema)
+
+    assert schema["additionalProperties"] is False
+    variants = schema["properties"]["field"]["anyOf"]
+    assert variants[0]["additionalProperties"] is False
+    assert "additionalProperties" not in variants[1]  # null type unchanged
+
+
+def test_add_additional_properties_false_handles_array_items() -> None:
+    """Array items with object types get additionalProperties: false."""
+    from app.llm.client import _add_additional_properties_false
+
+    schema: dict[str, Any] = {
+        "type": "array",
+        "items": {
+            "type": "object",
+            "properties": {"name": {"type": "string"}},
+        },
+    }
+    _add_additional_properties_false(schema)
+
+    assert schema["items"]["additionalProperties"] is False
 
 
 def client_request(
