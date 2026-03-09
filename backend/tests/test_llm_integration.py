@@ -486,6 +486,42 @@ async def test_router_receives_json_schema_dict_not_basemodel() -> None:
     assert rf["json_schema"]["name"] == "AgentDecision"
 
 
+def test_to_json_schema_format_raises_for_unsupported_type() -> None:
+    """Unsupported response_format type raises TypeError."""
+    with pytest.raises(TypeError, match="Unsupported response_format type"):
+        LLMClient._to_json_schema_format("not_a_valid_format")  # type: ignore[arg-type]
+
+
+def test_try_parse_returns_error_for_invalid_json_with_dict_format() -> None:
+    """Dict response_format path: invalid JSON returns error detail."""
+    parsed, error = LLMClient._try_parse("not-json", {"type": "json_object"})
+    assert parsed is None
+    assert error is not None
+
+
+def test_try_parse_returns_error_for_non_dict_json_with_dict_format() -> None:
+    """Dict response_format path: JSON array returns error detail."""
+    parsed, error = LLMClient._try_parse("[1, 2, 3]", {"type": "json_object"})
+    assert parsed is None
+    assert error == "JSON payload is not a dict"
+
+
+def test_try_parse_succeeds_with_dict_format() -> None:
+    """Dict response_format path: valid JSON dict returns parsed result."""
+    parsed, error = LLMClient._try_parse('{"a": 1}', {"type": "json_object"})
+    assert parsed == {"a": 1}
+    assert error is None
+
+
+def test_try_parse_returns_error_for_malformed_json_with_basemodel() -> None:
+    """BaseModel path: content that is not valid JSON hits ValueError branch."""
+    # Use a string that json.loads would reject but isn't caught by ValidationError
+    # model_validate_json raises ValueError for non-JSON content
+    parsed, error = LLMClient._try_parse("totally not json {{{", AgentDecision)
+    assert parsed is None
+    assert error is not None
+
+
 def test_add_additional_properties_false_handles_anyof_variants() -> None:
     """anyOf variants with object types get additionalProperties: false."""
     from app.llm.client import _add_additional_properties_false
