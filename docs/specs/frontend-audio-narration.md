@@ -60,7 +60,7 @@ Changes:
 
 Add frontend helpers for:
 
-- `getRoundNarration(experimentId, roundNumber)` returning metadata with `narration_id` and versioned `audio_url`
+- `getRoundNarration(experimentId, roundNumber)` returning metadata with `narration_id` and versioned `audio_url` returning metadata with `narration_id` and versioned `audio_url`
 - normalized backend `audio_url` usage for playback
 
 The frontend should play the backend URL directly. Do not add a frontend proxy layer.
@@ -130,7 +130,8 @@ Expected behavior:
 
 ## Acceptance Criteria
 
-- [ ] `gm_audio_status` is added to frontend websocket types and routed correctly
+- [x] `gm_audio_status` is added to frontend websocket types and routed correctly
+<!-- canon:realized-in:PR#183 file:backend/app/api/services/audio.py -->
 - [ ] the frontend no longer depends on `gm_narration` for live narration text
 - [ ] `gm_plan.plan.narration` populates GM narration text
 - [ ] `GET /rounds/{round}/narration` is wired into the API client
