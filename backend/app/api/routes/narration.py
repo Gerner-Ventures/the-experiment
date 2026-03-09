@@ -40,16 +40,29 @@ async def get_round_narration_audio(
     experiment_id: str,
     round_number: int,
     request: Request,
+    v: str | None = Query(None, description="Narration version from metadata"),
 ) -> StreamingResponse:
     runtime = _runtime_from_request(request)
     await _get_state(runtime, experiment_id)
     try:
-        content_type, stream = await runtime.get_narration_audio_stream(experiment_id, round_number)
+        content_type, stream, narration_id = await runtime.get_narration_audio_stream(
+            experiment_id,
+            round_number,
+            version=v,
+        )
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="Round not found") from exc
     except NarrationAudioError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    return StreamingResponse(stream, media_type=content_type)
+    cache_control = "public, max-age=31536000, immutable" if v else "no-store"
+    return StreamingResponse(
+        stream,
+        media_type=content_type,
+        headers={
+            "Cache-Control": cache_control,
+            "ETag": f'"{narration_id}"',
+        },
+    )
 
 
 @router.get(

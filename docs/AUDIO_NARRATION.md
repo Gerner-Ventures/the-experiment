@@ -62,7 +62,7 @@ flowchart LR
 4. A background prewarm task asks `NarrationTTSService` to fetch and cache the audio.
 5. The frontend can call:
    - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
-   - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
+   - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio?v=<narration_id>`
 6. If the audio is cached, the backend streams cached bytes. Otherwise it proxies the ElevenLabs
    stream, yields chunks to the client, and stores the completed audio in memory.
 
@@ -80,6 +80,7 @@ That allows audio playback for both in-progress and already-completed rounds.
 `NarrationTTSService` owns app-level behavior:
 
 - build stable audio requests
+- expose a public-safe `narration_id` derived from the resolved audio inputs
 - select the voice for the current map
 - compute cache keys
 - manage inflight generation and cache population
@@ -107,7 +108,7 @@ That allows audio playback for both in-progress and already-completed rounds.
 Dedicated experiment-scoped routes expose the feature:
 
 - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
-- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio?v=<narration_id>`
 
 ## Cache And Persistence
 
@@ -117,7 +118,8 @@ Cache behavior:
 
 - cache is in-process only
 - cache uses a TTL/LRU policy
-- cache key includes:
+- `narration_id` is the public version identifier and is derived from the same inputs as the cache key
+- the underlying cache key includes:
   - experiment id
   - round number
   - narration text
@@ -131,6 +133,8 @@ Implications:
 - repeated requests for the same narration on the same backend process are fast
 - a backend restart drops cached audio
 - replay remains possible because narration text is persisted, even though audio is not
+- changing narration text, narrator voice, model, output format, or voice settings changes the
+  `narration_id` and therefore changes the browser-visible audio URL too
 
 ## Voice Selection
 
@@ -184,11 +188,26 @@ The backend does not disable TLS verification.
 
 Payload shape:
 
-- `pending`: narration exists, but audio is not cached yet
-- `ready`: audio can be fetched from the backend audio URL
-- `error`: generation failed and the frontend should fall back to text-only narration
+- `pending`: `{ "status": "pending", "narration_id": "<id>" }`
+- `ready`: `{ "status": "ready", "narration_id": "<id>", "audio_url": "..." }`
+- `error`: `{ "status": "error", "narration_id": "<id>", "error": "..." }`
 
 The websocket never carries audio bytes.
+
+Metadata contract:
+
+- `GET /narration` always returns the exact resolved narration text for the round
+- when TTS is configured, metadata also returns `narration_id` and a versioned `audio_url`
+- when TTS is unavailable, metadata still returns the text with `status: unavailable` so the
+  frontend can render text-only fallback without a second source of truth
+
+Audio cache semantics:
+
+- versioned `GET /narration/audio?v=<narration_id>` responses are safe to cache with
+  `Cache-Control: public, max-age=31536000, immutable`
+- unversioned `GET /narration/audio` responses return `Cache-Control: no-store`
+- a stale `v` value is rejected with `409` because the route only serves the currently resolved
+  narration for that round
 
 ## Error Mapping
 
@@ -221,8 +240,9 @@ curl -s "http://127.0.0.1:8000/api/experiments/$EXP_ID/rounds/1/narration" | jq
 5. Fetch and play the audio:
 
 ```bash
+NARRATION_URL="$(curl -s "http://127.0.0.1:8000/api/experiments/$EXP_ID/rounds/1/narration" | jq -r '.audio_url')"
 curl -sS -D - \
-  "http://127.0.0.1:8000/api/experiments/$EXP_ID/rounds/1/narration/audio" \
+  "http://127.0.0.1:8000${NARRATION_URL}" \
   -o /tmp/narration.mp3
 file /tmp/narration.mp3
 afplay /tmp/narration.mp3
