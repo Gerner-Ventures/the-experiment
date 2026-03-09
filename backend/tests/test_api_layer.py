@@ -603,6 +603,7 @@ def test_round_narration_metadata_and_audio_routes(client: TestClient) -> None:
     )
     assert unversioned_audio.status_code == 200
     assert unversioned_audio.headers["cache-control"] == "no-store"
+    assert "etag" not in unversioned_audio.headers
 
 
 def test_pending_plan_narration_preview_and_audio_are_available_before_approval(
@@ -741,6 +742,21 @@ def test_round_narration_audio_rejects_stale_version(
         params={"v": stale_version},
     )
     assert audio.status_code == 409
+
+
+def test_round_narration_audio_rejects_oversized_version(
+    client: TestClient,
+) -> None:
+    created = client.post(f"{API_PREFIX}/experiments", json=_payload())
+    experiment_id = created.json()["experiment_id"]
+    approved = client.post(f"{API_PREFIX}/experiments/{experiment_id}/gm/approve", json={})
+    assert approved.status_code == 200
+
+    audio = client.get(
+        f"{API_PREFIX}/experiments/{experiment_id}/rounds/1/narration/audio",
+        params={"v": "x" * 65},
+    )
+    assert audio.status_code == 422
 
 
 def test_derived_round_logs_are_persisted(client: TestClient) -> None:

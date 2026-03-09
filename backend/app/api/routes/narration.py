@@ -40,7 +40,11 @@ async def get_round_narration_audio(
     experiment_id: str,
     round_number: int,
     request: Request,
-    v: str | None = Query(None, description="Narration version from metadata"),
+    v: str | None = Query(
+        None,
+        max_length=64,
+        description="Narration version from metadata",
+    ),
 ) -> StreamingResponse:
     runtime = _runtime_from_request(request)
     await _get_state(runtime, experiment_id)
@@ -55,13 +59,13 @@ async def get_round_narration_audio(
     except NarrationAudioError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     cache_control = "public, max-age=31536000, immutable" if v else "no-store"
+    headers = {"Cache-Control": cache_control}
+    if v:
+        headers["ETag"] = f'"{narration_id}"'
     return StreamingResponse(
         stream,
         media_type=content_type,
-        headers={
-            "Cache-Control": cache_control,
-            "ETag": f'"{narration_id}"',
-        },
+        headers=headers,
     )
 
 
