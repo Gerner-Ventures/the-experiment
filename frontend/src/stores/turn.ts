@@ -123,6 +123,11 @@ export const useTurnStore = defineStore('turn', () => {
     const turn = activeTurn.value
     if (!turn || !turn.thought) return
 
+    if (thoughtTimer) {
+      clearTimeout(thoughtTimer)
+      thoughtTimer = null
+    }
+
     phase.value = 'thinking'
     handlers?.updateAgent(turn.agentId, 'thinking')
     if (!turn.fromSpeakEvent) {
@@ -142,8 +147,18 @@ export const useTurnStore = defineStore('turn', () => {
 
   function completeThoughtPhase(turnId?: number) {
     const turn = activeTurn.value
-    if (!turn || phase.value !== 'thinking') return
-    if (turnId != null && turn.id !== turnId) return
+    if (!turn) {
+      console.debug('[Turn] Ignoring thought completion with no active turn')
+      return
+    }
+    if (phase.value !== 'thinking') {
+      console.debug(`[Turn] Ignoring thought completion outside thinking phase: ${phase.value}`)
+      return
+    }
+    if (turnId != null && turn.id !== turnId) {
+      console.debug(`[Turn] Ignoring stale thought completion for turn ${turnId}; active is ${turn.id}`)
+      return
+    }
 
     if (thoughtTimer) {
       clearTimeout(thoughtTimer)
@@ -167,8 +182,11 @@ export const useTurnStore = defineStore('turn', () => {
       phase.value = 'moving'
       console.debug(`[Turn] Moving ${turn.agentName}: ${currentLocation} → ${turn.targetLocation}`)
       handlers.move(turn.agentId, turn.targetLocation!, () => {
-        if (activeTurn.value?.id !== turnId) return
         handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
+        if (activeTurn.value?.id !== turnId) {
+          console.debug(`[Turn] Ignoring stale movement completion for turn ${turnId}`)
+          return
+        }
         startActionPhase()
       })
       return
@@ -201,14 +219,20 @@ export const useTurnStore = defineStore('turn', () => {
 
     const proceed = () => {
       if (animDone && floorDone) {
-        if (activeTurn.value?.id !== turnId) return
+        if (activeTurn.value?.id !== turnId) {
+          console.debug(`[Turn] Ignoring stale action completion for turn ${turnId}`)
+          return
+        }
         completeTurnPhase()
       }
     }
 
     if (handlers) {
       handlers.playAction(turn.agentId, animation, () => {
-        if (activeTurn.value?.id !== turnId) return
+        if (activeTurn.value?.id !== turnId) {
+          console.debug(`[Turn] Ignoring stale action callback for turn ${turnId}`)
+          return
+        }
         animDone = true
         proceed()
       })

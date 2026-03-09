@@ -130,4 +130,5 @@ describe('turn store sequencing', () => {
 
     expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'moving', 'forest')
   })
+
 })

@@ -176,4 +176,28 @@ describe('useTurnStore', () => {
     expect(store.activeTurn).toBeNull()
     expect(handlers.updateAgent).toHaveBeenCalledTimes(1)
   })
+
+  it('waits for both animation completion and the floor timer before advancing', () => {
+    let finishAction: (() => void) | null = null
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers({
+      playAction: jest.fn((_id, _anim, cb) => { finishAction = cb }),
+      getAgentLocation: jest.fn(() => 'camp'),
+    }))
+
+    store.enqueue(makeTurn({
+      actionType: 'stab',
+      thought: 'Strike now.',
+      targetLocation: 'camp',
+    }))
+
+    store.notifyAudioComplete(store.activeTurn!.id)
+    expect(store.phase).toBe('acting')
+
+    finishAction!()
+    expect(store.phase).toBe('acting')
+
+    jest.advanceTimersByTime(1500)
+    expect(store.phase).toBe('idle')
+  })
 })

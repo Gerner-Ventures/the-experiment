@@ -291,6 +291,8 @@ round).
 
 - Action turns render `inner_thought` first during a dedicated `thinking` phase, then
   movement/action continues after that narration completes or times out
+- The turn store guards bubble completion by turn ID so audio-end and dismiss cannot double-advance
+  a narrated action turn
 - Dialogue events remain tagged as dialogue speech and do not replace action-turn inner thoughts
 
 - If audio is `ready` on mount: plays immediately

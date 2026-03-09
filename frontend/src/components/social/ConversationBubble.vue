@@ -115,8 +115,13 @@ function tryPlay() {
           dismissTimer = null
         }
       })
-      .catch(() => {
-        autoplayBlocked.value = true
+      .catch((err: unknown) => {
+        const errName = err instanceof Error ? err.name : ''
+        if (errName === 'NotAllowedError') {
+          autoplayBlocked.value = true
+          return
+        }
+        autoplayBlocked.value = false
         isPlaying.value = false
       })
   }

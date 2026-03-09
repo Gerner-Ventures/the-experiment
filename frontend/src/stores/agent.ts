@@ -64,7 +64,7 @@ export const useAgentStore = defineStore('agent', () => {
     const speechText = normalizeLine(data.speech_text)
     const thought = data.speech_source === 'inner_thought'
       ? speechText ?? innerThought
-      : innerThought ?? speechText
+      : innerThought
 
     console.debug(`[AgentStore] onAction: ${agentName} → ${actionType}${targetLocation ? ` @ ${targetLocation}` : ''}`)
 
@@ -75,7 +75,7 @@ export const useAgentStore = defineStore('agent', () => {
       actionType,
       targetLocation,
       thought,
-      thoughtSource: 'inner_thought',
+      thoughtSource: data.speech_source ?? 'inner_thought',
       // Only skip the fallback row when the backend explicitly routed this turn through
       // the inner-thought speech pipeline. Dialogue events are tracked separately.
       fromSpeakEvent: data.speech_source === 'inner_thought',

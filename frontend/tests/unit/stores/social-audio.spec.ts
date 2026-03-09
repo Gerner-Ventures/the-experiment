@@ -113,6 +113,7 @@ describe('Social store audio state tracking', () => {
 
   it('onSpeechAudio does not crash when no matching entry exists', () => {
     const store = useSocialStore()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
     const audioMsg: WSMessage<AgentSpeechAudioData> = {
       type: 'agent_speech_audio',
       round: 1,
@@ -127,6 +128,8 @@ describe('Social store audio state tracking', () => {
     }
     // Should not throw
     expect(() => store.onSpeechAudio(audioMsg)).not.toThrow()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
   })
 
   it('onSpeechAudio matches correct entry by agent+round+index', () => {

@@ -108,6 +108,27 @@ describe('agent store', () => {
       expect(turnStore.activeTurn?.thought).toBe('Stay calm.')
       expect(turnStore.activeTurn?.fromSpeakEvent).toBe(false)
     })
+
+    it('does not treat dialogue speech_text as an inner thought', () => {
+      const store = useAgentStore()
+      const turnStore = useTurnStore()
+      store.setAgents([makeRawAgent()])
+
+      store.onAction({
+        type: 'agent_action',
+        round: 3,
+        timestamp: '2026-03-08T00:00:00Z',
+        data: {
+          agent_id: 'agent-1',
+          action: 'talk',
+          speech_text: 'Spoken dialogue only.',
+          speech_source: 'dialogue',
+        },
+      })
+
+      expect(turnStore.activeTurn?.thought).toBeUndefined()
+      expect(turnStore.activeTurn?.thoughtSource).toBe('dialogue')
+    })
   })
 
   describe('updateAgentStatus', () => {

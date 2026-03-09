@@ -85,6 +85,23 @@ const activeBubbleAudio = computed(() => {
       return conversation
     }
   }
+  console.warn('[Simulation] Missing audio match for active turn bubble', {
+    agentId: turn.agentId,
+    round: turn.round,
+    source: turn.thoughtSource ?? 'inner_thought',
+    thought: turn.thought,
+  })
+  return null
+})
+
+const activeDialogueBubble = computed(() => {
+  if (turnStore.phase === 'thinking') return null
+  for (let i = socialStore.conversations.length - 1; i >= 0; i--) {
+    const conversation = socialStore.conversations[i]
+    if (conversation.source === 'dialogue') {
+      return conversation
+    }
+  }
   return null
 })
 
@@ -481,6 +498,20 @@ function goBack() {
           :audio-url="activeBubbleAudio?.audioUrl ?? null"
           @dismiss="turnStore.onBubbleDismissed($event)"
           @audio-end="turnStore.notifyAudioComplete($event)"
+        />
+
+        <ConversationBubble
+          v-else-if="activeDialogueBubble"
+          :key="`dialogue-${activeDialogueBubble.id}`"
+          class="pointer-events-auto"
+          :turn-id="activeDialogueBubble.id"
+          :agent-name="activeDialogueBubble.agentName"
+          :message="activeDialogueBubble.message"
+          :agent-id="activeDialogueBubble.agentId"
+          variant="dialogue"
+          :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
+          :audio-status="activeDialogueBubble.audioStatus"
+          :audio-url="activeDialogueBubble.audioUrl"
         />
       </div>
     </div>

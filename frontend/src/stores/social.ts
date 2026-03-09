@@ -99,6 +99,8 @@ export const useSocialStore = defineStore('social', () => {
     if (entry) {
       entry.audioStatus = data.status
       entry.audioUrl = data.audio_url ?? null
+    } else {
+      console.warn('[Social] Missing conversation entry for audio update', data)
     }
   }
 
