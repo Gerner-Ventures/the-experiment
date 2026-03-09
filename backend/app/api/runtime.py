@@ -103,6 +103,8 @@ class ExperimentRuntime:
         self._steps_in_progress: dict[str, bool] = {}
         self._current_tasks: dict[str, asyncio.Task[None]] = {}
         self._agent_speech_log: dict[str, list[AgentSpeechEntry]] = defaultdict(list)
+        # While a background step is in flight, narration/audio readers should
+        # prefer this mutable in-memory state over the persisted store.
         self._live_states: dict[str, SimulationState] = {}
         self.event_log = RuntimeEventLogService(store=self.store)
         self.analytics = RuntimeAnalyticsService(

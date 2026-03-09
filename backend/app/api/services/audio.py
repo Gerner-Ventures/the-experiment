@@ -38,6 +38,9 @@ class RuntimeAudioService:
         self.tts_service = tts_service
         self.agent_speech_log = agent_speech_log
         self.message_builder = message_builder
+        # Shared throttle across all experiments on this runtime. Keeping agent
+        # speech prewarm globally bounded avoids provider-side concurrency limits.
+        # This is intentionally separate from the per-batch sequential loop below.
         self._agent_speech_prewarm_semaphore = asyncio.Semaphore(
             AGENT_SPEECH_PREWARM_MAX_CONCURRENCY
         )
