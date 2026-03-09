@@ -183,7 +183,7 @@ Rules for `feedback`:
 Each generated or revised pending draft can be previewed through:
 
 - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
-- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio`
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio?v=<narration_id>`
 
 Approve the cached plan as-is:
 
@@ -373,12 +373,13 @@ Connection semantics:
 | `connected` | `{ "experiment_id": "<id>" }` |
 | `round_start` | `{ "theme": "<round theme>" }` |
 | `gm_plan` | Full `GMPlanRecord` payload |
-| `gm_audio_status` | `{ "status": "pending|ready|error", "audio_url"?, "error"? }` |
+| `gm_audio_status` | `{ "status": "pending|ready|error", "narration_id": "<id>", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |
-| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought"?, "cooperation_intent"?, "goal_progress"?, "is_consequence", "source_agent_id"?, "source_agent_name"?, "source_action_type"? }` and the message envelope also carries `is_consequence` |
+| `agent_action` | `{ "agent_id", "agent_name", "action", "inner_thought"?, "speech_text"?, "speech_source"?, "dialogue"?, "cooperation_intent"?, "goal_progress"?, "is_consequence", "source_agent_id"?, "source_agent_name"?, "source_action_type"? }` and the message envelope also carries `is_consequence` |
+Use `speech_text` as the canonical narrated line for turn presentation; `inner_thought` is preserved as the raw decision field for compatibility and diagnostics.
 | `agent_move` | `{ "agent_id", "location" }` |
-| `agent_speak` | `{ "kind", "speaker_id", "speaker_name", "listener_id", "listener_name", "tone", "location", "trust_delta" }` |
+| `agent_speak` | Action-turn narration currently uses `{ "kind", "agent_id", "agent_name", "message", "target", "source" }` with `source="inner_thought"`. Social conversation events also include their richer conversation fields such as `speaker_id`, `speaker_name`, `listener_id`, `listener_name`, `tone`, `location`, and `trust_delta`, and set `source="dialogue"`. |
 | `meeting_start` | `{ "kind", "proposal" }` |
 | `meeting_speech` | `{ "kind", "agent_id", "agent_name", "stance", "content" }` |
 | `meeting_vote` | `{ "kind", "agent_id", "agent_name", "vote" }` |
@@ -425,6 +426,13 @@ Analytics persistence notes:
 - Revising an already-applied GM plan returns `409 Applied GM plans cannot be revised. Generate the next upcoming plan instead.`.
 - GM revision failures return `502 GM plan revision failed.`.
 - Unconfigured ElevenLabs audio returns `503 Narration audio is not configured.`.
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration` still returns the
+  resolved narration text when TTS is unavailable; in that case the metadata status is
+  `unavailable` and `audio_url` is `null`.
+- `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio?v=<narration_id>`
+  returns cacheable audio for the currently resolved narration version.
+- A stale narration version on the audio route returns
+  `409 Narration audio version does not match the current narration.`.
 - Invalid query/body payloads return FastAPI `422 Unprocessable Entity` responses.
 
 ## Notes

@@ -31,6 +31,7 @@ class AgentSpeechEntry(TypedDict):
     round_number: int
     index: int
     text: str
+    source: str
 
 
 class CooperationMetrics(TypedDict):

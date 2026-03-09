@@ -1,14 +1,18 @@
 ---
-title: "Fix LLM Structured Output Truncation"
-type: spec
-status: in_progress
-owner: ""
-team: backend
-review_status: draft
-tags: [agents, llm, reliability, parsing]
+created: '2026-03-08'
 depends_on: []
-created: "2026-03-08"
-updated: "2026-03-08"
+owner: ''
+review_status: approved
+status: in_progress
+tags:
+- agents
+- llm
+- reliability
+- parsing
+team: backend
+title: Fix LLM Structured Output Truncation
+type: spec
+updated: '2026-03-08'
 ---
 
 # Fix LLM Structured Output Truncation
@@ -49,6 +53,7 @@ LLM response (truncated JSON, finish_reason=stop)
 - [ ] `finish_reason=length` triggers a retry with increased `max_tokens` (deferred — root cause was `maxLength` schema constraint, not token budget)
 <!-- canon:realized-in:file:backend/app/llm/client.py -->
 - [x] `finish_reason` is included in all structured parse error logs and Langfuse traces for easier debugging
+<!-- canon:realized-in:PR#174 file:backend/app/llm/client.py -->
 <!-- canon:realized-in:file:backend/app/llm/client.py -->
 - [x] A retry-on-parse-failure strategy is implemented: retry the original request (up to 1 additional attempt) before falling back to the repair path
 <!-- canon:realized-in:file:backend/app/llm/client.py -->

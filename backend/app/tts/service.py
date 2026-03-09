@@ -90,8 +90,17 @@ class NarrationTTSService:
             voice_settings=self._voice_settings(),
         )
 
-    def build_audio_url(self, experiment_id: str, round_number: int) -> str:
-        return f"/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio"
+    def build_audio_url(
+        self,
+        experiment_id: str,
+        round_number: int,
+        *,
+        narration_id: str | None = None,
+    ) -> str:
+        url = f"/api/experiments/{experiment_id}/rounds/{round_number}/narration/audio"
+        if narration_id:
+            return f"{url}?v={narration_id}"
+        return url
 
     def build_speech_request(
         self,
@@ -151,6 +160,9 @@ class NarrationTTSService:
             digest.update(b"=")
             digest.update(f"{value}".encode("utf-8"))
         return digest.hexdigest()
+
+    def narration_id(self, request: NarrationAudioRequest) -> str:
+        return self.cache_key(request)
 
     async def get_status(self, request: NarrationAudioRequest) -> tuple[str, bool]:
         if not self.configured:

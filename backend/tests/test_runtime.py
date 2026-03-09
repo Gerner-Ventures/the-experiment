@@ -291,6 +291,8 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert agent_action["data"]["agent_name"] == state.agents[0].name
     assert agent_action["data"]["action"] == turn.decision.action.model_dump(mode="json")
     assert agent_action["data"]["inner_thought"] == turn.decision.inner_thought
+    assert agent_action["data"]["speech_text"] == turn.decision.inner_thought
+    assert agent_action["data"]["speech_source"] == "inner_thought"
     assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
     assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
 
@@ -565,6 +567,19 @@ async def test_approve_gm_plan_emits_audio_status(runtime_instance: ExperimentRu
     ]
     assert applied.status == "applied"
     assert "gm_audio_status" in sent_types
+    gm_audio_messages = [
+        call.args[1]
+        for call in runtime_instance.connection_manager.broadcast.await_args_list
+        if call.args[1]["type"] == "gm_audio_status"
+    ]
+    assert gm_audio_messages
+    for message in gm_audio_messages:
+        narration_id = message["data"]["narration_id"]
+        assert narration_id
+        if message["data"]["status"] == "ready":
+            assert message["data"]["audio_url"].endswith(
+                f"/rounds/1/narration/audio?v={narration_id}"
+            )
 
 
 @pytest.mark.asyncio
