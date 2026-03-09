@@ -138,7 +138,7 @@ export const useExperimentStore = defineStore('experiment', () => {
     if (roundEndPending) return
     roundEndPending = true
 
-    const data = msg.data as RoundEndData
+    const data = msg.data as unknown as RoundEndData
     if (data.current_round != null) currentRound.value = data.current_round
     if (data.total_rounds != null) totalRounds.value = data.total_rounds
     if (data.status) status.value = data.status as ExperimentStatus
