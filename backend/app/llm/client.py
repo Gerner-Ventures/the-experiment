@@ -84,7 +84,7 @@ class LLMClient:
                         role=request.role,
                         model=result.model,
                         experiment_id=request.metadata.get("experiment_id"),
-                        content_preview=result.content[:300],
+                        content_preview=result.content,
                         finish_reason=finish_reason,
                         completion_tokens=result.usage.completion_tokens,
                         max_tokens_requested=request.max_tokens,
@@ -119,7 +119,7 @@ class LLMClient:
                     )
                     raise ValueError(
                         f"model response did not match expected structured format. "
-                        f"Raw content: {result.content[:300]}"
+                        f"Raw content: {result.content}"
                     )
                 else:
                     result.parsed = parsed
