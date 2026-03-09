@@ -87,6 +87,27 @@ describe('agent store', () => {
       expect(agent.location).toBe('town_square')
       expect(agent.status).toBe('idle')
     })
+
+    it('keeps fallback inner-thought rows enabled when only dialogue speech is present', () => {
+      const store = useAgentStore()
+      const turnStore = useTurnStore()
+      store.setAgents([makeRawAgent()])
+
+      store.onAction({
+        type: 'agent_action',
+        round: 2,
+        timestamp: '2026-03-08T00:00:00Z',
+        data: {
+          agent_id: 'agent-1',
+          action: 'talk',
+          inner_thought: 'Stay calm.',
+          dialogue: 'Hello there.',
+        },
+      })
+
+      expect(turnStore.activeTurn?.thought).toBe('Stay calm.')
+      expect(turnStore.activeTurn?.fromSpeakEvent).toBe(false)
+    })
   })
 
   describe('updateAgentStatus', () => {

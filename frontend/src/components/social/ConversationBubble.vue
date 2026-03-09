@@ -53,7 +53,11 @@ const TOTAL_LIFETIME_MS = Math.max(
 
 const displayedMessage = computed(() => props.message.slice(0, revealedChars.value))
 const isFullyRevealed = computed(() => revealedChars.value >= props.message.length)
-const bubbleLabel = computed(() => (props.variant === 'thought' ? 'THOUGHT' : 'SAYS'))
+const bubbleLabel = computed(() =>
+  props.variant === 'thought'
+    ? locale.social.speech.thoughtLabel
+    : locale.social.speech.dialogueLabel,
+)
 const bubbleFrameClass = computed(() =>
   props.variant === 'thought'
     ? 'bg-[#0d1620] border-[#8fd3ff]/80 shadow-[4px_4px_0_rgba(16,44,61,0.5)]'

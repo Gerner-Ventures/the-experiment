@@ -92,4 +92,42 @@ describe('turn store sequencing', () => {
     expect(handlers.updateAgent).toHaveBeenLastCalledWith('agent-1', 'idle')
     expect(store.phase).toBe('idle')
   })
+
+  it('skips movement when the agent is already at the target location', () => {
+    const move = jest.fn()
+    const store = useTurnStore()
+    store.setHandlers(makeHandlers({
+      move,
+      getAgentLocation: jest.fn(() => 'forest'),
+    }))
+
+    store.enqueue(makeTurn({
+      actionType: 'move',
+      targetLocation: 'forest',
+      thought: 'Already here.',
+    }))
+    store.notifyAudioComplete(store.activeTurn!.id)
+
+    expect(move).not.toHaveBeenCalled()
+  })
+
+  it('updates agent location after movement completes', () => {
+    let onMoveComplete: (() => void) | null = null
+    const handlers = makeHandlers({
+      move: jest.fn((_id, _loc, cb) => { onMoveComplete = cb }),
+      getAgentLocation: jest.fn(() => 'camp'),
+    })
+    const store = useTurnStore()
+    store.setHandlers(handlers)
+
+    store.enqueue(makeTurn({
+      actionType: 'move',
+      targetLocation: 'forest',
+      thought: 'Move now.',
+    }))
+    store.notifyAudioComplete(store.activeTurn!.id)
+    onMoveComplete!()
+
+    expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'moving', 'forest')
+  })
 })

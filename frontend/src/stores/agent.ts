@@ -62,7 +62,6 @@ export const useAgentStore = defineStore('agent', () => {
       : undefined
     const innerThought = normalizeLine(data.inner_thought)
     const speechText = normalizeLine(data.speech_text)
-    const dialogueText = extractDialogueText(data.dialogue)
     const thought = data.speech_source === 'inner_thought'
       ? speechText ?? innerThought
       : innerThought ?? speechText
@@ -77,7 +76,9 @@ export const useAgentStore = defineStore('agent', () => {
       targetLocation,
       thought,
       thoughtSource: 'inner_thought',
-      fromSpeakEvent: data.speech_source === 'inner_thought' || !!dialogueText,
+      // Only skip the fallback row when the backend explicitly routed this turn through
+      // the inner-thought speech pipeline. Dialogue events are tracked separately.
+      fromSpeakEvent: data.speech_source === 'inner_thought',
     })
   }
 
@@ -147,11 +148,4 @@ function parseAgent(a: Record<string, unknown>): Agent {
 function normalizeLine(value: string | null | undefined): string | undefined {
   const text = value?.trim()
   return text ? text : undefined
-}
-
-function extractDialogueText(dialogue: AgentActionData['dialogue']): string | undefined {
-  if (typeof dialogue === 'string') {
-    return normalizeLine(dialogue)
-  }
-  return normalizeLine(dialogue?.message ?? undefined)
 }

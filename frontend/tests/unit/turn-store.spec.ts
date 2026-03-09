@@ -148,4 +148,32 @@ describe('useTurnStore', () => {
 
     expect(drained).toHaveBeenCalledTimes(1)
   })
+
+  it('fires drained callbacks only once per registration', () => {
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers())
+    const drained = jest.fn()
+    store.onDrained(drained)
+
+    store.enqueue(makeTurn({ actionType: 'gather', thought: undefined }))
+    jest.advanceTimersByTime(3000)
+    store.enqueue(makeTurn({ actionType: 'gather', thought: undefined }))
+    jest.advanceTimersByTime(3000)
+
+    expect(drained).toHaveBeenCalledTimes(1)
+  })
+
+  it('clears pending timers on reset', () => {
+    const handlers = createMockHandlers()
+    const store = useTurnStore()
+    store.setHandlers(handlers)
+
+    store.enqueue(makeTurn({ thought: 'Hold position.' }))
+    store.$reset()
+    jest.advanceTimersByTime(15000)
+
+    expect(store.phase).toBe('idle')
+    expect(store.activeTurn).toBeNull()
+    expect(handlers.updateAgent).toHaveBeenCalledTimes(1)
+  })
 })

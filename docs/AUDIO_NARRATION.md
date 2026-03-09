@@ -289,8 +289,8 @@ round).
 
 `ConversationBubble.vue` plays audio when the bubble appears:
 
-- Action turns render `inner_thought` first, then movement/action continues after that narration
-  completes or times out
+- Action turns render `inner_thought` first during a dedicated `thinking` phase, then
+  movement/action continues after that narration completes or times out
 - Dialogue events remain tagged as dialogue speech and do not replace action-turn inner thoughts
 
 - If audio is `ready` on mount: plays immediately
