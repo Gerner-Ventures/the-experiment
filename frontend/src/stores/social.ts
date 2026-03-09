@@ -11,7 +11,6 @@ import type {
   MeetingVoteData,
   WSMessage,
 } from '@/types/websocket'
-import { useAgentStore } from '@/stores/agent'
 import { useTurnStore } from '@/stores/turn'
 import { useLocale } from '@/locales'
 
