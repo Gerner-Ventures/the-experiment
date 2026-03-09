@@ -34,6 +34,12 @@ export function getAnimationIndex(name: string): number | undefined {
   return animNameToIndex.get(name)
 }
 
+/** Reset the animation registry. Call on world destroy to prevent cross-lifecycle leaks. */
+export function resetAnimationRegistry(): void {
+  animTable.length = 0
+  animNameToIndex.clear()
+}
+
 export function animationSystem(world: World, dt: number): void {
   const entities = query(world, [AnimState])
 

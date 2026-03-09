@@ -24,25 +24,26 @@ export interface ExperimentEvent {
 
 let eventCounter = 0
 
-/** Track active polling intervals so they can be cleaned up on $reset() */
-const activeIntervals = new Set<ReturnType<typeof setInterval>>()
-
-function trackInterval(id: ReturnType<typeof setInterval>): ReturnType<typeof setInterval> {
-  activeIntervals.add(id)
-  return id
-}
-
-function clearTrackedInterval(id: ReturnType<typeof setInterval>) {
-  clearInterval(id)
-  activeIntervals.delete(id)
-}
-
-function clearAllIntervals() {
-  activeIntervals.forEach(id => clearInterval(id))
-  activeIntervals.clear()
-}
-
 export const useExperimentStore = defineStore('experiment', () => {
+  /** Track active polling intervals so they can be cleaned up on $reset().
+   *  Scoped inside the store factory so each instance has its own set. */
+  const activeIntervals = new Set<ReturnType<typeof setInterval>>()
+
+  function trackInterval(id: ReturnType<typeof setInterval>): ReturnType<typeof setInterval> {
+    activeIntervals.add(id)
+    return id
+  }
+
+  function clearTrackedInterval(id: ReturnType<typeof setInterval>) {
+    clearInterval(id)
+    activeIntervals.delete(id)
+  }
+
+  function clearAllIntervals() {
+    activeIntervals.forEach(id => clearInterval(id))
+    activeIntervals.clear()
+  }
+
   const locale = useLocale()
   const id = ref<string | null>(null)
   const name = ref('')
@@ -97,7 +98,6 @@ export const useExperimentStore = defineStore('experiment', () => {
     useUIStore().setSteppingStatus(
       locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value)),
     )
-    addEvent(msg)
   }
 
   /**
@@ -156,7 +156,6 @@ export const useExperimentStore = defineStore('experiment', () => {
         power: data.resources.power ?? worldStore.resources.power,
       })
     }
-    addEvent(msg)
 
     // Defer round finalization until turns drain AND meeting closes
     const finalize = () => {
@@ -182,9 +181,6 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentPhase.value = phase
     if (phase) {
       useWorldStore().onPhaseChange(phase)
-    }
-    if ((data.events as unknown[])?.length) {
-      addEvent(msg)
     }
     console.debug(`[Experiment] Phase applied: ${phase}`)
 
@@ -217,7 +213,6 @@ export const useExperimentStore = defineStore('experiment', () => {
     const data = msg.data as { status?: string }
     status.value = (data.status as ExperimentStatus) ?? 'completed'
     useUIStore().clearStepping()
-    addEvent(msg)
   }
 
   function $reset() {

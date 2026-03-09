@@ -103,31 +103,27 @@ export interface MeetingResultData {
 
 // ─── Faction / exile payloads ───
 
-export interface FactionUpdateData {
+export type FactionUpdateData = {
   faction_id?: string
   name?: string
-  [key: string]: unknown
-}
+} & Record<string, unknown>
 
-export interface CultActivityData {
+export type CultActivityData = {
   cult_name?: string
   ritual?: string
-  [key: string]: unknown
-}
+} & Record<string, unknown>
 
-export interface ExileVoteData {
+export type ExileVoteData = {
   target_agent?: string
   votes?: Record<string, string>
-  [key: string]: unknown
-}
+} & Record<string, unknown>
 
-export interface ExileResultData {
+export type ExileResultData = {
   target_agent?: string
   exiled?: boolean
   exiled_agent_id?: string
   outcome?: string
-  [key: string]: unknown
-}
+} & Record<string, unknown>
 
 // ─── Round / world payloads ───
 

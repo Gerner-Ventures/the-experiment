@@ -59,6 +59,9 @@ const exileStage = ref<Map<string, 'none' | 'flashing' | 'dead' | 'faded'>>(new 
 // Track whether entrance animation has completed
 const entranceComplete = ref(false)
 
+// Exile animation timers (cleared on unmount to prevent firing on dead component)
+const exileTimers: ReturnType<typeof setTimeout>[] = []
+
 // Agents participating in the meeting
 const meetingAgents = computed(() => {
   return agentStore.agentList.filter(a => a.status !== 'exiled')
@@ -276,17 +279,17 @@ function playExit() {
 function playExileAnimation(agentId: string) {
   exileStage.value.set(agentId, 'flashing')
 
-  setTimeout(() => {
+  exileTimers.push(setTimeout(() => {
     exileStage.value.set(agentId, 'dead')
 
-    setTimeout(() => {
+    exileTimers.push(setTimeout(() => {
       exileStage.value.set(agentId, 'faded')
 
-      setTimeout(() => {
+      exileTimers.push(setTimeout(() => {
         emit('exile-complete', agentId)
-      }, 800)
-    }, 500)
-  }, 450)
+      }, 800))
+    }, 500))
+  }, 450))
 }
 
 // ─── Phase Watchers ───
@@ -321,6 +324,7 @@ onMounted(() => {
 onUnmounted(() => {
   entranceTl?.kill()
   exitTl?.kill()
+  exileTimers.forEach(t => clearTimeout(t))
 })
 </script>
 

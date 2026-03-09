@@ -18,7 +18,7 @@ import {
 } from '@/ecs/components'
 import { pathfindingSystem, setEntityPath, clearEntityPath } from '@/ecs/systems/pathfindingSystem'
 import { movementSystem } from '@/ecs/systems/movementSystem'
-import { animationSystem, registerAnimation } from '@/ecs/systems/animationSystem'
+import { animationSystem, registerAnimation, resetAnimationRegistry } from '@/ecs/systems/animationSystem'
 import { renderSyncSystem, type RenderBridge } from '@/ecs/systems/renderSyncSystem'
 import { useRenderer, type UseRenderer } from './useRenderer'
 import { tileToScreen } from '@/components/world/pixi/isometric-utils'
@@ -388,6 +388,10 @@ export function useGameWorld(): UseGameWorld {
 
     agentEntityMap.delete(id)
 
+    // Null out the ID table slot to prevent stale lookups if entity IDs are reused
+    const idIdx = agentIdTable.indexOf(id)
+    if (idIdx >= 0) agentIdTable[idIdx] = ''
+
     // Remove from renderer
     renderer.removeSprite(id)
 
@@ -407,6 +411,7 @@ export function useGameWorld(): UseGameWorld {
 
     agentEntityMap.clear()
     agentIdTable.length = 0
+    resetAnimationRegistry()
     renderBridge = null
     world = null
 
