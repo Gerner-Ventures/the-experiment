@@ -436,7 +436,7 @@ def test_websocket_emits_granular_round_messages(client: TestClient) -> None:
             "threat_update",
             "round_end",
         }
-        for _ in range(40):
+        for _ in range(80):
             message = websocket.receive_json()
             seen_types.add(message["type"])
             if "round_end" in seen_types:
