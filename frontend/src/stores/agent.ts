@@ -25,9 +25,16 @@ export const useAgentStore = defineStore('agent', () => {
   )
 
   function setAgents(agentData: Array<Record<string, unknown>>) {
+    // Preserve exiled agent IDs — round_end sync must not resurrect them
+    const exiledIds = new Set<string>()
+    for (const [id, agent] of agents.value) {
+      if (agent.status === 'exiled') exiledIds.add(id)
+    }
+
     agents.value.clear()
     for (const a of agentData) {
       const agent = parseAgent(a)
+      if (exiledIds.has(agent.id)) continue // skip exiled agents
       agents.value.set(agent.id, agent)
     }
   }

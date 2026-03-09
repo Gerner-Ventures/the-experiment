@@ -11,6 +11,7 @@ import type {
   MeetingVoteData,
   WSMessage,
 } from '@/types/websocket'
+import { useAgentStore } from '@/stores/agent'
 import { useTurnStore } from '@/stores/turn'
 import { useLocale } from '@/locales'
 
@@ -249,7 +250,12 @@ export const useSocialStore = defineStore('social', () => {
     const data = msg.data
     exileEvents.value.push({ ...data, phase: 'result' })
 
-    // If meeting is in result phase, transition to exile
+    // Mark the agent as exiled immediately so round_end sync won't resurrect them
+    if (data.exiled_agent_id) {
+      useAgentStore().updateAgentStatus(data.exiled_agent_id, 'exiled')
+    }
+
+    // If meeting is active, transition to exile animation phase
     if (meeting.value && data.exiled_agent_id) {
       meeting.value.exileTarget = data.exiled_agent_id
       meeting.value.exileOutcome = data.outcome ?? 'exiled'
