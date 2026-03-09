@@ -421,7 +421,7 @@ async def test_corrective_retry_includes_error_context(
     assert retry_messages[1]["role"] == "assistant"
     assert retry_messages[1]["content"] == "not-json-at-all"
     assert retry_messages[2]["role"] == "user"
-    assert "TOP LEVEL" in retry_messages[2]["content"]
+    assert "expected schema" in retry_messages[2]["content"]
     assert len(captured_events) == 0  # No PostHog event on successful retry
 
 

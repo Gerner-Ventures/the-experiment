@@ -100,12 +100,8 @@ class LLMClient:
                             {
                                 "role": "user",
                                 "content": (
-                                    "Your JSON response had incorrect structure. "
-                                    "All fields must be at the TOP LEVEL of the JSON object. "
-                                    "Do NOT nest fields like inner_thought, suspicion, "
-                                    "goal_progress, or cooperation_intent inside 'action'. "
-                                    "The 'action' object should ONLY contain 'type', 'target', "
-                                    "and 'location'. Please return the corrected JSON."
+                                    "Your JSON response could not be parsed. "
+                                    "Please return valid JSON matching the expected schema."
                                 ),
                             }
                         )
