@@ -162,9 +162,10 @@ When a bubble appears and audio is `ready`:
 
 Acceptance criteria:
 
-- [ ] audio plays automatically when bubble appears and audio is ready
-- [ ] speaker icon visible during playback
-- [ ] autoplay-blocked browsers show manual play affordance
+- [x] audio plays automatically when bubble appears and audio is ready
+<!-- canon:realized-in:PR#190 file:frontend/src/components/social/ConversationBubble.vue -->
+- [x] speaker icon visible during playback
+- [x] autoplay-blocked browsers show manual play affordance
 - [ ] audio failure does not break bubble display or dismissal
 - [ ] bubble dismissal stops active audio playback
 
@@ -182,7 +183,8 @@ Acceptance criteria:
 
 - [ ] thinking/speech phase waits for audio playback completion before advancing
 - [ ] pending audio has a 3s wait timeout before falling back to text-only
-- [ ] max audio timeout of 15s prevents indefinite blocking
+- [x] max audio timeout of 15s prevents indefinite blocking
+<!-- canon:realized-in:PR#190 file:frontend/src/stores/turn.ts -->
 - [ ] unavailable/error audio falls back to existing text-only timing
 
 ### 2.5 Audio controls
