@@ -253,8 +253,11 @@ MP3 stream.
 
 ## Agent Speech Audio
 
-In addition to GM narration, the backend generates per-agent TTS audio for dialogue spoken during
-the simulation. Each of the 22 character sprites has a unique ElevenLabs voice.
+In addition to GM narration, the backend generates per-agent TTS audio for agent speech events
+during the simulation. For normal action turns, that speech is sourced from the agent's
+`inner_thought` so the frontend can narrate intent before movement/action. Social conversation
+events continue to use their spoken dialogue text. Each of the 22 character sprites has a unique
+ElevenLabs voice.
 
 ### Voice Mapping
 
@@ -267,8 +270,8 @@ Unmapped characters fall back to `ELEVENLABS_VOICE_ID`.
 
 When agent decisions are resolved for a round, the runtime pregenerates TTS audio for agent speech
 in parallel via `asyncio.gather()`. Action turns use `inner_thought` narration, while conversation
-events continue to use dialogue speech. This happens before the frontend enters the thought/speech
-phase, so audio is typically ready when the bubble appears.
+events continue to use dialogue speech. Audio is typically ready when the frontend chooses to
+display the corresponding bubble.
 
 ### Transport
 
