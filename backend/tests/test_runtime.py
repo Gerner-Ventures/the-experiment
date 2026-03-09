@@ -291,6 +291,8 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert agent_action["data"]["agent_name"] == state.agents[0].name
     assert agent_action["data"]["action"] == turn.decision.action.model_dump(mode="json")
     assert agent_action["data"]["inner_thought"] == turn.decision.inner_thought
+    assert agent_action["data"]["speech_text"] == turn.decision.inner_thought
+    assert agent_action["data"]["speech_source"] == "inner_thought"
     assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
     assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
 

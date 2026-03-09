@@ -99,6 +99,7 @@ class RuntimeAudioService:
                 round_number=round_number,
                 index=index,
                 text=entry["text"],
+                source=str(entry.get("source", "dialogue")),
                 voice_id="",
                 model_id="",
                 output_format="",
@@ -122,6 +123,7 @@ class RuntimeAudioService:
             round_number=round_number,
             index=index,
             text=entry["text"],
+            source=str(entry.get("source", "dialogue")),
             voice_id=request.voice_id,
             model_id=request.model_id,
             output_format=request.output_format,
@@ -408,6 +410,7 @@ class RuntimeAudioService:
                     "round_number": round_number,
                     "index": current_index,
                     "text": message_text,
+                    "source": str(item.data.get("source", "dialogue")),
                 }
                 self.agent_speech_log[experiment_id].append(reconstructed)
                 return reconstructed

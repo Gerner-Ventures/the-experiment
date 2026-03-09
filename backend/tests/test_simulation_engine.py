@@ -16,7 +16,7 @@ from app.db.models import AgentStatus
 from app.engine import EngineAgentState, SimulationEngine, SimulationState
 from app.engine.service import PreparedAction
 from app.gm import get_preset_arc
-from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType
+from app.schemas.agent_decision import AgentDecision, DecisionAction, DecisionActionType, Dialogue
 from app.world import build_default_world_state, resolve_spawn_tile, tile_distance
 
 
@@ -24,7 +24,12 @@ class _StubAgentService(AgentService):
     def __init__(
         self,
         scripted_actions: dict[
-            str, list[tuple[str, str | None] | tuple[str, str | None, str | None]]
+            str,
+            list[
+                tuple[str, str | None]
+                | tuple[str, str | None, str | None]
+                | tuple[str, str | None, str | None, str | None]
+            ],
         ],
     ) -> None:
         super().__init__()
@@ -38,11 +43,14 @@ class _StubAgentService(AgentService):
         index = self.calls[agent_context.agent_id]
         self.calls[agent_context.agent_id] += 1
         script = self.scripted_actions[agent_context.agent_id][index]
+        dialogue = None
         if len(script) == 2:
             action_type, location = script
             target = location or "well"
-        else:
+        elif len(script) == 3:
             action_type, location, target = script
+        else:
+            action_type, location, target, dialogue = script
         return AgentTurnResult(
             decision=AgentDecision(
                 inner_thought="A choice is made.",
@@ -52,7 +60,7 @@ class _StubAgentService(AgentService):
                     target=target,
                     location=location,
                 ),
-                dialogue=None,
+                dialogue=Dialogue(target=target or "all", message=dialogue) if dialogue else None,
                 goal_progress="Incremental movement.",
                 cooperation_intent="low"
                 if action_type in {"hoard", "sabotage", "explore"}
@@ -321,6 +329,36 @@ async def test_engine_generates_social_events_and_relationship_updates() -> None
     assert {"meeting_start", "meeting_speech", "meeting_vote", "meeting_result"} <= midday_kinds
     assert state.agents[0].relationships
     assert state.agents[1].relationships
+
+
+@pytest.mark.asyncio
+async def test_action_phase_agent_speak_uses_inner_thought_not_dialogue() -> None:
+    service = _StubAgentService(
+        {
+            "a1": [
+                ("talk", "well", "Jon", "You should come with me."),
+                ("observe", "well"),
+                ("observe", "well"),
+            ],
+            "a2": [("observe", "well"), ("observe", "well"), ("observe", "well")],
+            "a3": [("observe", "workshop"), ("observe", "workshop"), ("observe", "workshop")],
+        }
+    )
+    state = _state()
+    engine = SimulationEngine(agent_service=service, random_seed=7)
+
+    result = await engine.run_round(state)
+    morning_phase = next(phase for phase in result.phases if phase.phase == "morning")
+    speak_events = [
+        event for event in morning_phase.events if event.data.get("kind") == "agent_speak"
+    ]
+
+    action_speak = next(
+        event for event in speak_events if event.data.get("agent_id") == state.agents[0].agent_id
+    )
+    assert action_speak.data["message"] == "A choice is made."
+    assert action_speak.data["source"] == "inner_thought"
+    assert action_speak.data["target"] == "self"
 
 
 @pytest.mark.asyncio
