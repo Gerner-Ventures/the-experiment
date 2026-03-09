@@ -23,6 +23,8 @@ export interface WSMessage<T = Record<string, unknown>> {
   round: number
   phase?: RoundPhase
   timestamp: string
+  /** True when the event is a system-generated consequence, not an agent decision */
+  is_consequence?: boolean
   data: T
 }
 
@@ -40,6 +42,10 @@ export interface AgentActionData {
   speech_source?: AgentSpeechSource | null
   dialogue?: string | { message?: string | null; target?: string | null } | null
   cooperation_intent?: string
+  /** True when this action is a system-generated consequence (bleeding, injured, etc.) */
+  is_consequence?: boolean
+  /** The agent who caused this consequence (only set when is_consequence is true) */
+  caused_by?: string
 }
 
 export interface AgentSpeakData {
@@ -66,4 +72,86 @@ export interface AgentSpeechAudioData {
   source?: AgentSpeechSource
   status: NarrationAudioStatus
   audio_url: string | null
+}
+
+// ─── Meeting message payloads ───
+
+export interface MeetingStartData {
+  proposal: string
+}
+
+export interface MeetingSpeechData {
+  agent_id: string
+  agent_name?: string
+  content: string
+  text?: string
+  stance?: string
+}
+
+export interface MeetingVoteData {
+  agent_id: string
+  agent_name?: string
+  vote: string
+}
+
+export interface MeetingResultData {
+  summary: string
+  votes: Record<string, string>
+  tally?: Record<string, number>
+  passed?: boolean
+}
+
+// ─── Faction / exile payloads ───
+
+export type FactionUpdateData = {
+  faction_id?: string
+  name?: string
+} & Record<string, unknown>
+
+export type CultActivityData = {
+  cult_name?: string
+  ritual?: string
+} & Record<string, unknown>
+
+export type ExileVoteData = {
+  target_agent?: string
+  votes?: Record<string, string>
+} & Record<string, unknown>
+
+export type ExileResultData = {
+  target_agent_id?: string
+  target_agent_name?: string
+  target_agent?: string
+  exiled?: boolean
+  enacted?: boolean
+  exiled_agent_id?: string
+  outcome?: string
+  reason?: string
+} & Record<string, unknown>
+
+// ─── Round / world payloads ───
+
+export interface RoundEndData {
+  status: string
+  current_round: number
+  total_rounds: number
+  threat_level: number
+  resources: Record<string, number>
+  agents: Record<string, unknown>[]
+}
+
+export interface CrisisEventData {
+  type: string
+  description: string
+  severity: string
+  affects?: string[]
+}
+
+export interface ThreatUpdateData {
+  threat_level: number
+}
+
+export interface StepErrorData {
+  error?: string
+  message?: string
 }

@@ -20,11 +20,14 @@ const props = withDefaults(defineProps<{
   message: string
   agentId: string
   variant?: 'thought' | 'dialogue'
+  /** Override hold-after-typing duration (ms). Lower = snappier meeting pacing. */
+  holdMs?: number
   getPosition: (agentId: string) => { x: number; y: number } | null
   audioStatus: AudioStatus
   audioUrl: string | null
 }>(), {
   variant: 'dialogue',
+  holdMs: HOLD_AFTER_TYPING_MS,
 })
 
 const emit = defineEmits<{
@@ -48,7 +51,7 @@ let audio: HTMLAudioElement | null = null
 
 const TOTAL_LIFETIME_MS = Math.max(
   MIN_LIFETIME_MS,
-  props.message.length * TYPEWRITER_MS + HOLD_AFTER_TYPING_MS,
+  props.message.length * TYPEWRITER_MS + props.holdMs,
 )
 
 const displayedMessage = computed(() => props.message.slice(0, revealedChars.value))
@@ -60,7 +63,7 @@ const bubbleLabel = computed(() =>
 )
 const bubbleFrameClass = computed(() =>
   props.variant === 'thought'
-    ? 'bg-[#0d1620] border-[#8fd3ff]/80 shadow-[4px_4px_0_rgba(16,44,61,0.5)]'
+    ? 'bg-[#0d1620] border-[#8fd3ff]/80 shadow-[4px_4px_0_rgba(16,44,61,0.5)] thought-drift'
     : 'bg-[#0a0a0f] border-white/80 shadow-[4px_4px_0_rgba(0,0,0,0.5)]',
 )
 const bubbleTextClass = computed(() =>
@@ -270,11 +273,16 @@ onUnmounted(() => {
           class="text-xs leading-snug font-mono max-h-[72px] overflow-y-auto bubble-scroll"
           :class="bubbleTextClass"
         >
-          "{{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>"
+          <template v-if="variant === 'thought'">
+            {{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>
+          </template>
+          <template v-else>
+            "{{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>"
+          </template>
         </div>
       </div>
-      <!-- Pixel-art tail pointer -->
-      <div class="retro-tail" />
+      <!-- Tail: thought bubbles get circular dots, dialogue gets triangular pointer -->
+      <div :class="variant === 'thought' ? 'thought-tail' : 'retro-tail'" />
     </div>
   </Transition>
 </template>
@@ -301,6 +309,37 @@ onUnmounted(() => {
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-top: 6px solid #0a0a0f;
+}
+
+.thought-tail {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(143, 211, 255, 0.4);
+  margin-top: 4px;
+}
+
+.thought-tail::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(143, 211, 255, 0.2);
+}
+
+.thought-drift {
+  animation: thought-float 4s ease-in-out infinite;
+}
+
+@keyframes thought-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .retro-cursor {

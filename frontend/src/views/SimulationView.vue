@@ -19,7 +19,7 @@ import AgentDossier from '@/components/dossier/AgentDossier.vue'
 import ExperimentLog from '@/components/log/ExperimentLog.vue'
 import ConversationBubble from '@/components/social/ConversationBubble.vue'
 import RelationshipWeb from '@/components/social/RelationshipWeb.vue'
-import TownMeeting from '@/components/social/TownMeeting.vue'
+import MeetingScene from '@/components/social/MeetingScene.vue'
 import { useExperimentStore } from '@/stores/experiment'
 import { useAgentStore } from '@/stores/agent'
 import { useWorldStore } from '@/stores/world'
@@ -94,16 +94,6 @@ const activeBubbleAudio = computed(() => {
   return null
 })
 
-const activeDialogueBubble = computed(() => {
-  if (turnStore.phase === 'thinking') return null
-  for (let i = socialStore.conversations.length - 1; i >= 0; i--) {
-    const conversation = socialStore.conversations[i]
-    if (conversation.source === 'dialogue') {
-      return conversation
-    }
-  }
-  return null
-})
 
 let narrationHydrationToken = 0
 
@@ -298,6 +288,18 @@ function handleAgentClick(agentId: string) {
   uiStore.selectAgent(agentId)
 }
 
+function onMeetingSceneExited() {
+  socialStore.dismissMeeting()
+}
+
+function onExileComplete(agentId: string) {
+  console.debug(`[Simulation] Exile complete: ${agentId}`)
+  // Mark agent as exiled (deferred until after meeting animation completes)
+  agentStore.updateAgentStatus(agentId, 'exiled')
+  // Remove exiled agent from game world
+  pixiWorldRef.value?.removeAgent(agentId)
+}
+
 // ─── Day/night cycle phase wiring ───
 
 watch(() => experimentStore.currentPhase, (phase) => {
@@ -456,7 +458,8 @@ function goBack() {
       <PixiWorld
         v-if="ready && (experimentCreated || isDemo)"
         ref="pixiWorldRef"
-        class="absolute inset-0 z-0"
+        class="absolute inset-0 z-0 transition-opacity duration-500"
+        :class="{ 'opacity-0 pointer-events-none': socialStore.isMeetingActive }"
         :theme="theme"
         :map-data="DEFAULT_TOWN"
         :agents="agentStore.agentConfigs"
@@ -515,9 +518,9 @@ function goBack() {
           />
         </div>
 
-        <!-- Turn-driven conversation bubble -->
+        <!-- Turn-driven conversation bubble (hidden during meeting — MeetingScene renders its own) -->
         <ConversationBubble
-          v-if="turnStore.phase === 'thinking' && turnStore.activeTurn?.thought"
+          v-if="turnStore.phase === 'thinking' && turnStore.activeTurn?.thought && !socialStore.isMeetingActive"
           :key="turnStore.activeTurn.id"
           class="pointer-events-auto"
           :turn-id="turnStore.activeTurn.id"
@@ -530,20 +533,6 @@ function goBack() {
           :audio-url="activeBubbleAudio?.audioUrl ?? null"
           @dismiss="turnStore.onBubbleDismissed($event)"
           @audio-end="turnStore.notifyAudioComplete($event)"
-        />
-
-        <ConversationBubble
-          v-else-if="activeDialogueBubble"
-          :key="`dialogue-${activeDialogueBubble.id}`"
-          class="pointer-events-auto"
-          :turn-id="activeDialogueBubble.id"
-          :agent-name="activeDialogueBubble.agentName"
-          :message="activeDialogueBubble.message"
-          :agent-id="activeDialogueBubble.agentId"
-          variant="dialogue"
-          :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
-          :audio-status="activeDialogueBubble.audioStatus"
-          :audio-url="activeDialogueBubble.audioUrl"
         />
       </div>
     </div>
@@ -575,11 +564,19 @@ function goBack() {
       @close="uiStore.deselectAgent()"
     />
 
-    <!-- Town Meeting Panel -->
-    <TownMeeting
+    <!-- Meeting Scene Overlay -->
+    <MeetingScene
+      v-if="socialStore.isMeetingActive && socialStore.meeting"
       :meeting="socialStore.meeting"
-      :visible="socialStore.isMeetingActive"
-      @dismiss="socialStore.dismissMeeting()"
+      :active-turn="turnStore.activeTurn"
+      :turn-phase="turnStore.phase"
+      :has-pending-turns="turnStore.hasPendingTurns"
+      :active-bubble-audio="activeBubbleAudio"
+      :theme-id="themeId"
+      @bubble-dismiss="turnStore.onBubbleDismissed($event)"
+      @audio-end="turnStore.notifyAudioComplete($event)"
+      @scene-exited="onMeetingSceneExited"
+      @exile-complete="onExileComplete"
     />
 
     <!-- Event Log Drawer -->

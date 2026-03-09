@@ -80,9 +80,13 @@ describe('useTurnStore', () => {
     const firstTurnId = store.activeTurn!.id
     store.notifyAudioComplete(firstTurnId)
 
+    // Advance past the TURN_GAP_MS timer so the second turn starts
+    jest.advanceTimersByTime(500)
+
     expect(store.activeTurn!.agentId).toBe('a2')
     const secondTurnId = store.activeTurn!.id
 
+    // Stale dismiss for first turn should be ignored
     store.onBubbleDismissed(firstTurnId)
 
     expect(store.activeTurn!.id).toBe(secondTurnId)

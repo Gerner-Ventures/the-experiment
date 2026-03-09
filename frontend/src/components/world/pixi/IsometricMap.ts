@@ -1,7 +1,9 @@
-import { Container, Graphics } from 'pixi.js'
-import type { MapData, MapTheme, TileDef, TilePalette } from '@/types/world'
+import { Container, Graphics, Rectangle, Texture } from 'pixi.js'
+import { CompositeTilemap } from '@pixi/tilemap'
+import type { MapData, MapTheme, TileDef } from '@/types/world'
 import { BuildingRenderer } from './BuildingRenderer'
 import { TILE_W, TILE_H, tileToScreen } from './isometric-utils'
+import { buildThemeAtlas, type ThemeAtlas } from './tile-atlas'
 
 export { tileToScreen, screenToTile } from './isometric-utils'
 
@@ -18,18 +20,13 @@ function drawDiamond(g: Graphics, x: number, y: number, fill: string, stroke: st
   g.stroke({ color: stroke, width: 1, alpha: 0.3 })
 }
 
-function getTileColor(tileType: string, palette: TilePalette): [string, string] {
-  const p = palette[tileType as keyof TilePalette]
-  if (p) return [p[0], p[1]]
-  return [palette.grass[0], palette.grass[1]]
-}
-
 export class IsometricMap {
   container: Container
   private tileGrid: (TileDef | null)[][] = []
   private mapWidth = 0
   private mapHeight = 0
   private buildingRenderer: BuildingRenderer
+  private atlas: ThemeAtlas | null = null
 
   constructor() {
     this.container = new Container()
@@ -53,45 +50,35 @@ export class IsometricMap {
     // Theme-specific background layer (water, void, etc.)
     this.renderBackground(theme)
 
-    // Ground layer
+    // Build tile atlas for this theme
+    this.atlas = buildThemeAtlas(theme)
+
+    // Ground layer — batch-rendered with CompositeTilemap
     const groundLayer = new Container()
     groundLayer.zIndex = 1
-    const groundGraphics = new Graphics()
+    const tilemap = new CompositeTilemap()
 
     for (let y = 0; y < this.mapHeight; y++) {
       for (let x = 0; x < this.mapWidth; x++) {
         const tile = this.tileGrid[y][x]
         if (!tile) continue
         const screen = tileToScreen(x, y)
+        const frameKey = this.resolveFrameKey(tile, theme)
+        const frame = this.atlas.frames.get(frameKey)
+        if (!frame) continue
 
-        // Theme-specific tile overrides
-        if (this.isCodeRiverTile(tile, theme)) {
-          this.drawCodeRiverTile(groundGraphics, screen.x, screen.y)
-          continue
-        }
-        if (this.isWaterTile(tile, theme)) {
-          this.drawWaterTile(groundGraphics, screen.x, screen.y)
-          continue
-        }
+        // Create a sub-texture from the atlas for this frame
+        const subTex = new Texture({
+          source: this.atlas.texture.source,
+          frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
+        })
 
-        const [fill, stroke] = getTileColor(tile.tileType, theme.tilePalette)
-
-        // Add sand variation for island theme fence tiles
-        if (theme.id === 'lord-of-the-flies' && tile.tileType === 'fence') {
-          drawDiamond(groundGraphics, screen.x, screen.y, '#e8d8b0', '#d0c8a0')
-          continue
-        }
-
-        drawDiamond(groundGraphics, screen.x, screen.y, fill, stroke)
-
-        // Field decoration (crops for island, barren for others)
-        if (tile.tileType === 'field' && theme.id === 'lord-of-the-flies') {
-          this.drawCropLines(groundGraphics, screen.x, screen.y)
-        }
+        // Position tile so the diamond center aligns with screen coords
+        tilemap.tile(subTex, screen.x - TILE_W / 2, screen.y - (TILE_H / 2) - 1)
       }
     }
 
-    groundLayer.addChild(groundGraphics)
+    groundLayer.addChild(tilemap)
     this.container.addChild(groundLayer)
 
     // Decorations layer (trees for island, grid overlay for matrix)
@@ -180,59 +167,17 @@ export class IsometricMap {
     this.container.addChild(bg)
   }
 
-  private isCodeRiverTile(tile: TileDef, theme: MapTheme): boolean {
-    // Matrix theme: path tiles along column 9 become a "code river"
-    return theme.id === 'matrix' && tile.tileType === 'path' && tile.x === 9
-  }
-
-  private drawCodeRiverTile(g: Graphics, sx: number, sy: number) {
-    const hw = TILE_W / 2
-    const hh = TILE_H / 2
-
-    // Dark base
-    g.poly([sx, sy - hh, sx + hw, sy, sx, sy + hh, sx - hw, sy])
-    g.fill('#001100')
-    g.stroke({ color: '#003300', width: 1, alpha: 0.5 })
-
-    // Glowing code stream lines
-    const lines = 3
-    for (let i = 0; i < lines; i++) {
-      const offset = (i - 1) * 6
-      g.moveTo(sx + offset - 2, sy - hh + 2)
-      g.lineTo(sx + offset + 2, sy + hh - 2)
-      g.stroke({ color: '#00ff41', width: 1, alpha: 0.15 + Math.random() * 0.2 })
+  /** Map a tile definition to its atlas frame key. */
+  private resolveFrameKey(tile: TileDef, theme: MapTheme): string {
+    // Theme-specific overrides
+    if (theme.id === 'matrix' && tile.tileType === 'path' && tile.x === 9) {
+      return 'code_river'
     }
-
-    // Bright center glow
-    g.circle(sx, sy, 4)
-    g.fill({ color: '#00ff41', alpha: 0.06 })
-  }
-
-  private isWaterTile(tile: TileDef, theme: MapTheme): boolean {
-    // Island theme: fence perimeter tiles become water/beach
-    return theme.id === 'lord-of-the-flies' && tile.tileType === 'fence'
-  }
-
-  private drawWaterTile(g: Graphics, sx: number, sy: number) {
-    const hw = TILE_W / 2
-    const hh = TILE_H / 2
-    g.poly([sx, sy - hh, sx + hw, sy, sx, sy + hh, sx - hw, sy])
-    g.fill('#e8d8b0')
-    g.stroke({ color: '#d0c090', width: 1, alpha: 0.4 })
-
-    // Wave hints
-    g.moveTo(sx - 8, sy - 2)
-    g.lineTo(sx + 8, sy - 2)
-    g.stroke({ color: '#c0b888', width: 0.5, alpha: 0.3 })
-  }
-
-  private drawCropLines(g: Graphics, sx: number, sy: number) {
-    // Little crop rows on field tiles
-    for (let i = -2; i <= 2; i++) {
-      g.moveTo(sx + i * 5 - 6, sy - 4)
-      g.lineTo(sx + i * 5 + 6, sy + 4)
-      g.stroke({ color: '#4a7a2a', width: 1, alpha: 0.3 })
+    if (theme.id === 'lord-of-the-flies') {
+      if (tile.tileType === 'fence') return 'sand_fence'
+      if (tile.tileType === 'field') return 'crop_field'
     }
+    return tile.tileType
   }
 
   private renderDecorations(theme: MapTheme, mapData: MapData) {
@@ -335,6 +280,10 @@ export class IsometricMap {
   }
 
   destroy() {
+    if (this.atlas) {
+      this.atlas.texture.destroy(true)
+      this.atlas = null
+    }
     this.container.destroy({ children: true })
   }
 }

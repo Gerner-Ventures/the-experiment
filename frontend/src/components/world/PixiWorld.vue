@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { MapTheme, MapData } from '@/types/world'
 import type { AgentConfig } from '@/types/agent'
-import { usePixiWorld } from '@/composables/usePixiWorld'
+import { useGameWorld } from '@/composables/useGameWorld'
 import { usePathfinding } from '@/composables/usePathfinding'
 import { getSpriteById } from '@/config/character-sprites'
 
@@ -20,7 +20,7 @@ const emit = defineEmits<{
 }>()
 
 const canvasContainer = ref<HTMLElement>()
-const world = usePixiWorld()
+const world = useGameWorld()
 const pathfinding = usePathfinding()
 
 function moveAgentToLocation(agentId: string, locationId: string, onComplete?: () => void) {
@@ -79,6 +79,7 @@ defineExpose({
   moveAgentTo: world.moveAgentTo,
   getAgents: world.getAgents,
   setPhase: world.setPhase,
+  removeAgent: world.removeAgent,
 })
 </script>
 

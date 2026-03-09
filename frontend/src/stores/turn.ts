@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
 import { HD_ACTION_TO_ANIMATION as ACTION_TO_ANIMATION } from '@/config/sprites/hd/animations'
-import { SKIP_ACTION_PHASE } from '@/config/action-categories'
+import { SKIP_ACTION_PHASE, SPEECH_ONLY_ACTIONS } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 import type { AgentSpeechSource } from '@/types/websocket'
 
@@ -19,6 +19,10 @@ export interface Turn {
   thoughtSource?: AgentSpeechSource
   /** When true, the speech row was already added by agent_speak — skip addConversation */
   fromSpeakEvent?: boolean
+  /** True when this turn is a system-generated consequence, not an agent decision */
+  isConsequence?: boolean
+  /** Agent who caused this consequence (for highlighting/targeting) */
+  causedBy?: string
 }
 
 export type TurnPhase = 'idle' | 'thinking' | 'moving' | 'acting' | 'hud-only'
@@ -48,6 +52,9 @@ const HUD_ONLY_DURATION_MS = 1500
 /** Maximum time to wait for audio playback before force-advancing */
 const AUDIO_MAX_TIMEOUT_MS = 15000
 
+/** Brief pause between turns so the user can register the transition */
+const TURN_GAP_MS = 400
+
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
   const queue = ref<Turn[]>([])
@@ -62,6 +69,7 @@ export const useTurnStore = defineStore('turn', () => {
   let hudTimer: ReturnType<typeof setTimeout> | null = null
   let actionFloorTimer: ReturnType<typeof setTimeout> | null = null
   let thoughtTimer: ReturnType<typeof setTimeout> | null = null
+  let turnGapTimer: ReturnType<typeof setTimeout> | null = null
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
   let handlers: TurnHandlers | null = null
@@ -85,6 +93,26 @@ export const useTurnStore = defineStore('turn', () => {
     if (!activeTurn.value) {
       processNext()
     }
+  }
+
+  /** Schedule the next turn with a brief gap so transitions don't overlap */
+  function scheduleNext() {
+    // Clear any existing gap timer to prevent double-scheduling
+    if (turnGapTimer) {
+      clearTimeout(turnGapTimer)
+      turnGapTimer = null
+    }
+
+    if (queue.value.length === 0) {
+      processNext() // drain immediately
+      return
+    }
+    // Brief pause between turns
+    phase.value = 'idle'
+    turnGapTimer = setTimeout(() => {
+      turnGapTimer = null
+      processNext()
+    }, TURN_GAP_MS)
   }
 
   function processNext() {
@@ -173,6 +201,13 @@ export const useTurnStore = defineStore('turn', () => {
     if (!turn) return
 
     handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType))
+
+    // Speech-only actions (meeting_speech, meeting_vote) skip movement and acting
+    if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
+      console.debug(`[Turn] Speech-only: ${turn.agentName} → ${turn.actionType}`)
+      completeTurnPhase()
+      return
+    }
 
     const currentLocation = handlers?.getAgentLocation(turn.agentId)
     const needsMove = !!turn.targetLocation && turn.targetLocation !== currentLocation
@@ -280,7 +315,7 @@ export const useTurnStore = defineStore('turn', () => {
     if (activeTurn.value) {
       handlers?.updateAgent(activeTurn.value.agentId, 'idle')
     }
-    processNext()
+    scheduleNext()
   }
 
   function clearTimers() {
@@ -295,6 +330,10 @@ export const useTurnStore = defineStore('turn', () => {
     if (thoughtTimer) {
       clearTimeout(thoughtTimer)
       thoughtTimer = null
+    }
+    if (turnGapTimer) {
+      clearTimeout(turnGapTimer)
+      turnGapTimer = null
     }
   }
 
@@ -319,6 +358,7 @@ export const useTurnStore = defineStore('turn', () => {
 function actionToStatus(action: string): AgentStatus {
   switch (action) {
     case 'talk': case 'trade': case 'accuse': return 'talking'
+    case 'meeting_speech': case 'meeting_vote': return 'talking'
     case 'move': case 'explore': return 'moving'
     case 'gather': case 'repair': return 'working'
     case 'hoard': case 'sabotage': return 'sneaking'

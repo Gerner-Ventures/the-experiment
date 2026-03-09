@@ -11,12 +11,15 @@
         "round_start", "round_end",
         "phase_change",
         "gm_plan", "gm_narration", "gm_audio_status",
-        "agent_action", "agent_speak",
+        "agent_action", "agent_speak", "agent_speech_audio",
         "crisis_event",
         "meeting_start", "meeting_speech", "meeting_vote", "meeting_result",
+        "faction_update", "cult_activity",
+        "exile_vote", "exile_result",
         "threat_update", "resource_update",
         "observer_event",
-        "experiment_end"
+        "experiment_end",
+        "step_error"
       ]
     },
     "round": { "type": "integer" },

@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sprite Fidelity — v6</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0a0a1a;color:#e0e0e0;font-family:'Courier New',monospace;display:flex;flex-direction:column;align-items:center;padding:40px 20px;min-height:100vh}
+  h1{font-size:24px;color:#88ccff;margin-bottom:8px}
+  h2{font-size:14px;color:#668899;margin-bottom:32px;font-weight:normal}
+  canvas{image-rendering:pixelated;image-rendering:crisp-edges}
+  .bg{border:1px solid #222233;background:#111122}
+  .section{font-size:18px;color:#88ccff;margin:32px 0 16px;border-bottom:1px solid #223344;padding-bottom:8px;width:100%;max-width:1200px;text-align:center}
+  .row{display:flex;gap:32px;flex-wrap:wrap;justify-content:center;margin-bottom:48px}
+  .card{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .lbl{font-size:11px;color:#778899}
+  .sm{font-size:10px;color:#557766}
+  .comparison{display:flex;gap:48px;align-items:flex-end;margin-bottom:48px;flex-wrap:wrap;justify-content:center}
+  .col{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .colLabel{font-size:12px;color:#558899;text-align:center}
+  .colLabel strong{color:#88ccff}
+</style>
+</head>
+<body>
+<h1>Sprite Fidelity — v6</h1>
+<h2>Shoot, tongue, knife, child sizing, rosy cheeks, bigger tongue, hip sway dance</h2>
+
+<div class="comparison" id="compare"></div>
+<div class="section">Walk Cycles</div>
+<div class="row" id="walks"></div>
+<div class="section">Combat Actions (punch, kick, stab)</div>
+<div class="row" id="combat"></div>
+<div class="section">Social Actions (talk, drink, wave, dance, think, panic)</div>
+<div class="row" id="social"></div>
+<div class="section">Hats &amp; Mustaches</div>
+<div class="row" id="accessories"></div>
+<div class="section">Full Roster</div>
+<div class="row" id="roster"></div>
+
+<script>
+// ─── UTILS ───
+const hex2rgb=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+const rgb2hex=(r,g,b)=>'#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('');
+const dk=(h,a=30)=>{const[r,g,b]=hex2rgb(h);return rgb2hex(r-a,g-a,b-a);};
+const lt=(h,a=40)=>{const[r,g,b]=hex2rgb(h);return rgb2hex(r+a,g+a,b+a);};
+const mix=(a,b,t=.5)=>{const[r1,g1,b1]=hex2rgb(a),[r2,g2,b2]=hex2rgb(b);return rgb2hex(r1+(r2-r1)*t,g1+(g2-g1)*t,b1+(b2-b1)*t);};
+const hash=s=>{let h=0;for(let i=0;i<s.length;i++)h=((h<<5)-h)+s.charCodeAt(i);return h;};
+
+// ─── OLD 14×18 ───
+const OLD_B=['00000111100000','00001222210000','00012222221000','00012222221000','00012289221000','00012222221000','00001232210000','00000111100000','00000166100000','00001666610000','00016666661000','00216666612000','00021666120000','00001666100000','00001166110000','00001611610000','00001C11C10000','0000CC00CC0000'];
+const OLD_H={0:['00004141400000','00041444414000','00045444451000','00041000041000','00010000001000','00000000000000','00000000000000','00000000000000'],1:['00000444400000','00044444440000','00445444441000','00441000041000','00410000001000','00000000000000','00000000000000','00000000000000'],2:['00004444400000','00044544540000','00445444441000','00441000041000','00410000004100','00410000004100','00040000004000','00000000000000'],3:['00000444400000','00004444440000','00014444441000','00010000001000','00010000001000','00000000000000','00000000000000','00000000000000'],4:['00000044000000','00000454000000','00001444100000','00012444210000','00012000210000','00010000001000','00000000000000','00000000000000'],5:['00044444440000','00454545454000','04454444454400','04410000014400','04100000001400','00100000001000','00000000000000','00000000000000']};
+function drawOld(cv,pal,hair){const W=14,H=18,S=6;cv.width=W*S;cv.height=H*S;cv.className='bg';const x=cv.getContext('2d');x.imageSmoothingEnabled=false;const m={'1':pal.outline,'2':pal.skin,'3':pal.skinShadow,'4':pal.hair,'5':pal.hairHighlight,'6':pal.outfitPrimary,'7':pal.outfitSecondary,'8':'#fff','9':'#1a1a2e','A':pal.accessory||'#f00','C':pal.shoe};for(let y=0;y<H;y++)for(let i=0;i<W;i++){const c=OLD_B[y]?.[i];if(c&&c!=='0'&&m[c]){x.fillStyle=m[c];x.fillRect(i*S,y*S,S,S);}}const h=hair||OLD_H[0];for(let y=0;y<h.length&&y<=7;y++)for(let i=0;i<W;i++){const c=h[y]?.[i];if(c&&c!=='0'&&m[c]){x.fillStyle=m[c];x.fillRect(i*S,y*S,S,S);}}}
+
+// ─── HD 32×48 RENDERER v3 ───
+const GW=32,GH=48;
+
+function pal(p){
+  const ec=['#4488cc','#338855','#885533','#446688','#556633','#664488'][Math.abs(hash(p.hair+p.skin))%6];
+  return{
+    ol:p.outline,
+    sk:p.skin, ss:p.skinShadow, sh:lt(p.skin,25), sd:dk(p.skin,15), // sd=skin deep shadow
+    rim:lt(p.skin,50), // rim light color
+    hr:p.hair, hh:p.hairHighlight, hs:dk(p.hair,25),
+    o1:p.outfitPrimary, o2:p.outfitSecondary,
+    os:dk(p.outfitPrimary,30), od:dk(p.outfitPrimary,50), // od=outfit deep shadow
+    oh:lt(p.outfitPrimary,20), orim:lt(p.outfitPrimary,40), // outfit rim light
+    bt:dk(p.outfitPrimary,50),
+    s1:p.shoe, s2:dk(p.shoe,30), s3:lt(p.shoe,20),
+    ew:'#e8e8f8', ei:ec, ep:'#0a0a1a', eg:'#ffffff', eb:dk(ec,40),
+    mo:dk(p.skin,45), // mouth outline/lips
+    mi:'#2a0a0e', // mouth interior (dark)
+    mt:'#e8ddd8', // teeth hint
+    ml:mix(dk(p.skin,30),'#cc6666',0.35), // lip color (warmer)
+    mu:mix(dk(p.skin,15),'#dd7777',0.4), // upper lip / open mouth top (lighter, distinct)
+    ch:mix(p.skin,'#ff8888',0.3),
+    ao:dk(p.outfitPrimary,60), // ambient occlusion
+    ao2:dk(p.skin,50), // skin AO
+    gs:'#06060f', // ground shadow (darker than ground plane)
+    gp:'#1a1a30', // ground plane base
+    gp2:'#151528', // ground plane darker edge
+    ob:dk(p.outfitPrimary,40), // outfit back shadow (torso center depth)
+    ue:dk(p.skin,20), // under-eye shadow
+    nh:lt(p.skin,35), // nose highlight
+    ear:mix(p.skin,p.skinShadow,0.5), // ear color
+    hbs:dk(p.hair,40), // hair back shadow (cast on neck/shoulders)
+  };
+}
+
+function render(palette,hairStyle,pose,acc,opts){
+  const g=Array.from({length:GH},()=>Array(GW).fill(null));
+  const c=pal(palette);
+  const small=opts&&opts.small;
+  if(opts&&opts.rosyCheeks) c.ch=mix(palette.skin,'#ff6688',0.45);
+  const px=(x,y,col)=>{if(x>=0&&x<GW&&y>=0&&y<GH&&col)g[y][x]=col;};
+  const rc=(x1,y1,w,h,col)=>{for(let y=y1;y<y1+h;y++)for(let x=x1;x<x1+w;x++)px(x,y,col);};
+
+  const P=pose||'idle';
+
+  // ─── POSE FLAGS ───
+  const walk1=P==='walk1',walk2=P==='walk2';
+  const talk1=P==='talk1',talk2=P==='talk2';
+  const dance1=P==='dance1',dance2=P==='dance2';
+  const wave1=P==='wave1',wave2=P==='wave2';
+  const think=P==='think';
+  const panic1=P==='panic1',panic2=P==='panic2';
+  const stab1=P==='stab1',stab2=P==='stab2';
+  const punch1=P==='punch1',punch2=P==='punch2';
+  const kick1=P==='kick1',kick2=P==='kick2';
+  const drink1=P==='drink1',drink2=P==='drink2';
+  const shoot1=P==='shoot1',shoot2=P==='shoot2';
+  const tongue=P==='tongue';
+  const blink=P==='blink';
+  const halfblink=P==='halfblink';
+  const lookR=P==='lookR';
+  const lookL=P==='lookL';
+  const idle2=P==='idle2';
+  const walking=walk1||walk2;
+
+  // ─── BODY DYNAMICS ───
+  const bob = walking?(walk1?-1:0) : kick2?1 : idle2?1 : 0;
+  const lean = walking?1 : (stab2||punch2)?2 : (kick1)?1 : (panic1||panic2)?-1 : (shoot2)?1 : (dance1)?1 : (dance2)?-1 : (drink1||drink2)?0 : 0;
+  const squash = walk2?1 : 0;
+
+  // ─── HEAD ───
+  const headX=10+lean, headY=(small?8:3)+bob;
+  const headW=12, headH=small?10:12;
+
+  // Rounded head fill
+  rc(headX+2,headY,headW-4,1,c.sk);
+  rc(headX+1,headY+1,headW-2,1,c.sk);
+  rc(headX,headY+2,headW,headH-4,c.sk);
+  rc(headX+1,headY+headH-2,headW-2,1,c.sk);
+  rc(headX+2,headY+headH-1,headW-4,1,c.sk);
+
+  // ── 3D SHADING: head ──
+  // Deep shadow left
+  rc(headX,headY+2,2,headH-4,c.ss);
+  rc(headX+1,headY+1,1,1,c.ss);
+  rc(headX+2,headY+2,1,headH-5,c.sd); // subtle mid shadow
+  // Highlight right edge
+  rc(headX+headW-2,headY+3,1,headH-7,c.sh);
+  // Rim light (bright edge right side — gives 3D pop)
+  rc(headX+headW-1,headY+3,1,headH-7,c.rim);
+  // Top of head slight highlight
+  rc(headX+4,headY,4,1,c.sh);
+  // Cheeks
+  px(headX+2,headY+8,c.ch); px(headX+headW-3,headY+8,c.ch);
+
+  // ─── EYES (3×3) ───
+  const eyeY=headY+5;
+  const leX=headX+2, reX=headX+7;
+
+  // Pupil offset for look direction
+  let pupOx=0,pupOy=0;
+  if(lookR||walk1||stab2||punch2||kick2||shoot1||shoot2){pupOx=1;}
+  else if(lookL||walk2){pupOx=-1;}
+  if(think){pupOx=1;pupOy=-1;}// look up-right when thinking
+
+  if(blink){
+    // Full blink — closed line
+    rc(leX,eyeY+1,3,1,c.ol); rc(reX,eyeY+1,3,1,c.ol);
+  } else if(halfblink){
+    // Half-blink — eyelid coming down, shows bottom half of eye
+    rc(leX,eyeY+1,3,2,c.ew); rc(reX,eyeY+1,3,2,c.ew);
+    px(leX,eyeY+1,c.ei); px(reX,eyeY+1,c.ei);
+    rc(leX,eyeY,3,1,c.ol); rc(reX,eyeY,3,1,c.ol);// eyelid line
+    // Outline
+    px(leX-1,eyeY+1,c.ol);px(leX+3,eyeY+1,c.ol);px(leX-1,eyeY+2,c.ol);px(leX+3,eyeY+2,c.ol);
+    for(let x=leX-1;x<=leX+3;x++)px(x,eyeY+3,c.ol);
+    px(reX-1,eyeY+1,c.ol);px(reX+3,eyeY+1,c.ol);px(reX-1,eyeY+2,c.ol);px(reX+3,eyeY+2,c.ol);
+    for(let x=reX-1;x<=reX+3;x++)px(x,eyeY+3,c.ol);
+  } else if(drink2||tongue){
+    // Happy squint — curved lines
+    px(leX,eyeY+1,c.ol);px(leX+1,eyeY,c.ol);px(leX+2,eyeY+1,c.ol);
+    px(reX,eyeY+1,c.ol);px(reX+1,eyeY,c.ol);px(reX+2,eyeY+1,c.ol);
+  } else {
+    // Full eyes with pupil direction
+    rc(leX,eyeY,3,3,c.ew); rc(reX,eyeY,3,3,c.ew);
+    // Iris (follows look direction)
+    const liX=Math.max(leX,Math.min(leX+1,leX+pupOx));
+    const riX=Math.max(reX,Math.min(reX+1,reX+pupOx));
+    const iY=Math.max(eyeY,Math.min(eyeY+1,eyeY+pupOy));
+    rc(liX,iY,2,2,c.ei); rc(riX,iY,2,2,c.ei);
+    // Pupil
+    px(liX,iY,c.ep); px(riX,iY,c.ep);
+    // Catchlight (opposite pupil)
+    px(liX+1,iY,c.eg); px(riX+1,iY,c.eg);
+    // Lower iris darker
+    px(liX,iY+1,c.eb);px(liX+1,iY+1,c.eb);
+    px(riX,iY+1,c.eb);px(riX+1,iY+1,c.eb);
+    // Eye outline
+    for(let x=leX-1;x<=leX+3;x++)px(x,eyeY+3,c.ol);
+    px(leX-1,eyeY,c.ol);px(leX-1,eyeY+1,c.ol);px(leX-1,eyeY+2,c.ol);
+    px(leX+3,eyeY,c.ol);px(leX+3,eyeY+1,c.ol);px(leX+3,eyeY+2,c.ol);
+    for(let x=reX-1;x<=reX+3;x++)px(x,eyeY+3,c.ol);
+    px(reX-1,eyeY,c.ol);px(reX-1,eyeY+1,c.ol);px(reX-1,eyeY+2,c.ol);
+    px(reX+3,eyeY,c.ol);px(reX+3,eyeY+1,c.ol);px(reX+3,eyeY+2,c.ol);
+    // Brow line
+    rc(leX-1,eyeY-1,4,1,c.ol); rc(reX-1,eyeY-1,4,1,c.ol);
+    if(panic1||panic2){
+      rc(leX-1,eyeY-1,4,1,c.sk);rc(reX-1,eyeY-1,4,1,c.sk);
+      rc(leX-1,eyeY-2,4,1,c.ol);rc(reX-1,eyeY-2,4,1,c.ol);
+    }
+    // Angry brows for punch/kick/stab
+    if(punch1||punch2||kick1||kick2||stab1||stab2||shoot1||shoot2){
+      rc(leX-1,eyeY-1,4,1,c.sk);rc(reX-1,eyeY-1,4,1,c.sk);
+      // angry angle: \ for left, / for right
+      px(leX-1,eyeY-2,c.ol);px(leX,eyeY-2,c.ol);px(leX+1,eyeY-1,c.ol);px(leX+2,eyeY-1,c.ol);
+      px(reX-1,eyeY-1,c.ol);px(reX,eyeY-1,c.ol);px(reX+1,eyeY-2,c.ol);px(reX+2,eyeY-2,c.ol);
+    }
+  }
+
+  // ── Under-eye shadows (1px below eye bottom, inside face) ──
+  px(leX,eyeY+4,c.ue);px(leX+1,eyeY+4,c.ue);px(leX+2,eyeY+4,c.ue);
+  px(reX,eyeY+4,c.ue);px(reX+1,eyeY+4,c.ue);px(reX+2,eyeY+4,c.ue);
+
+  // Nose — with highlight
+  px(headX+5,eyeY+3,c.ss);px(headX+6,eyeY+3,c.ss);
+  px(headX+6,eyeY+2,c.nh);// nose bridge highlight (catches light)
+
+  // Mouth
+  const mY=headY+10;
+  if(talk1){
+    // Open mouth — distinct top/bottom lip colors
+    rc(headX+4,mY,4,1,c.mu);// upper lip (lighter)
+    rc(headX+4,mY+1,4,1,c.mi);// dark interior
+    rc(headX+5,mY+1,2,1,c.mt);// teeth hint
+    rc(headX+4,mY+2,4,1,c.ml);// lower lip (darker)
+  } else if(talk2){
+    // Wide open — bigger shape change
+    rc(headX+3,mY-1,5,1,c.mu);// upper lip raised
+    rc(headX+3,mY,5,2,c.mi);// bigger dark interior
+    rc(headX+4,mY,3,1,c.mt);// teeth top row
+    rc(headX+3,mY+2,5,1,c.ml);// lower lip
+  } else if(dance1||dance2||drink2){
+    // Smile — curved lip line
+    rc(headX+4,mY,4,1,c.ml);
+    px(headX+3,mY-1,c.ml);px(headX+8,mY-1,c.ml);// smile corners up
+  } else if(panic1||panic2){
+    // O-mouth — round open
+    px(headX+5,mY,c.ml);px(headX+6,mY,c.ml);// top lip
+    px(headX+4,mY+1,c.ml);rc(headX+5,mY+1,2,1,c.mi);px(headX+7,mY+1,c.ml);// sides + interior
+    px(headX+5,mY+2,c.ml);px(headX+6,mY+2,c.ml);// bottom lip
+  } else if(think){
+    // Pursed lips — small sideways
+    px(headX+6,mY,c.ml);px(headX+7,mY,c.ml);px(headX+8,mY,c.ml);
+  } else if(tongue){
+    // Happy open mouth — big pink tongue out
+    rc(headX+3,mY,5,1,c.mu);// upper lip wide
+    rc(headX+3,mY+1,5,1,c.mi);// dark mouth interior
+    // Big chunky pink tongue
+    rc(headX+3,mY+2,6,3,'#f47a8a');// tongue body — wide bright pink
+    rc(headX+4,mY+5,4,1,'#f47a8a');// tongue tip
+    // Tongue shading
+    rc(headX+3,mY+2,1,3,'#d8607a');// left shadow
+    rc(headX+8,mY+2,1,3,'#ff8fa0');// right highlight
+    rc(headX+5,mY+2,2,2,'#ff9aaa');// center highlight blob
+    px(headX+4,mY+5,'#d8607a');px(headX+7,mY+5,'#ff8fa0');// tip shading
+  } else if(punch2||kick2||stab2||shoot2){
+    // Gritting teeth
+    rc(headX+4,mY,4,1,c.ml);// lip
+    rc(headX+4,mY+1,4,1,c.mt);// teeth showing
+    rc(headX+4,mY+1,1,1,c.ml);px(headX+7,mY+1,c.ml);// corners
+  } else if(shoot1){
+    // Tense closed mouth
+    rc(headX+4,mY,4,1,c.ml);
+    rc(headX+3,mY,1,1,c.ml);// tight corners
+  } else if(drink1){
+    // Sipping — small round
+    px(headX+6,mY,c.ml);px(headX+7,mY,c.ml);
+    px(headX+6,mY+1,c.mi);px(headX+7,mY+1,c.mi);
+    px(headX+6,mY+2,c.ml);px(headX+7,mY+2,c.ml);
+  } else {
+    // Neutral — clean straight line (v3 style)
+    rc(headX+4,mY,4,1,c.ml);
+  }
+
+  // ─── MUSTACHE ───
+  if(acc&&acc.mustache){
+    const mx=headX+3,my=mY-1;
+    if(acc.mustache==='handlebar'){rc(mx,my,6,1,c.hr);rc(mx+1,my+1,4,1,c.hr);px(mx-1,my+1,c.hr);px(mx+6,my+1,c.hr);px(mx-1,my,c.hr);px(mx+6,my,c.hr);}
+    else if(acc.mustache==='thick'){rc(mx+1,my,4,2,c.hr);rc(mx,my,1,1,c.hr);rc(mx+5,my,1,1,c.hr);}
+    else if(acc.mustache==='goatee'){rc(mx+1,my,4,1,c.hr);rc(mx+2,my+1,2,1,c.hr);rc(headX+4,mY+1,3,2,c.hr);}
+  }
+
+  // ─── HAIR ───
+  const hy=headY-3;
+  if(hairStyle===0){px(headX+1,hy,c.hr);px(headX+3,hy-1,c.hr);px(headX+6,hy-1,c.hr);px(headX+9,hy,c.hr);rc(headX,hy+1,headW,2,c.hr);rc(headX-1,hy+2,headW+2,2,c.hr);rc(headX-1,hy+4,2,3,c.hr);rc(headX+headW-1,hy+4,2,3,c.hr);px(headX+2,hy+1,c.hh);px(headX+5,hy+1,c.hh);px(headX+8,hy+1,c.hh);px(headX+3,hy+2,c.hh);px(headX+7,hy+2,c.hh);rc(headX-1,hy+5,2,2,c.hs);}
+  else if(hairStyle===1){rc(headX,hy+1,headW,1,c.hr);rc(headX-1,hy+2,headW+2,2,c.hr);rc(headX-1,hy+4,2,4,c.hr);rc(headX+headW-1,hy+4,2,3,c.hr);rc(headX-1,hy+2,3,1,c.hs);px(headX+3,hy+1,c.hh);px(headX+7,hy+1,c.hh);}
+  else if(hairStyle===2){rc(headX,hy,headW,1,c.hr);rc(headX-1,hy+1,headW+2,3,c.hr);rc(headX-2,hy+4,2,9,c.hr);rc(headX+headW,hy+4,2,9,c.hr);rc(headX-2,hy+12,2,3,c.hr);rc(headX+headW,hy+12,2,3,c.hr);px(headX+2,hy+1,c.hh);px(headX+5,hy+1,c.hh);px(headX+9,hy+1,c.hh);rc(headX-2,hy+7,2,3,c.hs);rc(headX+headW,hy+7,2,3,c.hs);}
+  else if(hairStyle===3){rc(headX+1,hy+1,headW-2,1,c.hr);rc(headX,hy+2,headW,2,c.hr);px(headX+3,hy+2,c.hh);px(headX+8,hy+2,c.hh);}
+  else if(hairStyle===4){rc(headX+4,hy-3,4,1,c.hr);rc(headX+3,hy-2,6,1,c.hr);rc(headX+3,hy-1,6,1,c.hr);rc(headX+2,hy,8,1,c.hr);rc(headX+1,hy+1,10,1,c.hr);rc(headX,hy+2,headW,2,c.hr);px(headX+5,hy-3,c.hh);px(headX+4,hy-2,c.hh);px(headX+6,hy-1,c.hh);}
+  else{rc(headX-1,hy,headW+2,1,c.hr);rc(headX-2,hy+1,headW+4,3,c.hr);rc(headX-2,hy+4,2,4,c.hr);rc(headX+headW,hy+4,2,4,c.hr);px(headX,hy-1,c.hr);px(headX+3,hy-1,c.hr);px(headX+6,hy-1,c.hr);px(headX+9,hy-1,c.hr);px(headX+1,hy,c.hh);px(headX+4,hy,c.hh);px(headX+7,hy,c.hh);px(headX+10,hy,c.hh);px(headX+0,hy+1,c.hh);px(headX+3,hy+1,c.hh);px(headX+6,hy+1,c.hh);px(headX+9,hy+1,c.hh);rc(headX-2,hy+5,2,2,c.hs);rc(headX+headW,hy+5,2,2,c.hs);}
+
+  // ── Hair back shadow (cast onto neck area, below outline) ──
+  rc(headX+3,headY+headH+1,headW-6,1,c.hbs);
+  rc(headX+4,headY+headH+2,headW-8,1,mix(c.hbs,c.sk,0.5));
+
+  // ─── HEAD OUTLINE (drawn last so it's always crisp) ───
+  for(let x=headX+2;x<headX+headW-2;x++){px(x,headY-1,c.ol);px(x,headY+headH,c.ol);}
+  for(let y2=headY+2;y2<headY+headH-2;y2++){px(headX-1,y2,c.ol);px(headX+headW,y2,c.ol);}
+  px(headX+1,headY,c.ol);px(headX+headW-2,headY,c.ol);
+  px(headX,headY+1,c.ol);px(headX+headW-1,headY+1,c.ol);
+  px(headX,headY+headH-2,c.ol);px(headX+headW-1,headY+headH-2,c.ol);
+  px(headX+1,headY+headH-1,c.ol);px(headX+headW-2,headY+headH-1,c.ol);
+
+  // ── Ear hints (outside outline) ──
+  px(headX-1,headY+5,c.ear);px(headX-1,headY+6,c.ear);// left ear
+  px(headX+headW,headY+5,c.ear);px(headX+headW,headY+6,c.ear);// right ear
+  px(headX-2,headY+5,c.ol);px(headX-2,headY+6,c.ol);// left ear outline
+  px(headX+headW+1,headY+5,c.ol);px(headX+headW+1,headY+6,c.ol);// right ear outline
+
+  // ─── HAT ───
+  if(acc&&acc.hat){
+    const hatY=hy-1;
+    if(acc.hat==='cap'){rc(headX-1,hatY+1,headW+2,3,acc.hatColor||'#cc3333');rc(headX-1,hatY+1,headW+2,1,lt(acc.hatColor||'#cc3333',20));rc(headX-3,hatY+3,headW+4,1,dk(acc.hatColor||'#cc3333',20));rc(headX-3,hatY+4,headW+5,1,dk(acc.hatColor||'#cc3333',35));for(let x=headX-1;x<headX+headW+1;x++)px(x,hatY,c.ol);for(let x=headX-3;x<headX+headW+4;x++)px(x,hatY+5,c.ol);}
+    else if(acc.hat==='beanie'){rc(headX,hatY,headW,4,acc.hatColor||'#4466aa');rc(headX+1,hatY-1,headW-2,1,acc.hatColor||'#4466aa');rc(headX,hatY+3,headW,1,dk(acc.hatColor||'#4466aa',20));rc(headX+4,hatY-3,4,2,acc.hatColor||'#4466aa');rc(headX+5,hatY-4,2,1,lt(acc.hatColor||'#4466aa',20));px(headX+5,hatY-3,lt(acc.hatColor||'#4466aa',30));}
+    else if(acc.hat==='chef'){rc(headX+1,hatY-4,headW-2,7,c.ew);rc(headX+2,hatY-5,headW-4,1,c.ew);rc(headX+3,hatY-6,headW-6,2,c.ew);rc(headX,hatY+2,headW,2,c.ew);for(let x=headX+3;x<headX+headW-3;x++)px(x,hatY-7,c.ol);px(headX+2,hatY-6,c.ol);px(headX+headW-3,hatY-6,c.ol);px(headX+1,hatY-5,c.ol);px(headX+headW-2,hatY-5,c.ol);for(let y2=hatY-4;y2<hatY+2;y2++){px(headX,y2,c.ol);px(headX+headW-1,y2,c.ol);}}
+    else if(acc.hat==='tophat'){rc(headX+2,hatY-6,headW-4,8,c.ol);rc(headX+3,hatY-5,headW-6,6,dk(c.ol,0));rc(headX-1,hatY+1,headW+2,2,c.ol);rc(headX+3,hatY-1,headW-6,1,'#cc3333');rc(headX+4,hatY-4,1,4,lt(c.ol,30));}
+    else if(acc.hat==='military'){rc(headX-1,hatY+1,headW+2,3,dk('#4a5a3a',0));rc(headX-1,hatY+1,headW+2,1,lt('#4a5a3a',15));rc(headX-2,hatY+3,headW+3,1,dk('#4a5a3a',15));rc(headX-2,hatY+4,headW+2,1,dk('#4a5a3a',30));px(headX+5,hatY+2,'#ddaa33');px(headX+6,hatY+2,'#ddaa33');}
+  }
+
+  // ─── NECK ───
+  const neckY=headY+headH+1;
+  rc(14+lean,neckY,4,2,c.sk); rc(14+lean,neckY,1,2,c.ss);
+  // Neck AO (shadow under head)
+  px(13+lean,neckY,c.ao2);px(18+lean,neckY,c.ao2);
+
+  // ─── TORSO ───
+  const tX=10+lean, tY=neckY+2, tW=small?10:12, tH=(small?8:11)+squash;
+  rc(tX,tY,tW,tH,c.o1);
+  // ── 3D SHADING: torso ──
+  // Deep shadow left column
+  rc(tX,tY,2,tH,c.os);
+  rc(tX+2,tY,1,tH,c.od);// extra deep shadow stripe
+  // Bottom shadow
+  rc(tX,tY+tH-2,tW,2,c.os);
+  // Right highlight
+  rc(tX+tW-3,tY+1,2,tH-4,c.oh);
+  // Rim light right edge
+  rc(tX+tW-1,tY+1,1,tH-2,c.orim);
+  // Collar
+  rc(tX+3,tY,6,2,c.o2);
+  // Back depth — center columns darker (torso curves away from viewer)
+  rc(tX+4,tY+2,1,tH-3,c.ob);
+  rc(tX+5,tY+2,2,tH-3,mix(c.o1,c.os,0.4));// center crease
+  rc(tX+7,tY+2,1,tH-3,c.ob);
+  // AO under collar
+  rc(tX+3,tY+2,6,1,c.ao);
+
+  // Outline torso
+  for(let x=tX;x<tX+tW;x++){px(x,tY-1,c.ol);px(x,tY+tH,c.ol);}
+  for(let y2=tY;y2<tY+tH;y2++){px(tX-1,y2,c.ol);px(tX+tW,y2,c.ol);}
+  // Belt
+  rc(tX+1,tY+tH-2,tW-2,1,c.bt);
+  px(tX+5,tY+tH-2,lt(c.bt,40));px(tX+6,tY+tH-2,lt(c.bt,40));
+
+  // ─── SHOULDERS ───
+  const shL={x:tX,y:tY+1},shR={x:tX+tW-1,y:tY+1};
+  rc(shL.x-1,shL.y,2,2,c.o1);px(shL.x-1,shL.y,c.os);
+  rc(shR.x,shR.y,2,2,c.o1);px(shR.x+1,shR.y,c.orim);
+
+  // ─── ARM FUNC ───
+  function arm(sh,side,pose2){
+    const L=side==='L';
+    const sx=sh.x,sy=sh.y;
+    let ux,uy,fx,fy,hx,hy;
+    if(pose2==='down'){ux=sx+(L?-3:1);uy=sy;fx=ux;fy=uy+5;hx=ux;hy=uy+9;}
+    else if(pose2==='back'){ux=sx+(L?-2:0);uy=sy-1;fx=ux+(L?1:-1);fy=uy+4;hx=fx+(L?1:-1);hy=fy+3;}
+    else if(pose2==='fwd'){ux=sx+(L?-4:2);uy=sy;fx=ux+(L?-1:1);fy=uy+4;hx=fx+(L?-1:1);hy=fy+3;}
+    else if(pose2==='up'){ux=sx+(L?-3:1);uy=sy-6;fx=ux+(L?-1:1);fy=uy-3;hx=fx;hy=fy-2;}
+    else if(pose2==='diag'){ux=sx+(L?-4:2);uy=sy-3;fx=ux+(L?-2:2);fy=uy-2;hx=fx+(L?-1:1);hy=fy-2;}
+    else if(pose2==='punch'){ux=sx+(L?-4:2);uy=sy;fx=ux+(L?-4:4);fy=sy-1;hx=fx+(L?-3:3);hy=sy-1;}
+    else if(pose2==='uppercut'){ux=sx+(L?-3:1);uy=sy-2;fx=ux+(L?-2:2);fy=uy-4;hx=fx+(L?-1:1);hy=fy-2;}
+    else if(pose2==='hold'){ux=sx+(L?-3:1);uy=sy-2;fx=ux;fy=uy+4;hx=fx+(L?1:-1);hy=fy+2;}
+
+    // Upper arm with 3D shading
+    rc(ux,uy,3,5,c.o1);
+    rc(L?ux:ux+2,uy,1,5,c.os);// shadow edge
+    px(L?ux+2:ux,uy+1,c.oh);// highlight edge
+    // Forearm with 3D
+    rc(fx,fy,3,4,c.sk);
+    rc(L?fx:fx+2,fy,1,4,c.ss);
+    px(L?fx+2:fx,fy+1,c.sh);// skin highlight
+    // Hand
+    rc(hx,hy,3,2,c.sk);
+    rc(hx,hy+1,3,1,c.ss);
+    // Shoulder bridge
+    px(L?sx-1:sx+1,sy+1,c.o1);
+    // AO at armpit
+    px(L?sx:sx,sy+2,c.ao);
+
+    return{hx,hy};
+  }
+
+  // ─── ARM POSE SELECTION ───
+  let lArm='down',rArm='down';
+  if(walk1){lArm='fwd';rArm='back';}
+  else if(walk2){lArm='back';rArm='fwd';}
+  else if(talk1){rArm='diag';}
+  else if(talk2){rArm='up';}
+  else if(dance1){lArm='up';rArm='diag';}
+  else if(dance2){lArm='diag';rArm='up';}
+  else if(wave1){rArm='up';}
+  else if(wave2){rArm='diag';}
+  else if(think){rArm='diag';}
+  else if(panic1){lArm='diag';rArm='up';}
+  else if(panic2){lArm='up';rArm='diag';}
+  else if(stab1){rArm='back';}
+  else if(stab2){rArm='punch';}
+  else if(punch1){rArm='back';lArm='fwd';}// wind up
+  else if(punch2){rArm='punch';lArm='back';}// snap
+  else if(kick1){rArm='fwd';lArm='back';}
+  else if(kick2){rArm='diag';lArm='down';}
+  else if(shoot1){rArm='fwd';lArm='fwd';}// aiming two-handed
+  else if(shoot2){rArm='punch';lArm='fwd';}// recoil
+  else if(drink1){rArm='hold';}
+  else if(drink2){rArm='hold';}
+  else if(tongue){rArm='diag';}
+
+  arm(shL,'L',lArm);
+  const rh=arm(shR,'R',rArm);
+
+  // ─── PROPS ───
+  if(think){
+    px(rh.hx+1,rh.hy-2,'#fff');px(rh.hx+2,rh.hy-4,'#fff');
+    rc(rh.hx+2,rh.hy-8,5,3,'#fff');rc(rh.hx+3,rh.hy-9,3,1,'#fff');
+    px(rh.hx+3,rh.hy-7,'#aabbcc');px(rh.hx+5,rh.hy-7,'#aabbcc');
+  }
+  if(stab1||stab2){
+    // Knife — held in right hand
+    const kx=rh.hx+2,ky=rh.hy-1;
+    if(stab2){
+      // Knife thrust forward — blade horizontal
+      rc(kx,ky,7,1,'#cccccc');// blade
+      rc(kx,ky-1,7,1,'#dddddd');// blade highlight
+      px(kx+6,ky-1,'#eeeeee');px(kx+6,ky,'#aaaaaa');// tip
+      rc(kx-1,ky-1,2,3,'#8b6914');// handle/guard
+      px(kx-1,ky,'#a07818');// handle highlight
+    } else {
+      // Knife held back — blade up
+      rc(kx,ky,1,6,'#cccccc');// blade vertical
+      px(kx+1,ky,c.ol);px(kx+1,ky+1,'#dddddd');// blade edge
+      px(kx,ky,'#eeeeee');// tip
+      rc(kx-1,ky+5,3,2,'#8b6914');// handle
+      px(kx,ky+5,'#a07818');// handle highlight
+    }
+  }
+  if(shoot1||shoot2){
+    // Gun — held in right hand
+    const gx=rh.hx+2,gy=rh.hy;
+    if(shoot2){
+      // Firing — gun extended with muzzle flash
+      rc(gx,gy-1,6,3,'#444455');// gun body
+      rc(gx,gy-1,6,1,'#555566');// barrel highlight
+      rc(gx+5,gy,1,2,'#333344');// grip
+      px(gx+6,gy-1,'#ffff44');px(gx+7,gy-2,'#ffaa22');px(gx+7,gy,'#ffaa22');// muzzle flash
+      px(gx+6,gy-2,'#ffff88');// flash spark
+    } else {
+      // Aiming — gun forward
+      rc(gx,gy-1,5,3,'#444455');// gun body
+      rc(gx,gy-1,5,1,'#555566');// barrel highlight
+      rc(gx+4,gy,1,2,'#333344');// grip
+      px(gx+5,gy-1,'#666677');// muzzle
+    }
+  }
+  if(punch2){
+    // Impact stars
+    const ix=rh.hx+4,iy=rh.hy-1;
+    px(ix,iy,'#ffff44');px(ix+1,iy-1,'#ffff44');px(ix+2,iy,'#ffff44');
+    px(ix+1,iy+1,'#ffaa22');px(ix,iy-1,'#ffaa22');
+  }
+  if(talk1||talk2){
+    const sx2=rh.hx+(talk2?1:2),sy2=rh.hy-3;
+    px(sx2,sy2,'#fff');px(sx2+2,sy2-1,'#fff');px(sx2+1,sy2+1,'#ccc');
+  }
+  if(drink1||drink2){
+    // Cup/mug in hand — closer to face
+    const dx=rh.hx-1,dy=rh.hy-3;
+    rc(dx,dy,4,5,'#ddaa66');// mug body
+    rc(dx,dy,1,5,dk('#ddaa66',20));// mug shadow
+    rc(dx+3,dy,1,5,lt('#ddaa66',15));// mug highlight
+    rc(dx,dy,4,1,'#996633');// rim
+    rc(dx+4,dy+1,2,3,'#ddaa66');// handle
+    px(dx+4,dy+1,dk('#ddaa66',15));px(dx+5,dy+2,dk('#ddaa66',15));px(dx+4,dy+3,dk('#ddaa66',15));
+    // Straw — reaches up toward mouth
+    const stX=dx+1;
+    rc(stX,dy-6,1,7,'#cc3333');// straw shaft (red)
+    px(stX,dy-7,'#ee4444');// straw top
+    px(stX+1,dy-6,'#aa2222');// straw shadow
+    // Liquid visible in mug
+    rc(dx+1,dy+1,2,3,'#885533');
+  }
+
+  // ─── LEGS ───
+  const legY=tY+tH;
+  if(walk1){
+    rc(tX+1,legY,4,7,c.o1);rc(tX+1,legY,1,7,c.os);rc(tX+3,legY,1,7,c.oh);// 3D leg
+    rc(tX+7,legY,4,6,c.o1);rc(tX+10,legY,1,6,c.os);
+    rc(tX,legY+7,5,2,c.s1);rc(tX,legY+8,5,1,c.s2);px(tX+4,legY+7,c.s3);
+    rc(tX+7,legY+6,4,2,c.s1);rc(tX+7,legY+7,4,1,c.s2);
+  }else if(walk2){
+    rc(tX+1,legY,4,6,c.o1);rc(tX+1,legY,1,6,c.os);
+    rc(tX+7,legY,4,7,c.o1);rc(tX+10,legY,1,7,c.os);rc(tX+9,legY,1,7,c.oh);// 3D leg
+    rc(tX+1,legY+6,4,2,c.s1);rc(tX+1,legY+7,4,1,c.s2);
+    rc(tX+6,legY+7,6,2,c.s1);rc(tX+6,legY+8,6,1,c.s2);px(tX+11,legY+7,c.s3);
+  }else if(kick1){
+    // Kicking leg winding up — right leg pulled back
+    rc(tX+1,legY,4,8,c.o1);rc(tX+1,legY,1,8,c.os);rc(tX+3,legY,1,8,c.oh);
+    rc(tX+8,legY,4,5,c.o1);rc(tX+11,legY,1,5,c.os);
+    rc(tX,legY+8,6,2,c.s1);rc(tX,legY+9,6,1,c.s2);px(tX+5,legY+8,c.s3);
+    rc(tX+8,legY+5,4,2,c.s1);rc(tX+8,legY+6,4,1,c.s2);
+  }else if(kick2){
+    // Kick extended! Right leg out horizontal
+    rc(tX+1,legY,4,8,c.o1);rc(tX+1,legY,1,8,c.os);rc(tX+3,legY,1,8,c.oh);
+    // Extended kick leg — horizontal
+    rc(tX+7,legY+2,8,3,c.o1);rc(tX+7,legY+2,8,1,c.os);rc(tX+7,legY+4,8,1,c.oh);
+    // Kick foot
+    rc(tX+15,legY+1,3,4,c.s1);rc(tX+15,legY+1,3,1,c.s3);rc(tX+15,legY+4,3,1,c.s2);
+    // Standing shoe
+    rc(tX,legY+8,6,2,c.s1);rc(tX,legY+9,6,1,c.s2);px(tX+5,legY+8,c.s3);
+    // Impact!
+    px(tX+18,legY+2,'#ffff44');px(tX+19,legY+1,'#ffff44');px(tX+19,legY+3,'#ffaa22');
+  }else{
+    // Standing with 3D shading on legs
+    rc(tX+1,legY,4,8,c.o1);rc(tX+1,legY,1,8,c.os);rc(tX+4,legY,1,8,c.oh);
+    rc(tX+7,legY,4,8,c.o1);rc(tX+10,legY,1,8,c.os);rc(tX+7,legY,1,8,c.oh);
+    rc(tX,legY+8,6,2,c.s1);rc(tX,legY+9,6,1,c.s2);px(tX+5,legY+8,c.s3);
+    rc(tX+6,legY+8,6,2,c.s1);rc(tX+6,legY+9,6,1,c.s2);px(tX+11,legY+8,c.s3);
+    // AO between legs — deeper shadow for back depth
+    rc(tX+5,legY,2,5,c.ao);
+    rc(tX+4,legY,1,3,c.ob);rc(tX+7,legY,1,3,c.ob);// inner leg back shadow
+  }
+
+  // ─── GROUND SHADOW ───
+  // Elliptical drop shadow beneath character
+  const shY=legY+10;// just below feet
+  const shCx=16+lean;// center x follows lean
+  const shRx=7,shRy=2;// ellipse radii
+  for(let sy=shY-shRy;sy<=shY+shRy;sy++){
+    for(let sx=shCx-shRx;sx<=shCx+shRx;sx++){
+      const dx=(sx-shCx)/shRx,dy=(sy-shY)/shRy;
+      if(dx*dx+dy*dy<=1.0){
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<0.4) px(sx,sy,c.gs);
+        else if(dist<0.7) px(sx,sy,'#0c0c1e');
+        else px(sx,sy,'#10102a');
+      }
+    }
+  }
+
+  return g;
+}
+
+function drawHD(cv,pal,hair,pose,sc,acc,opts){
+  const S=sc||4;cv.width=GW*S;cv.height=GH*S;cv.className='bg';
+  const ctx=cv.getContext('2d');ctx.imageSmoothingEnabled=false;
+
+  // ── Ground plane ──
+  // Top half: dark sky/void. Bottom strip: subtle floor surface.
+  const groundStart=Math.floor(GH*0.82);// ground starts at ~82% down
+  ctx.fillStyle='#111122';ctx.fillRect(0,0,cv.width,groundStart*S);
+  // Ground plane with slight gradient
+  for(let row=groundStart;row<GH;row++){
+    const t=(row-groundStart)/(GH-groundStart);
+    const r=0x14+Math.round(t*0x08);
+    const g2=0x14+Math.round(t*0x08);
+    const b=0x28+Math.round(t*0x0c);
+    ctx.fillStyle=rgb2hex(r,g2,b);
+    ctx.fillRect(0,row*S,cv.width,S);
+  }
+  // Subtle horizon line
+  ctx.fillStyle='#222244';ctx.fillRect(0,groundStart*S,cv.width,1);
+
+  const g=render(pal,hair,pose,acc,opts);
+  for(let y=0;y<GH;y++)for(let x=0;x<GW;x++)if(g[y][x]){ctx.fillStyle=g[y][x];ctx.fillRect(x*S,y*S,S,S);}
+}
+
+// ─── CHARACTER DATA ───
+const C=[
+  {id:'volunteer',p:{outline:'#1a1a2e',skin:'#f5d0a9',skinShadow:'#d4a574',hair:'#c4783c',hairHighlight:'#e09050',outfitPrimary:'#cc4444',outfitSecondary:'#ffffff',shoe:'#5a3a2a'},h:0},
+  {id:'intern',p:{outline:'#1a1a2e',skin:'#ffe0cc',skinShadow:'#e0b8a0',hair:'#6b4423',hairHighlight:'#8b6243',outfitPrimary:'#4a7c59',outfitSecondary:'#ffffff',shoe:'#3d3d3d'},h:1},
+  {id:'medic',p:{outline:'#1a1a2e',skin:'#8b5e3c',skinShadow:'#6b4226',hair:'#1a1a1a',hairHighlight:'#2a2a2a',outfitPrimary:'#ffffff',outfitSecondary:'#cc3333',shoe:'#ffffff'},h:3},
+  {id:'influencer',p:{outline:'#1a1a2e',skin:'#f5d0a9',skinShadow:'#d4a574',hair:'#e8c840',hairHighlight:'#f0d860',outfitPrimary:'#e05090',outfitSecondary:'#ffffff',shoe:'#ffffff'},h:2},
+  {id:'nihilist',p:{outline:'#1a1a2e',skin:'#ffe0cc',skinShadow:'#e0b8a0',hair:'#1a1a1a',hairHighlight:'#2a2a2a',outfitPrimary:'#1a1a1a',outfitSecondary:'#2a2a2a',shoe:'#1a1a1a'},h:4},
+  {id:'philosopher',p:{outline:'#1a1a2e',skin:'#ffe0cc',skinShadow:'#e0b8a0',hair:'#aaaaaa',hairHighlight:'#cccccc',outfitPrimary:'#6a5a4a',outfitSecondary:'#5a4a3a',shoe:'#4a3a2a'},h:2},
+  {id:'prepper',p:{outline:'#1a1a2e',skin:'#f5d0a9',skinShadow:'#d4a574',hair:'#3a2a1a',hairHighlight:'#5a4a3a',outfitPrimary:'#5a6a3a',outfitSecondary:'#4a5a2a',shoe:'#3a3a2a'},h:3},
+  {id:'child',p:{outline:'#1a1a2e',skin:'#f5d0a9',skinShadow:'#d4a574',hair:'#cc6633',hairHighlight:'#ee8855',outfitPrimary:'#5588cc',outfitSecondary:'#ffffff',shoe:'#cc4444'},h:5,opts:{small:true,rosyCheeks:true}},
+  {id:'politician',p:{outline:'#1a1a2e',skin:'#c68c53',skinShadow:'#a06830',hair:'#555555',hairHighlight:'#777777',outfitPrimary:'#1a2a4a',outfitSecondary:'#aa2222',shoe:'#1a1a1a'},h:1},
+  {id:'optimist',p:{outline:'#1a1a2e',skin:'#c68c53',skinShadow:'#a06830',hair:'#dd8833',hairHighlight:'#eeaa55',outfitPrimary:'#f0c030',outfitSecondary:'#ffffff',shoe:'#dd7722'},h:5},
+  {id:'engineer',p:{outline:'#1a1a2e',skin:'#c68c53',skinShadow:'#a06830',hair:'#2a2a2a',hairHighlight:'#3a3a3a',outfitPrimary:'#cc8833',outfitSecondary:'#aa6622',shoe:'#5a4a3a'},h:0},
+  {id:'therapist',p:{outline:'#1a1a2e',skin:'#8b5e3c',skinShadow:'#6b4226',hair:'#2a1a1a',hairHighlight:'#4a3a3a',outfitPrimary:'#7a6a8a',outfitSecondary:'#6a5a7a',shoe:'#3a3a3a'},h:5},
+];
+
+// ─── PAGE ───
+
+// Comparison
+const cmp=document.getElementById('compare');
+[C[0],C[3],C[2]].forEach(ch=>{
+  const c1d=document.createElement('div');c1d.className='col';
+  const c1=document.createElement('canvas');drawOld(c1,ch.p,OLD_H[ch.h]);
+  const l1=document.createElement('div');l1.className='colLabel';l1.innerHTML=`<strong>Current</strong><br>${ch.id}`;
+  c1d.appendChild(c1);c1d.appendChild(l1);cmp.appendChild(c1d);
+  const c2d=document.createElement('div');c2d.className='col';
+  const c2=document.createElement('canvas');drawHD(c2,ch.p,ch.h,'idle',4,null,ch.opts);
+  const l2=document.createElement('div');l2.className='colLabel';l2.innerHTML=`<strong>HD v6</strong><br>${ch.id}`;
+  c2d.appendChild(c2);c2d.appendChild(l2);cmp.appendChild(c2d);
+});
+
+// Walk cycles
+const wD=document.getElementById('walks');
+const wA=[];
+// Smash-style walk: contact-pass-contact with bob and lean
+const wSeq=['idle','walk1','walk2','walk1','idle2','walk2','walk1','walk2','halfblink','blink','halfblink','idle','idle','lookR','idle','lookL','idle'];
+[C[0],C[3],C[7],C[8]].forEach(ch=>{
+  const d=document.createElement('div');d.className='card';
+  const cv=document.createElement('canvas');drawHD(cv,ch.p,ch.h,'idle',4,null,ch.opts);
+  wA.push({cv,ch,f:0});
+  const l=document.createElement('div');l.className='lbl';l.textContent=ch.id;
+  d.appendChild(cv);d.appendChild(l);wD.appendChild(d);
+});
+setInterval(()=>wA.forEach(w=>{w.f=(w.f+1)%wSeq.length;drawHD(w.cv,w.ch.p,w.ch.h,wSeq[w.f],4,null,w.ch.opts);}),180);
+
+// Combat actions — Smash anticipation→snap→recover
+const combatD=document.getElementById('combat');
+const combatA=[];
+const combatDefs=[
+  {ch:C[10],seq:['idle','lookR','stab1','stab1','stab2','stab2','stab2','idle','halfblink','blink','halfblink','idle'],label:'stab'},
+  {ch:C[6],seq:['idle','lookR','punch1','punch1','punch2','punch2','punch2','idle','halfblink','blink','halfblink','idle'],label:'punch'},
+  {ch:C[4],seq:['idle','lookR','kick1','kick1','kick2','kick2','kick2','idle','halfblink','blink','halfblink','idle'],label:'kick'},
+  {ch:C[8],seq:['idle','lookR','shoot1','shoot1','shoot2','shoot2','shoot1','shoot2','idle','halfblink','blink','halfblink','idle'],label:'shoot'},
+  {ch:C[5],seq:['idle','lookR','punch1','punch2','punch2','idle','kick1','kick2','kick2','idle','halfblink','blink','idle'],label:'combo'},
+];
+combatDefs.forEach(ad=>{
+  const d=document.createElement('div');d.className='card';
+  const cv=document.createElement('canvas');drawHD(cv,ad.ch.p,ad.ch.h,'idle',4,null,ad.ch.opts);
+  combatA.push({cv,ch:ad.ch,seq:ad.seq,f:0});
+  const l=document.createElement('div');l.className='lbl';l.textContent=ad.ch.id+' — '+ad.label;
+  d.appendChild(cv);d.appendChild(l);combatD.appendChild(d);
+});
+setInterval(()=>combatA.forEach(a=>{a.f=(a.f+1)%a.seq.length;drawHD(a.cv,a.ch.p,a.ch.h,a.seq[a.f],4,null,a.ch.opts);}),200);
+
+// Social actions
+const socialD=document.getElementById('social');
+const socialA=[];
+const socialDefs=[
+  {ch:C[0],seq:['idle','lookR','talk1','talk2','talk1','talk2','talk1','idle','halfblink','blink','halfblink','idle'],label:'talk'},
+  {ch:C[1],seq:['idle','drink1','drink1','drink2','drink2','drink1','idle','halfblink','blink','halfblink','idle'],label:'drink'},
+  {ch:C[3],seq:['idle','dance1','dance2','dance1','dance2','idle','halfblink','blink','idle'],label:'dance'},
+  {ch:C[4],seq:['idle','lookR','wave1','wave2','wave1','wave2','idle','halfblink','blink','halfblink','idle'],label:'wave'},
+  {ch:C[8],seq:['idle','lookR','lookR','think','think','think','think','idle','halfblink','blink','halfblink','idle'],label:'think'},
+  {ch:C[7],seq:['idle','panic1','panic2','panic1','panic2','idle','halfblink','blink','halfblink','idle'],label:'panic'},
+  {ch:C[9],seq:['idle','tongue','tongue','tongue','idle','halfblink','blink','halfblink','idle','lookR','idle'],label:'tongue'},
+];
+socialDefs.forEach(ad=>{
+  const d=document.createElement('div');d.className='card';
+  const cv=document.createElement('canvas');drawHD(cv,ad.ch.p,ad.ch.h,'idle',4,null,ad.ch.opts);
+  socialA.push({cv,ch:ad.ch,seq:ad.seq,f:0});
+  const l=document.createElement('div');l.className='lbl';l.textContent=ad.ch.id+' — '+ad.label;
+  d.appendChild(cv);d.appendChild(l);socialD.appendChild(d);
+});
+setInterval(()=>socialA.forEach(a=>{a.f=(a.f+1)%a.seq.length;drawHD(a.cv,a.ch.p,a.ch.h,a.seq[a.f],4,null,a.ch.opts);}),210);
+
+// Hats & Mustaches showcase
+const accD=document.getElementById('accessories');
+const accDefs=[
+  {ch:C[0],acc:{hat:'cap',hatColor:'#cc3333'},label:'baseball cap'},
+  {ch:C[8],acc:{hat:'tophat'},label:'top hat'},
+  {ch:C[2],acc:{hat:'chef'},label:'chef hat'},
+  {ch:C[6],acc:{hat:'military'},label:'military cap'},
+  {ch:C[9],acc:{hat:'beanie',hatColor:'#4466aa'},label:'beanie'},
+  {ch:C[1],acc:{mustache:'handlebar'},label:'handlebar stache'},
+  {ch:C[8],acc:{mustache:'thick'},label:'thick stache'},
+  {ch:C[5],acc:{mustache:'goatee'},label:'goatee'},
+  {ch:C[10],acc:{hat:'cap',hatColor:'#cc8833',mustache:'thick'},label:'cap + stache'},
+  {ch:C[0],acc:{hat:'beanie',hatColor:'#cc4444',mustache:'handlebar'},label:'beanie + handlebar'},
+];
+const accAnims=[];
+const accSeq=['idle','idle','blink','idle','walk1','walk2','walk1','idle'];
+accDefs.forEach(ad=>{
+  const d=document.createElement('div');d.className='card';
+  const cv=document.createElement('canvas');drawHD(cv,ad.ch.p,ad.ch.h,'idle',3,ad.acc);
+  accAnims.push({cv,ch:ad.ch,acc:ad.acc,f:0});
+  const l=document.createElement('div');l.className='sm';l.textContent=ad.label;
+  d.appendChild(cv);d.appendChild(l);accD.appendChild(d);
+});
+setInterval(()=>accAnims.forEach(a=>{a.f=(a.f+1)%accSeq.length;drawHD(a.cv,a.ch.p,a.ch.h,accSeq[a.f],3,a.acc);}),220);
+
+// Full roster
+const rD=document.getElementById('roster');
+C.forEach(ch=>{
+  const d=document.createElement('div');d.className='card';
+  const cv=document.createElement('canvas');drawHD(cv,ch.p,ch.h,'idle',3,null,ch.opts);
+  const l=document.createElement('div');l.className='sm';l.textContent=ch.id;
+  d.appendChild(cv);d.appendChild(l);rD.appendChild(d);
+});
+</script>
+</body>
+</html>

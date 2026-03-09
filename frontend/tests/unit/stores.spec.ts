@@ -89,21 +89,20 @@ describe('experimentStore', () => {
   })
 
   describe('onRoundStart', () => {
-    it('updates currentRound, sets running, and adds event', () => {
+    it('updates currentRound and sets running', () => {
       const store = useExperimentStore()
       store.onRoundStart(makeMsg({ type: 'round_start', round: 4, data: { total_rounds: 15 } }))
       expect(store.currentRound).toBe(4)
       expect(store.status).toBe('running')
-      expect(store.events).toHaveLength(1)
-      expect(store.events[0].type).toBe('round_start')
     })
   })
 
   describe('onRoundEnd', () => {
-    it('updates state and adds event', () => {
+    it('updates state from round_end data', () => {
       const store = useExperimentStore()
       store.onRoundEnd(makeMsg({ type: 'round_end', data: { status: 'running', current_round: 3, total_rounds: 15, threat_level: 30, resources: { food: 20, water: 25, materials: 10, power: 8 }, agents: [] } }))
-      expect(store.events).toHaveLength(1)
+      expect(store.currentRound).toBe(3)
+      expect(store.totalRounds).toBe(15)
     })
   })
 
@@ -112,7 +111,6 @@ describe('experimentStore', () => {
       const store = useExperimentStore()
       store.onPhaseChange(makeMsg({ type: 'phase_change', phase: 'dawn', data: { events: [{ type: 'dawn' }] } }))
       expect(store.currentPhase).toBe('dawn')
-      expect(store.events).toHaveLength(1)
     })
   })
 
@@ -121,7 +119,6 @@ describe('experimentStore', () => {
       const store = useExperimentStore()
       store.onEnd(makeMsg({ type: 'experiment_end', data: { summary: 'Game over' } }))
       expect(store.status).toBe('completed')
-      expect(store.events).toHaveLength(1)
     })
   })
 
@@ -634,8 +631,9 @@ describe('socialStore', () => {
       }))
       expect(store.meeting!.result).toBe('Proposal passed')
       expect(store.meeting!.votes).toEqual({ a1: 'agree', a2: 'disagree' })
-      expect(store.meeting!.active).toBe(false)
-      expect(store.isMeetingActive).toBe(false)
+      // Meeting stays active until explicitly dismissed
+      expect(store.meeting!.active).toBe(true)
+      expect(store.isMeetingActive).toBe(true)
     })
   })
 

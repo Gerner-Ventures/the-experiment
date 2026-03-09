@@ -117,6 +117,10 @@ export const HD_ACTION_TO_ANIMATION: Record<string, string> = {
   eat: 'eat',
   drink: 'drink',
 
+  // Meeting
+  meeting_speech: 'talk',
+  meeting_vote: 'vote',
+
   // Meta
   investigate: 'investigate',
   monologue: 'monologue',

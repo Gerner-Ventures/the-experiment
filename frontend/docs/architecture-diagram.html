@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Experiment — Round Data Flow</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      color: #e0e0e0;
+      font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.4rem;
+      font-weight: 500;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 0.25rem;
+    }
+    h2 {
+      font-size: 1rem;
+      font-weight: 500;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin: 2.5rem 0 0.5rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .subtitle {
+      text-align: center;
+      font-size: 0.75rem;
+      color: #555;
+      margin-bottom: 2rem;
+    }
+    .diagram-container {
+      max-width: 1400px;
+      margin: 0.5rem auto 0;
+      background: #0f0f18;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 12px;
+      padding: 2rem;
+      overflow-x: auto;
+    }
+    .problem-label {
+      color: #e94560;
+    }
+    .solution-label {
+      color: #16c79a;
+    }
+    .mermaid { display: flex; justify-content: center; }
+    .mermaid svg { max-width: 100%; height: auto; }
+    .section-wrapper { max-width: 1400px; margin: 0 auto; }
+    .callout {
+      max-width: 1400px;
+      margin: 1rem auto;
+      padding: 1rem 1.5rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      line-height: 1.6;
+    }
+    .callout-problem {
+      background: rgba(233, 69, 96, 0.08);
+      border: 1px solid rgba(233, 69, 96, 0.2);
+    }
+    .callout-solution {
+      background: rgba(22, 199, 154, 0.08);
+      border: 1px solid rgba(22, 199, 154, 0.2);
+    }
+    .callout strong { color: #ccc; }
+    .callout code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 0.75rem;
+    }
+    ul { padding-left: 1.5rem; }
+    li { margin: 0.25rem 0; }
+    .legend {
+      max-width: 1400px;
+      margin: 1rem auto 0;
+      display: flex;
+      gap: 1.5rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.7rem;
+      color: #666;
+    }
+    .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>The Experiment — Round Data Flow</h1>
+<p class="subtitle">How WebSocket messages flow through the frontend during a complete game round</p>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 1: BEFORE — Current (Broken) Flow             -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-wrapper">
+  <h2><span class="problem-label">BEFORE</span> — Current Round Flow (Broken)</h2>
+</div>
+
+<div class="callout callout-problem">
+  <strong>Problem:</strong> Meetings, speeches, and social events fire independently with zero coordination.
+  The turn pipeline processes <code>agent_action</code> sequentially, but <code>meeting_start</code>,
+  <code>meeting_speech</code>, and <code>meeting_vote</code> messages arrive during the same phase and
+  update the UI simultaneously. Agents keep animating while the meeting drawer is open.
+  Phase changes arrive mid-turn-queue, causing visual chaos.
+  <ul>
+    <li><code>agent_action</code> → enqueued in turn store (sequential processing)</li>
+    <li><code>meeting_*</code> → fires directly to socialStore (no queuing, no coordination)</li>
+    <li><code>agent_speak</code> → fires to socialStore AND marks turn (split ownership)</li>
+    <li><code>phase_change</code> → updates experimentStore immediately (no turn queue awareness)</li>
+    <li>Turn queue keeps draining during meetings — bubbles overlap with meeting drawer</li>
+  </ul>
+</div>
+
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant BE as Backend WS
+    participant WS as routeMessage()
+    participant EXP as experimentStore
+    participant AGT as agentStore
+    participant SOC as socialStore
+    participant TURN as turnStore
+    participant ECS as useGameWorld<br/>(ECS)
+    participant UI as Vue UI
+
+    Note over BE,UI: ROUND START
+    BE->>WS: round_start {round: 3}
+    WS->>EXP: onRoundStart()
+    EXP->>UI: currentRound = 3
+
+    Note over BE,UI: GM PLAN PHASE
+    BE->>WS: gm_plan {plan: {...}}
+    WS->>EXP: addEvent()
+    BE->>WS: phase_change {phase: "gm_plan"}
+    WS->>EXP: onPhaseChange("gm_plan")
+    EXP->>UI: currentPhase = "gm_plan"
+
+    Note over BE,UI: DAWN PHASE — Agent Actions
+    BE->>WS: phase_change {phase: "dawn"}
+    WS->>EXP: onPhaseChange("dawn")
+
+    BE->>WS: agent_action {agent_id: "A1", action: {type: "gather", location: "farm"}}
+    WS->>AGT: onAction()
+    AGT->>TURN: enqueue(A1 → gather)
+    TURN->>ECS: handlers.move("A1", "farm")
+    Note over ECS: PathState added,<br/>walk animation starts
+
+    BE->>WS: agent_action {agent_id: "A2", action: {type: "talk", location: "town_hall"}}
+    WS->>AGT: onAction()
+    AGT->>TURN: enqueue(A2 → talk)
+    Note over TURN: Queued behind A1
+
+    BE->>WS: agent_speak {agent_id: "A1", message: "Hello"}
+    WS->>SOC: onSpeak() — adds conversation
+
+    Note over TURN,ECS: A1 path completes → act phase → speech bubble
+    ECS-->>TURN: path callback
+    TURN->>UI: Show bubble for A1
+
+    Note over BE,UI: AFTERNOON PHASE — Meeting Starts
+    BE->>WS: phase_change {phase: "afternoon"}
+    WS->>EXP: onPhaseChange("afternoon")
+
+    rect rgb(80, 20, 20)
+        Note over BE,UI: CONFLICT ZONE — Everything fires simultaneously
+        BE->>WS: agent_action {agent_id: "A3", action: {type: "vote"}}
+        WS->>AGT: onAction()
+        AGT->>TURN: enqueue(A3 → vote)
+
+        BE->>WS: meeting_start {proposal: "Exile Agent5"}
+        WS->>SOC: onMeetingStart()
+        SOC->>UI: TownMeeting drawer OPENS
+
+        BE->>WS: meeting_speech {agent_id: "A1", text: "I vote yes"}
+        WS->>SOC: onMeetingSpeech()
+        Note over SOC: Speech added to meeting<br/>but A1's turn bubble<br/>still showing!
+
+        BE->>WS: meeting_speech {agent_id: "A2", text: "I disagree"}
+        WS->>SOC: onMeetingSpeech()
+
+        BE->>WS: agent_action {agent_id: "A4", action: {type: "talk"}}
+        WS->>AGT: onAction()
+        AGT->>TURN: enqueue(A4 → talk)
+        Note over TURN: Queue grows: [A2, A3, A4]<br/>Still processing A1!
+
+        BE->>WS: meeting_vote {agent_id: "A1", vote: "support"}
+        WS->>SOC: onMeetingVote()
+
+        BE->>WS: meeting_vote {agent_id: "A2", vote: "oppose"}
+        WS->>SOC: onMeetingVote()
+
+        BE->>WS: meeting_result {summary: "Exile passed", votes: {...}}
+        WS->>SOC: onMeetingResult()
+        SOC->>UI: Meeting result shown
+        Note over UI: Meeting drawer + bubbles +<br/>turn animations all visible<br/>at the same time
+    end
+
+    Note over BE,UI: ROUND END
+    BE->>WS: round_end {threat_level: 42, resources: {...}, agents: [...]}
+    WS->>EXP: onRoundEnd()
+    Note over EXP,TURN: Waits for turn queue drain...<br/>but turns are backed up<br/>behind meeting chaos
+  </pre>
+</div>
+
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#e94560"></div>
+    Red zone = uncoordinated concurrent updates
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 2: AFTER — New Implementation                  -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-wrapper">
+  <h2><span class="solution-label">AFTER</span> — New Implementation (Coordinated)</h2>
+</div>
+
+<div class="callout callout-solution">
+  <strong>Solution:</strong> All displayable events flow through the turn store as sequenced items.
+  Meetings become a turn phase — the queue pauses regular agent turns while the meeting plays out.
+  Social events (speeches, votes) are batched into the meeting turn. Phase changes wait for the current
+  turn to complete before applying.
+  <ul>
+    <li><code>meeting_start</code> → enqueues a <strong>meeting turn</strong> that pauses agent turns</li>
+    <li><code>meeting_speech</code> / <code>meeting_vote</code> → buffered into the active meeting turn</li>
+    <li><code>meeting_result</code> → completes the meeting turn, resumes agent queue</li>
+    <li><code>phase_change</code> → enqueues a <strong>phase marker</strong> in the turn queue (visual only)</li>
+    <li>Agent turns after the meeting resume in order — no overlap</li>
+  </ul>
+</div>
+
+<div class="diagram-container">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant BE as Backend WS
+    participant WS as routeMessage()
+    participant EXP as experimentStore
+    participant AGT as agentStore
+    participant SOC as socialStore
+    participant TURN as turnStore
+    participant ECS as useGameWorld<br/>(ECS)
+    participant UI as Vue UI
+
+    Note over BE,UI: ROUND START
+    BE->>WS: round_start {round: 3}
+    WS->>EXP: onRoundStart()
+    EXP->>UI: currentRound = 3
+
+    Note over BE,UI: GM PLAN PHASE
+    BE->>WS: gm_plan {plan: {...}}
+    WS->>EXP: addEvent(gm_plan)
+    BE->>WS: phase_change {phase: "gm_plan"}
+    WS->>EXP: onPhaseChange("gm_plan")
+
+    Note over BE,UI: DAWN PHASE — Agent Actions (Sequential)
+    BE->>WS: phase_change {phase: "dawn"}
+    WS->>EXP: onPhaseChange("dawn")
+
+    BE->>WS: agent_action {agent_id: "A1", action: {type: "gather", location: "farm"}}
+    WS->>AGT: onAction()
+    AGT->>TURN: enqueue(A1 → gather @ farm)
+    TURN->>ECS: handlers.move("A1", "farm")
+    ECS-->>TURN: path complete
+    TURN->>ECS: handlers.playAction("A1", "gather")
+    ECS-->>TURN: anim complete
+    TURN->>UI: Show bubble "A1 gathering..."
+
+    BE->>WS: agent_action {agent_id: "A2", action: {type: "talk"}}
+    WS->>AGT: onAction()
+    AGT->>TURN: enqueue(A2 → talk)
+
+    Note over TURN: A1 bubble dismissed → processNext → A2 starts
+    TURN->>ECS: handlers.move("A2", ...)
+    ECS-->>TURN: path complete
+    TURN->>UI: Show bubble for A2
+
+    Note over BE,UI: AFTERNOON PHASE — Meeting (Coordinated)
+    BE->>WS: phase_change {phase: "afternoon"}
+    WS->>EXP: onPhaseChange("afternoon")
+
+    BE->>WS: agent_action {agent_id: "A3", action: {type: "vote"}}
+    WS->>AGT: onAction()
+    AGT->>TURN: enqueue(A3 → vote)
+
+    rect rgb(15, 50, 40)
+        Note over BE,UI: MEETING — Queued as a turn item
+        BE->>WS: meeting_start {proposal: "Exile Agent5"}
+        WS->>SOC: onMeetingStart()
+        SOC->>TURN: enqueueMeeting(proposal)
+        Note over TURN: Queue: [A3, MEETING]<br/>A2 finishes first, then A3,<br/>THEN meeting opens
+
+        BE->>WS: meeting_speech {agent_id: "A1", text: "I vote yes"}
+        WS->>SOC: onMeetingSpeech()
+        SOC->>TURN: bufferMeetingEvent(speech)
+
+        BE->>WS: meeting_speech {agent_id: "A2", text: "I disagree"}
+        WS->>SOC: onMeetingSpeech()
+        SOC->>TURN: bufferMeetingEvent(speech)
+
+        BE->>WS: meeting_vote {agent_id: "A1", vote: "support"}
+        WS->>SOC: onMeetingVote()
+        SOC->>TURN: bufferMeetingEvent(vote)
+
+        BE->>WS: meeting_vote {agent_id: "A2", vote: "oppose"}
+        WS->>SOC: onMeetingVote()
+        SOC->>TURN: bufferMeetingEvent(vote)
+
+        Note over TURN: A3 turn completes → meeting turn activates
+        TURN->>UI: Open TownMeeting drawer
+        TURN->>UI: Replay speeches sequentially
+        TURN->>UI: Show votes updating
+
+        BE->>WS: meeting_result {summary: "Exile passed"}
+        WS->>SOC: onMeetingResult()
+        SOC->>TURN: completeMeeting(result)
+        TURN->>UI: Show result, wait for dismiss
+        UI-->>TURN: User dismisses meeting
+        Note over TURN: Meeting turn complete → resume queue
+    end
+
+    BE->>WS: agent_action {agent_id: "A4", action: {type: "talk"}}
+    WS->>AGT: onAction()
+    AGT->>TURN: enqueue(A4 → talk)
+    Note over TURN: Resumes: A4 processes cleanly
+
+    Note over BE,UI: ROUND END
+    BE->>WS: round_end {threat_level: 42, resources: {...}, agents: [...]}
+    WS->>EXP: onRoundEnd()
+    EXP->>TURN: onDrained(finalize)
+    Note over TURN: Queue drains → finalize
+    TURN-->>EXP: drained
+    EXP->>UI: Round 3 finalized
+  </pre>
+</div>
+
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#16c79a"></div>
+    Green zone = coordinated meeting turn
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#e94560"></div>
+    Sequential turn processing (no overlap)
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- DIAGRAM 3: Complete Round Message Timeline              -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<div class="section-wrapper">
+  <h2>Complete Round — Message Types by Phase</h2>
+</div>
+
+<div class="diagram-container">
+  <pre class="mermaid">
+flowchart LR
+    subgraph RS["round_start"]
+        RS1["round: N\nstatus → running"]
+    end
+
+    subgraph GM["gm_plan Phase"]
+        GM1["gm_plan\n{plan, narration,\ncrisis, resources}"]
+        GM2["gm_narration\n{text}"]
+        GM3["gm_audio_status\n{status, audio_url}"]
+        GM4["phase_change\n{phase: gm_plan}"]
+    end
+
+    subgraph DAWN["dawn Phase"]
+        DAWN0["phase_change\n{phase: dawn}"]
+        DAWN1["agent_action ×N\n{agent_id, action,\ninner_thought,\ndialogue, coop}"]
+        DAWN2["agent_speak ×N\n{agent_id, target,\nmessage}"]
+        DAWN3["agent_speech_audio\n{status, audio_url}"]
+    end
+
+    subgraph MID["morning / midday"]
+        MID0["phase_change"]
+        MID1["agent_action ×N"]
+        MID2["agent_speak ×N"]
+        MID3["crisis_event\n{type, severity,\ndescription}"]
+        MID4["threat_update\n{threat_level}"]
+        MID5["resource_update\n{food, water,\nmaterials, power}"]
+    end
+
+    subgraph AFT["afternoon / night"]
+        AFT0["phase_change"]
+        AFT1["agent_action ×N"]
+        AFT2["meeting_start\n{proposal}"]
+        AFT3["meeting_speech ×N\n{agent_id, text}"]
+        AFT4["meeting_vote ×N\n{agent_id, vote}"]
+        AFT5["meeting_result\n{summary, votes}"]
+        AFT6["exile_vote ×N"]
+        AFT7["exile_result"]
+        AFT8["faction_update"]
+        AFT9["cult_activity"]
+    end
+
+    subgraph RE["round_end"]
+        RE1["status, threat,\nresources,\nagents[] full sync"]
+    end
+
+    RS --> GM --> DAWN --> MID --> AFT --> RE
+
+    classDef phaseNode fill:#1a1a2e,stroke:#4da8da,color:#ccc,stroke-width:1px
+    classDef agentNode fill:#0f3460,stroke:#3b82f6,color:#ccc,stroke-width:1px
+    classDef gmNode fill:#1a1a2e,stroke:#8b5cf6,color:#ccc,stroke-width:1px
+    classDef worldNode fill:#1a1a2e,stroke:#f59e0b,color:#ccc,stroke-width:1px
+    classDef socialNode fill:#1a1a2e,stroke:#06b6d4,color:#ccc,stroke-width:1px
+    classDef roundNode fill:#1a1a2e,stroke:#eab308,color:#ccc,stroke-width:1px
+
+    class RS1,RE1 roundNode
+    class GM1,GM2,GM3 gmNode
+    class GM4,DAWN0,MID0,AFT0 phaseNode
+    class DAWN1,DAWN2,DAWN3,MID1,MID2,AFT1 agentNode
+    class MID3,MID4,MID5 worldNode
+    class AFT2,AFT3,AFT4,AFT5,AFT6,AFT7,AFT8,AFT9 socialNode
+  </pre>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#eab308"></div> Round lifecycle</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#8b5cf6"></div> GM content</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#4da8da"></div> Phase changes</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#3b82f6"></div> Agent actions</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f59e0b"></div> World state</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#06b6d4"></div> Social/meetings</div>
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#0f0f18',
+      primaryColor: '#1a1a2e',
+      primaryTextColor: '#e0e0e0',
+      primaryBorderColor: '#333',
+      lineColor: '#555',
+      secondaryColor: '#162447',
+      tertiaryColor: '#0f3460',
+      fontFamily: '"SF Mono", "Fira Code", monospace',
+      fontSize: '11px',
+      actorBkg: '#1a1a2e',
+      actorBorder: '#555',
+      actorTextColor: '#e0e0e0',
+      noteBkgColor: '#162447',
+      noteBorderColor: '#333',
+      noteTextColor: '#ccc',
+      signalColor: '#888',
+      signalTextColor: '#ccc',
+      clusterBkg: '#0d0d15',
+      clusterBorder: 'rgba(255,255,255,0.08)',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageMargin: 30,
+      noteMargin: 10,
+      actorMargin: 50,
+      width: 150,
+      height: 40,
+      boxMargin: 10,
+      useMaxWidth: false,
+    },
+    flowchart: {
+      htmlLabels: true,
+      curve: 'basis',
+      rankSpacing: 40,
+      nodeSpacing: 20,
+      padding: 10,
+      useMaxWidth: false,
+    },
+  });
+</script>
+
+</body>
+</html>
