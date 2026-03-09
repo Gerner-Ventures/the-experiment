@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { Agent, AgentConfig, AgentStatus } from '@/types/agent'
 import type { AgentActionData, WSMessage } from '@/types/websocket'
 import { useTurnStore } from '@/stores/turn'
+import { useSocialStore } from '@/stores/social'
 
 export const useAgentStore = defineStore('agent', () => {
   const agents = ref<Map<string, Agent>>(new Map())
@@ -51,6 +52,7 @@ export const useAgentStore = defineStore('agent', () => {
   function onAction(msg: WSMessage<AgentActionData>) {
     const data = msg.data
     const agent = agents.value.get(data.agent_id)
+    const socialStore = useSocialStore()
     const actionType = typeof data.action === 'string'
       ? data.action
       : (data.action?.type as string) ?? 'observe'
@@ -65,6 +67,16 @@ export const useAgentStore = defineStore('agent', () => {
     const thought = data.speech_source === 'inner_thought'
       ? speechText ?? innerThought
       : innerThought
+    const existingThoughtConversation = (
+      data.speech_source === 'inner_thought' && thought
+    )
+      ? [...socialStore.conversations].reverse().find((conversation) =>
+        conversation.agentId === data.agent_id
+        && conversation.round === msg.round
+        && conversation.source === 'inner_thought'
+        && conversation.message === thought,
+      )
+      : null
 
     console.debug(`[AgentStore] onAction: ${agentName} → ${actionType}${targetLocation ? ` @ ${targetLocation}` : ''}`)
 
@@ -76,8 +88,9 @@ export const useAgentStore = defineStore('agent', () => {
       targetLocation,
       thought,
       thoughtSource: data.speech_source ?? 'inner_thought',
-      // Only skip the fallback row when the backend explicitly routed this turn through
-      // the inner-thought speech pipeline. Dialogue events are tracked separately.
+      thoughtConversationId: existingThoughtConversation?.id,
+      thoughtAudioIndex: existingThoughtConversation?.index,
+      // Inner-thought speech rows already arrive through agent_speak.
       fromSpeakEvent: data.speech_source === 'inner_thought',
     })
   }

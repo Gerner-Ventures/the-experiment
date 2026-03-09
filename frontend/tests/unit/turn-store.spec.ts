@@ -200,4 +200,33 @@ describe('useTurnStore', () => {
     jest.advanceTimersByTime(1500)
     expect(store.phase).toBe('idle')
   })
+
+  it('queues turns without starting them while blocked, then resumes when unblocked', () => {
+    const handlers = createMockHandlers()
+    const store = useTurnStore()
+    store.setHandlers(handlers)
+    store.setBlocked(true)
+
+    store.enqueue(makeTurn({
+      actionType: 'move',
+      targetLocation: 'forest',
+      thought: 'Wait for the narration.',
+    }))
+
+    expect(store.activeTurn).toBeNull()
+    expect(store.phase).toBe('idle')
+    expect(handlers.addConversation).not.toHaveBeenCalled()
+
+    store.setBlocked(false)
+
+    expect(store.activeTurn).not.toBeNull()
+    expect(store.phase).toBe('thinking')
+    expect(handlers.addConversation).toHaveBeenCalledWith(
+      'agent-1',
+      'Alice',
+      'Wait for the narration.',
+      'inner_thought',
+      1,
+    )
+  })
 })

@@ -226,6 +226,21 @@ async def test_start_step_cleans_up_after_streaming_failure_without_persisting_p
 
 
 @pytest.mark.asyncio
+async def test_get_state_returns_live_cached_state_before_persistence() -> None:
+    runtime = ExperimentRuntime(store=InMemoryExperimentStore())
+
+    state = await runtime.create_experiment(_request())
+    state.gm_plan = _gm_plan(1)
+    runtime._live_states[state.experiment_id] = state
+
+    loaded = await runtime.get_state(state.experiment_id)
+
+    assert loaded is state
+    assert loaded.gm_plan is not None
+    assert loaded.gm_plan.plan.round == 1
+
+
+@pytest.mark.asyncio
 async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     runtime_instance: ExperimentRuntime,
 ) -> None:

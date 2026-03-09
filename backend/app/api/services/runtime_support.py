@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Literal, TypedDict, cast, get_args
+from typing import Any, Literal, NotRequired, TypedDict, cast, get_args
 
 from app.api.models import AgentGoalProgress, EventLogItem
 from app.db.models import AgentStatus
@@ -32,6 +32,7 @@ class AgentSpeechEntry(TypedDict):
     index: int
     text: str
     source: str
+    voice_id: NotRequired[str]
 
 
 class CooperationMetrics(TypedDict):

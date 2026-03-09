@@ -161,11 +161,11 @@ function dismiss() {
   emit('dismiss', props.turnId)
 }
 
-// Watch for audioStatus changing to 'ready' after mount (late arrival)
+// Watch for late-arriving audio metadata; either the status or the URL can land after mount.
 watch(
-  () => props.audioStatus,
-  (newStatus) => {
-    if (newStatus === 'ready' && props.audioUrl && !audio && !isMuted()) {
+  () => [props.audioStatus, props.audioUrl] as const,
+  ([newStatus, audioUrl]) => {
+    if (newStatus === 'ready' && audioUrl && !audio && !isMuted()) {
       if (pendingTimer) {
         clearTimeout(pendingTimer)
         pendingTimer = null

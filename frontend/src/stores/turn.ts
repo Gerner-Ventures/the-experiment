@@ -6,6 +6,7 @@ import { HD_ACTION_TO_ANIMATION as ACTION_TO_ANIMATION } from '@/config/sprites/
 import { SKIP_ACTION_PHASE } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 import type { AgentSpeechSource } from '@/types/websocket'
+import type { ConversationRef } from '@/stores/social'
 
 export interface Turn {
   id: number
@@ -17,6 +18,8 @@ export interface Turn {
   targetLocation?: string
   thought?: string
   thoughtSource?: AgentSpeechSource
+  thoughtConversationId?: number
+  thoughtAudioIndex?: number
   /** When true, the speech row was already added by agent_speak — skip addConversation */
   fromSpeakEvent?: boolean
 }
@@ -33,7 +36,7 @@ export interface TurnHandlers {
     message: string,
     source: AgentSpeechSource,
     round: number,
-  ) => void
+  ) => ConversationRef | void
   getAgentLocation: (agentId: string) => string | undefined
 }
 
@@ -53,6 +56,7 @@ export const useTurnStore = defineStore('turn', () => {
   const queue = ref<Turn[]>([])
   const activeTurn = ref<Turn | null>(null)
   const phase = ref<TurnPhase>('idle')
+  const blocked = ref(false)
   const isProcessing = computed(() => activeTurn.value !== null || queue.value.length > 0)
   const hasPendingTurns = computed(() => queue.value.length > 0)
 
@@ -82,13 +86,19 @@ export const useTurnStore = defineStore('turn', () => {
     console.debug(`[Turn] Enqueued: ${turn.agentName} → ${turn.actionType} (queue: ${queue.value.length})`)
 
     // If nothing is active, start processing
-    if (!activeTurn.value) {
+    if (!activeTurn.value && !blocked.value) {
       processNext()
     }
   }
 
   function processNext() {
     clearTimers()
+
+    if (blocked.value) {
+      activeTurn.value = null
+      phase.value = 'idle'
+      return
+    }
 
     if (queue.value.length === 0) {
       activeTurn.value = null
@@ -131,13 +141,17 @@ export const useTurnStore = defineStore('turn', () => {
     phase.value = 'thinking'
     handlers?.updateAgent(turn.agentId, 'thinking')
     if (!turn.fromSpeakEvent) {
-      handlers?.addConversation(
+      const conversation = handlers?.addConversation(
         turn.agentId,
         turn.agentName,
         turn.thought,
         turn.thoughtSource ?? 'inner_thought',
         turn.round,
       )
+      if (conversation) {
+        turn.thoughtConversationId = conversation.id
+        turn.thoughtAudioIndex = conversation.index
+      }
     }
     console.debug(`[Turn] Thinking: ${turn.agentName}`)
     thoughtTimer = setTimeout(() => {
@@ -283,6 +297,13 @@ export const useTurnStore = defineStore('turn', () => {
     processNext()
   }
 
+  function setBlocked(value: boolean) {
+    blocked.value = value
+    if (!value && !activeTurn.value && queue.value.length > 0) {
+      processNext()
+    }
+  }
+
   function clearTimers() {
     if (hudTimer) {
       clearTimeout(hudTimer)
@@ -303,6 +324,7 @@ export const useTurnStore = defineStore('turn', () => {
     queue.value = []
     activeTurn.value = null
     phase.value = 'idle'
+    blocked.value = false
     turnCounter = 0
     handlers = null
     drainedHandlers = []
@@ -311,7 +333,7 @@ export const useTurnStore = defineStore('turn', () => {
   return {
     queue, activeTurn, phase, isProcessing, hasPendingTurns,
     setHandlers, onDrained,
-    enqueue, processNext, onBubbleDismissed, notifyAudioComplete,
+    enqueue, processNext, onBubbleDismissed, notifyAudioComplete, setBlocked,
     $reset,
   }
 })
