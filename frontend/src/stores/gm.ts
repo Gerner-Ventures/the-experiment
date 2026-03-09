@@ -79,6 +79,7 @@ export const useGMStore = defineStore('gm', () => {
       return
     }
 
+    // Do not downgrade an already hydrated ready/unavailable state back to pending.
     queuedAudioStatus.value = null
   }
 

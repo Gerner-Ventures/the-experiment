@@ -99,6 +99,7 @@ async function syncRoundNarration(experimentId: string, round: number, fallbackT
   } catch (err) {
     if (token !== narrationHydrationToken) return
     console.warn('Failed to load round narration metadata:', err)
+    gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
   }
 }
 
@@ -228,11 +229,14 @@ watch(
     return `${experimentStore.id}:${plan.round}:${plan.narration}`
   },
   (planKey) => {
-    if (!planKey || !experimentStore.id || !gmStore.currentPlan?.narration) return
+    if (!planKey) return
+    const experimentId = experimentStore.id
+    const currentPlan = gmStore.currentPlan
+    if (!experimentId || !currentPlan?.narration) return
     void syncRoundNarration(
-      experimentStore.id,
-      gmStore.currentPlan.round,
-      gmStore.currentPlan.narration,
+      experimentId,
+      currentPlan.round,
+      currentPlan.narration,
     )
   },
 )
