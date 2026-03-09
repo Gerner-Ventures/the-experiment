@@ -7,7 +7,7 @@ tags: [stream-1, frontend, backend, audio, tts, agents]
 
 # Agent Voice Narration
 
-When an agent's speech bubble appears during the talking phase, the narrated line should be spoken aloud
+When an agent's speech bubble appears during the talking or thinking phase, the narrated line should be spoken aloud
 using a voice unique to that character. Voice IDs are mapped per character sprite in backend config.
 
 ## Background
@@ -33,7 +33,7 @@ Current backend behavior:
 - **Concurrency**: Multiple agents may speak per round. TTS requests should be pregenerated when
   the backend resolves agent decisions, not on-demand when the frontend requests audio.
 - **Cost**: Cache aggressively. Same text + same voice = cache hit.
-- **Pacing**: Audio playback should gate the talking phase — don't advance to the next agent until
+- **Pacing**: Audio playback should gate the thought/speech phase — don't advance to the next agent until
   their audio finishes (or a timeout fires).
 - **Degradation**: If TTS is unavailable, the text bubble works exactly as today.
 
@@ -78,8 +78,8 @@ Acceptance criteria:
 Files: `backend/app/api/runtime.py`, `backend/app/tts/service.py`
 
 When agent speech events are resolved for a round, the runtime should kick off TTS generation for
-all of them in parallel (background tasks), before the frontend enters the talking phase. This
-includes both action-turn inner-thought narration and social conversation dialogue.
+all of them in parallel (background tasks), before the frontend enters the thought/speech phase.
+This includes both action-turn inner-thought narration and social conversation dialogue.
 
 Acceptance criteria:
 
@@ -103,6 +103,7 @@ Add `agent_speech_audio` WebSocket message:
     "agent_id": "string",
     "round": 1,
     "index": 0,
+    "source": "inner_thought | dialogue",
     "status": "pending | ready | error | unavailable",
     "audio_url": "/api/experiments/{id}/agents/{agent_id}/speech/audio?round=1&index=0"
   }
@@ -114,7 +115,7 @@ Emitted per-agent when speech audio becomes ready (or fails).
 Acceptance criteria:
 
 - [ ] `agent_speech_audio` message is emitted when audio generation completes or fails
-- [ ] message includes agent_id, round, index, status, and audio_url
+- [ ] message includes agent_id, round, index, source, status, and audio_url
 - [ ] `unavailable` status is sent when ElevenLabs is not configured
 
 ## 2. Frontend: Speech Audio Playback
@@ -155,6 +156,8 @@ When a bubble appears and audio is `ready`:
 - Play audio via `new Audio(audioUrl).play()`
 - Show a small speaker icon on the bubble during playback
 - Handle autoplay blocking gracefully (show tap-to-play affordance)
+- Use bubble variant styling to distinguish `inner_thought` from `dialogue`
+- Emit `audioEnd` with the active `turnId` so stale dismissals cannot double-advance the queue
 - On audio end or error, continue with normal bubble dismissal timing
 
 Acceptance criteria:
@@ -169,7 +172,7 @@ Acceptance criteria:
 
 Files: `frontend/src/stores/turn.ts`
 
-The talking phase should wait for audio to finish before advancing to the next agent:
+The thinking/speech phase should wait for audio to finish before advancing to the next agent:
 
 - If audio is `ready`, wait for playback completion (or a max timeout of 15s)
 - If audio is `pending`, wait up to 3s for it to become ready, then proceed with text-only
@@ -177,7 +180,7 @@ The talking phase should wait for audio to finish before advancing to the next a
 
 Acceptance criteria:
 
-- [ ] speech phase waits for audio playback completion before advancing
+- [ ] thinking/speech phase waits for audio playback completion before advancing
 - [ ] pending audio has a 3s wait timeout before falling back to text-only
 - [ ] max audio timeout of 15s prevents indefinite blocking
 - [ ] unavailable/error audio falls back to existing text-only timing

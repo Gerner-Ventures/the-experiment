@@ -248,6 +248,8 @@ export default {
       tapToPlay: 'Tap to play',
       mute: 'Mute agent voices',
       unmute: 'Unmute agent voices',
+      thoughtLabel: 'THOUGHT',
+      dialogueLabel: 'SAYS',
     },
   },
 

@@ -14,18 +14,22 @@ const PENDING_TIMEOUT_MS = 3000
 
 const locale = useLocale()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
+  turnId: number
   agentName: string
   message: string
   agentId: string
+  variant?: 'thought' | 'dialogue'
   getPosition: (agentId: string) => { x: number; y: number } | null
   audioStatus: AudioStatus
   audioUrl: string | null
-}>()
+}>(), {
+  variant: 'dialogue',
+})
 
 const emit = defineEmits<{
-  dismiss: [agentId: string]
-  audioEnd: []
+  dismiss: [turnId: number]
+  audioEnd: [turnId: number]
 }>()
 
 const visible = ref(false)
@@ -49,6 +53,21 @@ const TOTAL_LIFETIME_MS = Math.max(
 
 const displayedMessage = computed(() => props.message.slice(0, revealedChars.value))
 const isFullyRevealed = computed(() => revealedChars.value >= props.message.length)
+const bubbleLabel = computed(() =>
+  props.variant === 'thought'
+    ? locale.social.speech.thoughtLabel
+    : locale.social.speech.dialogueLabel,
+)
+const bubbleFrameClass = computed(() =>
+  props.variant === 'thought'
+    ? 'bg-[#0d1620] border-[#8fd3ff]/80 shadow-[4px_4px_0_rgba(16,44,61,0.5)]'
+    : 'bg-[#0a0a0f] border-white/80 shadow-[4px_4px_0_rgba(0,0,0,0.5)]',
+)
+const bubbleTextClass = computed(() =>
+  props.variant === 'thought'
+    ? 'text-[#d7efff] italic'
+    : 'text-white/80',
+)
 
 function isMuted(): boolean {
   return window.localStorage.getItem(MUTE_STORAGE_KEY) === 'true'
@@ -96,8 +115,13 @@ function tryPlay() {
           dismissTimer = null
         }
       })
-      .catch(() => {
-        autoplayBlocked.value = true
+      .catch((err: unknown) => {
+        const errName = err instanceof Error ? err.name : ''
+        if (errName === 'NotAllowedError') {
+          autoplayBlocked.value = true
+          return
+        }
+        autoplayBlocked.value = false
         isPlaying.value = false
       })
   }
@@ -110,13 +134,13 @@ function handleTapToPlay() {
 
 function onAudioEnded() {
   isPlaying.value = false
-  emit('audioEnd')
+  emit('audioEnd', props.turnId)
   dismiss()
 }
 
 function onAudioError() {
   isPlaying.value = false
-  emit('audioEnd')
+  emit('audioEnd', props.turnId)
   dismiss()
 }
 
@@ -134,7 +158,7 @@ function dismiss() {
   if (!visible.value) return
   visible.value = false
   stopAudio()
-  emit('dismiss', props.agentId)
+  emit('dismiss', props.turnId)
 }
 
 // Watch for audioStatus changing to 'ready' after mount (late arrival)
@@ -210,7 +234,7 @@ onUnmounted(() => {
   }
   stopAudio()
   if (wasPending) {
-    emit('dismiss', props.agentId)
+    emit('dismiss', props.turnId)
   }
 })
 </script>
@@ -226,13 +250,12 @@ onUnmounted(() => {
         transform: 'translateX(-50%)',
       }"
     >
-      <div
-        class="retro-bubble bg-[#0a0a0f] border-2 border-white/80 rounded-none px-3 py-2 shadow-[4px_4px_0_rgba(0,0,0,0.5)]"
-      >
+      <div class="retro-bubble border-2 rounded-none px-3 py-2" :class="bubbleFrameClass">
         <div
           class="font-mono text-[10px] text-accent uppercase tracking-wider mb-0.5 flex items-center gap-1"
         >
           {{ agentName }}
+          <span class="text-[9px] text-white/45">{{ bubbleLabel }}</span>
           <SoundOutlined v-if="isPlaying" class="text-accent/80" />
           <span
             v-if="autoplayBlocked"
@@ -244,7 +267,8 @@ onUnmounted(() => {
         </div>
         <div
           ref="scrollContainer"
-          class="text-xs text-white/80 leading-snug font-mono max-h-[72px] overflow-y-auto bubble-scroll"
+          class="text-xs leading-snug font-mono max-h-[72px] overflow-y-auto bubble-scroll"
+          :class="bubbleTextClass"
         >
           "{{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>"
         </div>

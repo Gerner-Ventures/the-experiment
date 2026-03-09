@@ -143,17 +143,26 @@ describe('WebSocket message routing', () => {
 
   it('routes movement updates through agent_action', () => {
     const agentStore = useAgentStore()
+    const turnStore = useTurnStore()
     agentStore.setAgents([{ id: 'a1', name: 'Alice', personality: { axes: {}, traitTags: [] }, goal: { archetype: 'communal_survival', text: '', progressSignals: [] }, llmModel: 'openai/gpt-4o-mini' }])
     routeMessage(makeMsg('agent_action', { agent_id: 'a1', action: { type: 'move', location: 'forest' } }))
-    expect(agentStore.getAgent('a1')!.location).toBe('forest')
-    expect(agentStore.getAgent('a1')!.status).toBe('moving')
+    expect(agentStore.getAgent('a1')!.location).not.toBe('forest')
+    expect(agentStore.getAgent('a1')!.status).toBe('idle')
+    expect(turnStore.activeTurn?.targetLocation).toBe('forest')
   })
 
   it('routes agent_speak to socialStore', () => {
     const socialStore = useSocialStore()
-    routeMessage(makeMsg('agent_speak', { agent_id: 'a1', agent_name: 'Alice', target: 'a2', message: 'Hello' }))
+    routeMessage(makeMsg('agent_speak', {
+      agent_id: 'a1',
+      agent_name: 'Alice',
+      target: 'a2',
+      message: 'Hello',
+      source: 'dialogue',
+    }))
     expect(socialStore.conversations).toHaveLength(1)
     expect(socialStore.conversations[0].message).toBe('Hello')
+    expect(socialStore.conversations[0].source).toBe('dialogue')
   })
 
   it('routes crisis_event to worldStore', () => {

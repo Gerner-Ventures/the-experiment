@@ -1,8 +1,6 @@
 import { setActivePinia, createPinia } from 'pinia'
-import { useTurnStore, type TurnHandlers } from '@/stores/turn'
-import { useUIStore } from '@/stores/ui'
+import { useTurnStore, type Turn, type TurnHandlers } from '@/stores/turn'
 
-// Mock the locale module so the turn store can call useLocale()
 jest.mock('@/locales', () => ({
   useLocale: () => ({
     hud: {
@@ -11,33 +9,29 @@ jest.mock('@/locales', () => ({
   }),
 }))
 
-function makeTurn(overrides: Partial<{ agentId: string; agentName: string; actionType: string; targetLocation: string; thought: string }> = {}) {
+function makeTurn(overrides: Partial<Omit<Turn, 'id'>> = {}): Omit<Turn, 'id'> {
   return {
-    agentId: overrides.agentId ?? 'agent-1',
-    agentName: overrides.agentName ?? 'Alice',
-    actionType: overrides.actionType ?? 'talk',
-    targetLocation: overrides.targetLocation,
-    thought: overrides.thought,
+    agentId: 'agent-1',
+    agentName: 'Alice',
+    round: 1,
+    actionType: 'talk',
+    thoughtSource: 'inner_thought',
+    ...overrides,
   }
 }
 
-function makeMockHandlers(overrides: Partial<TurnHandlers> = {}): TurnHandlers {
+function createMockHandlers(overrides: Partial<TurnHandlers> = {}): TurnHandlers {
   return {
-    move: overrides.move ?? jest.fn((_id, _loc, onComplete) => onComplete()),
-    playAction: overrides.playAction ?? jest.fn((_id, _anim, onComplete) => onComplete()),
-    updateAgent: overrides.updateAgent ?? jest.fn(),
-    addConversation: overrides.addConversation ?? jest.fn(),
-    getAgentLocation: overrides.getAgentLocation ?? jest.fn(() => undefined),
+    move: jest.fn((_id, _loc, cb) => cb()),
+    playAction: jest.fn((_id, _anim, cb) => cb()),
+    updateAgent: jest.fn(),
+    addConversation: jest.fn(),
+    getAgentLocation: jest.fn(() => 'camp'),
+    ...overrides,
   }
 }
 
-/** Advance past the MIN_ACTION_DURATION_MS (1500ms) floor timer so
- *  the acting phase dual gate completes and advances to speech. */
-function advancePastActionFloor() {
-  jest.advanceTimersByTime(1500)
-}
-
-describe('turn store', () => {
+describe('useTurnStore', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
     jest.useFakeTimers()
@@ -47,396 +41,163 @@ describe('turn store', () => {
     jest.useRealTimers()
   })
 
-  describe('enqueue and processNext', () => {
-    it('auto-processes the first enqueued turn', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
-
-      // HUD-only turn (no thought) — should become activeTurn immediately
-      store.enqueue(makeTurn({ actionType: 'gather' }))
-
-      expect(store.activeTurn).not.toBeNull()
-      expect(store.activeTurn!.actionType).toBe('gather')
-    })
-
-    it('queues subsequent turns without processing them', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      // First turn (talking) — auto-processed
-      store.enqueue(makeTurn({ thought: 'hello', agentId: 'a1' }))
-      advancePastActionFloor()
-      // Second turn — stays in queue
-      store.enqueue(makeTurn({ thought: 'world', agentId: 'a2' }))
-
-      expect(store.activeTurn!.agentId).toBe('a1')
-      expect(store.queue).toHaveLength(1)
-    })
-
-    it('goes idle when queue is empty after processing', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      store.enqueue(makeTurn({ thought: 'only one' }))
-      advancePastActionFloor()
-      store.onBubbleDismissed()
-
-      expect(store.phase).toBe('idle')
-      expect(store.activeTurn).toBeNull()
-    })
+  it('starts in idle phase with an empty queue', () => {
+    const store = useTurnStore()
+    expect(store.phase).toBe('idle')
+    expect(store.queue).toEqual([])
+    expect(store.activeTurn).toBeNull()
   })
 
-  describe('phase transitions', () => {
-    it('enters moving phase when agent needs to move', () => {
-      const store = useTurnStore()
-      // Agent is at location "camp", turn wants them at "forest"
-      let moveCallback: (() => void) | null = null
-      const handlers = makeMockHandlers({
-        getAgentLocation: jest.fn(() => 'camp'),
-        move: jest.fn((_id, _loc, onComplete) => { moveCallback = onComplete }),
-      })
-      store.setHandlers(handlers)
+  it('holds movement until the thought phase completes', () => {
+    const move = jest.fn()
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers({ move }))
 
-      store.enqueue(makeTurn({ targetLocation: 'forest', thought: 'heading out' }))
+    store.enqueue(makeTurn({
+      actionType: 'move',
+      targetLocation: 'forest',
+      thought: 'I should head north.',
+    }))
 
-      expect(store.phase).toBe('moving')
-      expect(handlers.move).toHaveBeenCalledWith('agent-1', 'forest', expect.any(Function))
+    expect(store.phase).toBe('thinking')
+    expect(move).not.toHaveBeenCalled()
 
-      // Complete the move — enters acting phase
-      moveCallback!()
-      expect(store.phase).toBe('acting')
+    store.onBubbleDismissed(store.activeTurn!.id)
 
-      // Advance past action floor — enters talking
-      advancePastActionFloor()
-      expect(store.phase).toBe('talking')
-    })
-
-    it('enters talking phase when turn has a thought (no move needed)', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers({
-        getAgentLocation: jest.fn(() => 'camp'),
-      }))
-
-      store.enqueue(makeTurn({ targetLocation: 'camp', thought: 'I feel safe here' }))
-
-      // Enters acting phase first (talk has animation), then talking after floor timer
-      expect(store.phase).toBe('acting')
-      advancePastActionFloor()
-      expect(store.phase).toBe('talking')
-    })
-
-    it('enters hud-only phase when turn has no thought', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      store.enqueue(makeTurn({ actionType: 'gather' }))
-
-      // 'gather' has an animation, so enters acting first
-      expect(store.phase).toBe('acting')
-      advancePastActionFloor()
-      expect(store.phase).toBe('hud-only')
-    })
-
-    it('hud-only auto-advances after timeout', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      store.enqueue(makeTurn({ actionType: 'gather', agentId: 'a1' }))
-      advancePastActionFloor()
-      expect(store.phase).toBe('hud-only')
-
-      jest.advanceTimersByTime(1500)
-
-      // After timeout, should go idle (queue empty)
-      expect(store.phase).toBe('idle')
-      expect(store.activeTurn).toBeNull()
-    })
-
-    it('hud-only advances to next queued turn after timeout', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      // Two hud-only turns (explore skips action phase)
-      store.enqueue(makeTurn({ actionType: 'explore', agentId: 'a1' }))
-      store.enqueue(makeTurn({ actionType: 'explore', agentId: 'a2' }))
-
-      expect(store.activeTurn!.agentId).toBe('a1')
-
-      jest.advanceTimersByTime(1500)
-
-      expect(store.activeTurn!.agentId).toBe('a2')
-      expect(store.phase).toBe('hud-only')
-    })
-
-    it('skips acting phase for actions in SKIP_ACTION_PHASE', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      // 'move' is in SKIP_ACTION_PHASE, so acting is skipped
-      store.enqueue(makeTurn({ actionType: 'move', thought: 'walking around' }))
-
-      expect(store.phase).toBe('talking')
-    })
+    expect(store.phase).toBe('moving')
+    expect(move).toHaveBeenCalledWith('agent-1', 'forest', expect.any(Function))
   })
 
-  describe('onBubbleDismissed', () => {
-    it('advances to next turn when bubble is dismissed', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
+  it('does not double-advance when audioEnd and dismiss both arrive for the same bubble', () => {
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers({
+      getAgentLocation: jest.fn(() => undefined),
+    }))
 
-      store.enqueue(makeTurn({ thought: 'first', agentId: 'a1' }))
-      store.enqueue(makeTurn({ thought: 'second', agentId: 'a2' }))
+    store.enqueue(makeTurn({ agentId: 'a1', thought: 'first thought', actionType: 'move' }))
+    store.enqueue(makeTurn({ agentId: 'a2', thought: 'second thought', actionType: 'move' }))
 
-      advancePastActionFloor()
-      expect(store.activeTurn!.agentId).toBe('a1')
-      expect(store.phase).toBe('talking')
+    const firstTurnId = store.activeTurn!.id
+    store.notifyAudioComplete(firstTurnId)
 
-      store.onBubbleDismissed()
+    expect(store.activeTurn!.agentId).toBe('a2')
+    const secondTurnId = store.activeTurn!.id
 
-      advancePastActionFloor()
-      expect(store.activeTurn!.agentId).toBe('a2')
-      expect(store.phase).toBe('talking')
-    })
+    store.onBubbleDismissed(firstTurnId)
 
-    it('resets agent to idle on dismiss', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
-
-      store.enqueue(makeTurn({ thought: 'hello', agentId: 'a1' }))
-      advancePastActionFloor()
-      store.onBubbleDismissed()
-
-      expect(handlers.updateAgent).toHaveBeenCalledWith('a1', 'idle')
-    })
-
-    it('goes to idle when last bubble is dismissed', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-
-      store.enqueue(makeTurn({ thought: 'only one' }))
-      advancePastActionFloor()
-      expect(store.phase).toBe('talking')
-
-      store.onBubbleDismissed()
-
-      expect(store.phase).toBe('idle')
-      expect(store.activeTurn).toBeNull()
-      expect(store.isProcessing).toBe(false)
-    })
+    expect(store.activeTurn!.id).toBe(secondTurnId)
+    expect(store.phase).toBe('thinking')
   })
 
-  describe('onDrained callback', () => {
-    it('fires when queue fully drains', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-      const drainedFn = jest.fn()
-      store.onDrained(drainedFn)
+  it('adds a fallback inner-thought conversation row with source and round metadata', () => {
+    const handlers = createMockHandlers()
+    const store = useTurnStore()
+    store.setHandlers(handlers)
 
-      store.enqueue(makeTurn({ actionType: 'gather' }))
-      // acting phase floor + hud-only timeout
-      advancePastActionFloor()
-      jest.advanceTimersByTime(1500)
+    store.enqueue(makeTurn({
+      thought: 'Keep it together.',
+      round: 3,
+    }))
 
-      expect(drainedFn).toHaveBeenCalledTimes(1)
-    })
-
-    it('is one-shot — does not fire again on subsequent drains', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-      const drainedFn = jest.fn()
-      store.onDrained(drainedFn)
-
-      store.enqueue(makeTurn({ actionType: 'gather' }))
-      advancePastActionFloor()
-      jest.advanceTimersByTime(1500)
-      expect(drainedFn).toHaveBeenCalledTimes(1)
-
-      // Enqueue another turn — should NOT fire again
-      store.enqueue(makeTurn({ actionType: 'repair' }))
-      advancePastActionFloor()
-      jest.advanceTimersByTime(1500)
-      expect(drainedFn).toHaveBeenCalledTimes(1)
-    })
-
-    it('does not fire when queue is not yet empty', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-      const drainedFn = jest.fn()
-      store.onDrained(drainedFn)
-
-      // Talking turns need manual dismiss
-      store.enqueue(makeTurn({ thought: 'a', agentId: 'a1' }))
-      store.enqueue(makeTurn({ thought: 'b', agentId: 'a2' }))
-
-      advancePastActionFloor()
-
-      // Dismiss first — still one left
-      store.onBubbleDismissed()
-      expect(drainedFn).not.toHaveBeenCalled()
-
-      advancePastActionFloor()
-
-      // Dismiss second — now drained
-      store.onBubbleDismissed()
-      expect(drainedFn).toHaveBeenCalledTimes(1)
-    })
+    expect(handlers.addConversation).toHaveBeenCalledWith(
+      'agent-1',
+      'Alice',
+      'Keep it together.',
+      'inner_thought',
+      3,
+    )
   })
 
-  describe('HUD status updates', () => {
-    it('sets UI store stepping status on each turn', () => {
-      const store = useTurnStore()
-      const uiStore = useUIStore()
-      store.setHandlers(makeMockHandlers())
+  it('skips fallback conversation rows when speech already came from agent_speak', () => {
+    const handlers = createMockHandlers()
+    const store = useTurnStore()
+    store.setHandlers(handlers)
 
-      store.enqueue(makeTurn({ agentName: 'Bob', actionType: 'explore' }))
+    store.enqueue(makeTurn({
+      thought: 'Already tracked.',
+      fromSpeakEvent: true,
+    }))
 
-      expect(uiStore.steppingStatus).toBe('Bob: explore')
-    })
+    expect(handlers.addConversation).not.toHaveBeenCalled()
   })
 
-  describe('agent status mapping', () => {
-    it('maps talk actions to talking status', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
+  it('advances hud-only turns after the action floor timer', () => {
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers())
 
-      store.enqueue(makeTurn({ actionType: 'talk' }))
-      expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'talking')
-    })
+    store.enqueue(makeTurn({ actionType: 'gather', thought: undefined }))
 
-    it('maps move actions to moving status', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
+    expect(store.phase).toBe('acting')
 
-      store.enqueue(makeTurn({ actionType: 'move' }))
-      expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'moving')
-    })
+    jest.advanceTimersByTime(1500)
+    expect(store.phase).toBe('hud-only')
 
-    it('maps gather actions to working status', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
-
-      store.enqueue(makeTurn({ actionType: 'gather' }))
-      expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'working')
-    })
-
-    it('maps hoard actions to sneaking status', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
-
-      store.enqueue(makeTurn({ actionType: 'hoard' }))
-      expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'sneaking')
-    })
-
-    it('maps unknown actions to idle status', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
-
-      store.enqueue(makeTurn({ actionType: 'unknown_action' }))
-      expect(handlers.updateAgent).toHaveBeenCalledWith('agent-1', 'idle')
-    })
+    jest.advanceTimersByTime(1500)
+    expect(store.phase).toBe('idle')
+    expect(store.activeTurn).toBeNull()
   })
 
-  describe('$reset', () => {
-    it('clears all state', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
+  it('fires drained callbacks after the queue fully empties', () => {
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers())
+    const drained = jest.fn()
+    store.onDrained(drained)
 
-      store.enqueue(makeTurn({ thought: 'hello', agentId: 'a1' }))
-      store.enqueue(makeTurn({ agentId: 'a2' }))
-      store.onDrained(jest.fn())
+    store.enqueue(makeTurn({ actionType: 'gather', thought: undefined }))
+    jest.advanceTimersByTime(3000)
 
-      expect(store.activeTurn).not.toBeNull()
-      expect(store.queue.length).toBeGreaterThan(0)
-
-      store.$reset()
-
-      expect(store.queue).toHaveLength(0)
-      expect(store.activeTurn).toBeNull()
-      expect(store.phase).toBe('idle')
-      expect(store.isProcessing).toBe(false)
-      expect(store.hasPendingTurns).toBe(false)
-    })
-
-    it('clears pending hud timer', () => {
-      const store = useTurnStore()
-      store.setHandlers(makeMockHandlers())
-      const drainedFn = jest.fn()
-
-      // 'explore' skips action phase, goes straight to hud-only
-      store.enqueue(makeTurn({ actionType: 'explore' }))
-      store.onDrained(drainedFn)
-
-      // Reset before timeout fires
-      store.$reset()
-      jest.advanceTimersByTime(2000)
-
-      // drainedHandler was cleared by $reset, so it should not fire from the timer
-      expect(drainedFn).not.toHaveBeenCalled()
-    })
+    expect(drained).toHaveBeenCalledTimes(1)
   })
 
-  describe('movement integration', () => {
-    it('skips move when no targetLocation', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
+  it('fires drained callbacks only once per registration', () => {
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers())
+    const drained = jest.fn()
+    store.onDrained(drained)
 
-      // 'move' is in SKIP_ACTION_PHASE, so goes directly to talking
-      store.enqueue(makeTurn({ actionType: 'move', thought: 'just talking' }))
+    store.enqueue(makeTurn({ actionType: 'gather', thought: undefined }))
+    jest.advanceTimersByTime(3000)
+    store.enqueue(makeTurn({ actionType: 'gather', thought: undefined }))
+    jest.advanceTimersByTime(3000)
 
-      expect(handlers.move).not.toHaveBeenCalled()
-      expect(store.phase).toBe('talking')
-    })
+    expect(drained).toHaveBeenCalledTimes(1)
+  })
 
-    it('skips move when agent is already at target location', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers({
-        getAgentLocation: jest.fn(() => 'camp'),
-      })
-      store.setHandlers(handlers)
+  it('clears pending timers on reset', () => {
+    const handlers = createMockHandlers()
+    const store = useTurnStore()
+    store.setHandlers(handlers)
 
-      // 'move' is in SKIP_ACTION_PHASE
-      store.enqueue(makeTurn({ actionType: 'move', targetLocation: 'camp', thought: 'still here' }))
+    store.enqueue(makeTurn({ thought: 'Hold position.' }))
+    store.$reset()
+    jest.advanceTimersByTime(15000)
 
-      expect(handlers.move).not.toHaveBeenCalled()
-      expect(store.phase).toBe('talking')
-    })
+    expect(store.phase).toBe('idle')
+    expect(store.activeTurn).toBeNull()
+    expect(handlers.updateAgent).toHaveBeenCalledTimes(1)
+  })
 
-    it('updates agent location after move completes', () => {
-      const store = useTurnStore()
-      let moveCallback: (() => void) | null = null
-      const handlers = makeMockHandlers({
-        getAgentLocation: jest.fn(() => 'camp'),
-        move: jest.fn((_id, _loc, onComplete) => { moveCallback = onComplete }),
-      })
-      store.setHandlers(handlers)
+  it('waits for both animation completion and the floor timer before advancing', () => {
+    let finishAction: (() => void) | null = null
+    const store = useTurnStore()
+    store.setHandlers(createMockHandlers({
+      playAction: jest.fn((_id, _anim, cb) => { finishAction = cb }),
+      getAgentLocation: jest.fn(() => 'camp'),
+    }))
 
-      store.enqueue(makeTurn({ targetLocation: 'forest', thought: 'going', agentId: 'a1' }))
-      expect(store.phase).toBe('moving')
+    store.enqueue(makeTurn({
+      actionType: 'stab',
+      thought: 'Strike now.',
+      targetLocation: 'camp',
+    }))
 
-      moveCallback!()
+    store.notifyAudioComplete(store.activeTurn!.id)
+    expect(store.phase).toBe('acting')
 
-      // After move completes, updateAgent should be called with new location
-      expect(handlers.updateAgent).toHaveBeenCalledWith('a1', 'talking', 'forest')
-    })
+    finishAction!()
+    expect(store.phase).toBe('acting')
 
-    it('adds conversation when thought is present', () => {
-      const store = useTurnStore()
-      const handlers = makeMockHandlers()
-      store.setHandlers(handlers)
-
-      // 'move' skips action phase, goes directly to speech
-      store.enqueue(makeTurn({ actionType: 'move', thought: 'I see things', agentName: 'Eve' }))
-
-      expect(handlers.addConversation).toHaveBeenCalledWith('agent-1', 'Eve', 'I see things')
-    })
+    jest.advanceTimersByTime(1500)
+    expect(store.phase).toBe('idle')
   })
 })

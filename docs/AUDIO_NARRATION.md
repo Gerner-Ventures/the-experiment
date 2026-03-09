@@ -268,16 +268,17 @@ Unmapped characters fall back to `ELEVENLABS_VOICE_ID`.
 
 ### Pregeneration
 
-When agent speech events are resolved for a round, the runtime pregenerates TTS audio for all of
-them in parallel via `asyncio.gather()`. This includes action-turn inner-thought narration and
-conversation dialogue. Audio is typically ready when the frontend chooses to display the
-corresponding bubble.
+When agent decisions are resolved for a round, the runtime pregenerates TTS audio for agent speech
+in parallel via `asyncio.gather()`. Action turns use `inner_thought` narration, while conversation
+events continue to use dialogue speech. Audio is typically ready when the frontend chooses to
+display the corresponding bubble.
 
 ### Transport
 
 Agent speech audio uses the same split transport as GM narration:
 
-- `agent_speech_audio` WebSocket message carries readiness status per utterance
+- `agent_speech_audio` WebSocket message carries readiness status per utterance, including its
+  `source`
 - `GET /api/experiments/{id}/agents/{agent_id}/speech` returns metadata
 - `GET /api/experiments/{id}/agents/{agent_id}/speech/audio?round=N&index=I` streams MP3 audio
 
@@ -287,6 +288,12 @@ round).
 ### Frontend Playback
 
 `ConversationBubble.vue` plays audio when the bubble appears:
+
+- Action turns render `inner_thought` first during a dedicated `thinking` phase, then
+  movement/action continues after that narration completes or times out
+- The turn store guards bubble completion by turn ID so audio-end and dismiss cannot double-advance
+  a narrated action turn
+- Dialogue events remain tagged as dialogue speech and do not replace action-turn inner thoughts
 
 - If audio is `ready` on mount: plays immediately
 - If audio is `pending`: waits up to 3s, then falls back to text-only (6s auto-dismiss)

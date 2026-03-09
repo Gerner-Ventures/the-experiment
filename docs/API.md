@@ -380,6 +380,7 @@ Connection semantics:
 Use `speech_text` as the canonical narrated line for turn presentation; `inner_thought` is preserved as the raw decision field for compatibility and diagnostics.
 | `agent_move` | `{ "agent_id", "location" }` |
 | `agent_speak` | Action-turn narration currently uses `{ "kind", "agent_id", "agent_name", "message", "target", "source" }` with `source="inner_thought"`. Social conversation events also include their richer conversation fields such as `speaker_id`, `speaker_name`, `listener_id`, `listener_name`, `tone`, `location`, and `trust_delta`, and set `source="dialogue"`. |
+| `agent_speech_audio` | `{ "agent_id", "round", "index", "status", "audio_url"?, "source"? }` |
 | `meeting_start` | `{ "kind", "proposal" }` |
 | `meeting_speech` | `{ "kind", "agent_id", "agent_name", "stance", "content" }` |
 | `meeting_vote` | `{ "kind", "agent_id", "agent_name", "vote" }` |
