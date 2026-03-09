@@ -230,7 +230,14 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     runtime_instance: ExperimentRuntime,
 ) -> None:
     runtime_instance.connection_manager.broadcast = AsyncMock()
-    runtime_instance.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
+    runtime_instance.audio.resolve_narration_audio_snapshot_for_plan = AsyncMock(
+        return_value={
+            "status": "ready",
+            "narration_id": "narr-1",
+            "audio_url": "/api/experiments/exp-1/rounds/1/narration/audio?v=narr-1",
+            "error": None,
+        }
+    )
 
     state = await runtime_instance.create_experiment(_request())
     hook = runtime_instance.streaming.build_hook(state.experiment_id)
@@ -262,6 +269,7 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert [payload["type"] for payload in payloads] == [
         "round_start",
         "gm_plan",
+        "gm_audio_status",
         "crisis_event",
         "phase_change",
         "phase_change",
@@ -275,17 +283,33 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert round_start["phase"] is None
     assert round_start["data"] == {"theme": "Test pressure"}
 
-    phase_start = payloads[3]
+    gm_plan = payloads[1]
+    assert gm_plan["data"]["narration_audio"] == {
+        "status": "ready",
+        "narration_id": "narr-1",
+        "audio_url": "/api/experiments/exp-1/rounds/1/narration/audio?v=narr-1",
+        "error": None,
+    }
+
+    audio_status = payloads[2]
+    assert audio_status["phase"] == "gm_plan"
+    assert audio_status["data"] == {
+        "status": "ready",
+        "narration_id": "narr-1",
+        "audio_url": "/api/experiments/exp-1/rounds/1/narration/audio?v=narr-1",
+    }
+
+    phase_start = payloads[4]
     assert phase_start["phase"] == "morning"
     assert phase_start["data"] == {"status": "starting"}
 
-    phase_complete = payloads[4]
+    phase_complete = payloads[5]
     assert phase_complete["phase"] == "morning"
     assert phase_complete["data"]["events"] == [
         event.model_dump(mode="json") for event in phase_result.events
     ]
 
-    agent_action = payloads[7]
+    agent_action = payloads[8]
     assert agent_action["phase"] == "morning"
     assert agent_action["data"]["agent_id"] == state.agents[0].agent_id
     assert agent_action["data"]["agent_name"] == state.agents[0].name
@@ -296,9 +320,10 @@ async def test_streaming_hook_broadcasts_round_phase_and_agent_messages(
     assert agent_action["data"]["cooperation_intent"] == turn.decision.cooperation_intent
     assert agent_action["data"]["goal_progress"] == turn.decision.goal_progress
 
-    runtime_instance.audio.broadcast_narration_audio_status_for_plan.assert_awaited_once_with(
+    runtime_instance.audio.resolve_narration_audio_snapshot_for_plan.assert_awaited_once_with(
         state.experiment_id,
         _gm_plan(1),
+        prewarm=True,
     )
 
 

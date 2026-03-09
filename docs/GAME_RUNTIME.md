@@ -475,8 +475,10 @@ Those routes resolve both:
 - the current upcoming pending/applied GM plan for `current_round + 1`
 - persisted narration from completed rounds
 
-The websocket only carries narration-audio readiness state; audio bytes are streamed over HTTP from
-the backend rather than sent through the experiment websocket.
+The live `gm_plan` websocket payload now includes a `narration_audio` snapshot so the frontend can
+reveal text and start playback together at round start. `gm_audio_status` remains an additive
+readiness event, and audio bytes are still streamed over HTTP from the backend rather than sent
+through the experiment websocket.
 
 For the full narration-audio design, see `docs/AUDIO_NARRATION.md`.
 

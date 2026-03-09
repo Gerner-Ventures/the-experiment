@@ -83,6 +83,71 @@ class RuntimeAudioService:
             cache_hit=cache_hit,
         )
 
+    async def resolve_narration_audio_snapshot_for_plan(
+        self,
+        experiment_id: str,
+        gm_plan: GMPlanRecord,
+        *,
+        prewarm: bool = False,
+    ) -> dict[str, Any]:
+        if not gm_plan.plan.narration.strip():
+            return {
+                "status": "unavailable",
+                "narration_id": None,
+                "audio_url": None,
+                "error": None,
+            }
+        if self.tts_service is None or not self.tts_service.configured:
+            return {
+                "status": "unavailable",
+                "narration_id": None,
+                "audio_url": None,
+                "error": None,
+            }
+
+        request = await self._narration_audio_request(
+            experiment_id,
+            gm_plan.plan.round,
+            narration_text=gm_plan.plan.narration,
+        )
+        narration_id = self.tts_service.narration_id(request)
+        error: str | None = None
+        if prewarm:
+            try:
+                await self.tts_service.prewarm(request)
+            except NarrationAudioError as exc:
+                log.warning(
+                    "narration_audio_prewarm_failed",
+                    experiment_id=experiment_id,
+                    round_number=request.round_number,
+                    narration_hash=self.tts_service.cache_key(request),
+                    error=str(exc),
+                )
+                error = str(exc)
+
+        if error is not None:
+            return {
+                "status": "error",
+                "narration_id": narration_id,
+                "audio_url": None,
+                "error": error,
+            }
+
+        status, _ = await self.tts_service.get_status(request)
+        audio_url: str | None = None
+        if status == "ready":
+            audio_url = self.tts_service.build_audio_url(
+                experiment_id,
+                request.round_number,
+                narration_id=narration_id,
+            )
+        return {
+            "status": status,
+            "narration_id": narration_id,
+            "audio_url": audio_url,
+            "error": None,
+        }
+
     async def get_narration_audio_stream(
         self,
         experiment_id: str,

@@ -106,26 +106,57 @@ const activeDialogueBubble = computed(() => {
 })
 
 let narrationHydrationToken = 0
+const NARRATION_METADATA_RETRY_MS = 500
+const NARRATION_METADATA_MAX_ATTEMPTS = 8
+
+function apiErrorStatus(err: unknown): number | null {
+  if (!(err instanceof Error)) return null
+  const match = err.message.match(/^API (\d+):/)
+  return match ? Number(match[1]) : null
+}
+
+function delay(ms: number) {
+  return new Promise<void>(resolve => window.setTimeout(resolve, ms))
+}
 
 async function syncRoundNarration(experimentId: string, round: number, fallbackText: string) {
   const token = ++narrationHydrationToken
   gmStore.setNarrationFallback(fallbackText, round)
 
-  try {
-    const meta = await api.getRoundNarration(experimentId, round)
-    if (token !== narrationHydrationToken) return
+  for (let attempt = 0; attempt <= NARRATION_METADATA_MAX_ATTEMPTS; attempt++) {
+    try {
+      const meta = await api.getRoundNarration(experimentId, round)
+      if (token !== narrationHydrationToken) return
 
-    gmStore.hydrateNarration(
-      meta.text,
-      meta.round_number,
-      meta.narration_id,
-      meta.status,
-      meta.audio_url ?? null,
-    )
-  } catch (err) {
-    if (token !== narrationHydrationToken) return
-    console.warn('Failed to load round narration metadata:', err)
-    gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+      gmStore.hydrateNarration(
+        meta.text,
+        meta.round_number,
+        meta.narration_id,
+        meta.status,
+        meta.audio_url ?? null,
+      )
+
+      if (meta.status !== 'pending') {
+        return
+      }
+    } catch (err) {
+      if (token !== narrationHydrationToken) return
+      const status = apiErrorStatus(err)
+      const retryable = status === 409
+      if (!retryable || attempt === NARRATION_METADATA_MAX_ATTEMPTS) {
+        if (!retryable) {
+          console.warn('Failed to load round narration metadata:', err)
+        }
+        gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+        return
+      }
+    }
+
+    if (attempt === NARRATION_METADATA_MAX_ATTEMPTS) {
+      gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+      return
+    }
+    await delay(NARRATION_METADATA_RETRY_MS)
   }
 }
 
@@ -247,25 +278,6 @@ watch(() => uiStore.isPlaying, (playing) => {
     uiStore.clearStepping()
   }
 })
-
-watch(
-  () => {
-    const plan = gmStore.currentPlan
-    if (!experimentStore.id || !plan?.narration) return null
-    return `${experimentStore.id}:${plan.round}:${plan.narration}`
-  },
-  (planKey) => {
-    if (!planKey) return
-    const experimentId = experimentStore.id
-    const currentPlan = gmStore.currentPlan
-    if (!experimentId || !currentPlan?.narration) return
-    void syncRoundNarration(
-      experimentId,
-      currentPlan.round,
-      currentPlan.narration,
-    )
-  },
-)
 
 // When a round completes (from WS round_end), schedule next step if auto-playing
 watch(() => experimentStore.completedRounds, () => {
