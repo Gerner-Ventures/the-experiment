@@ -279,7 +279,7 @@ function formatEventHeadline(event: ExperimentEvent): string {
     case 'meeting_start':
       return `Meeting: "${(d.proposal as string) ?? '?'}"`
     case 'meeting_speech': {
-      const text = (d.text as string) ?? ''
+      const text = (d.content as string) ?? (d.text as string) ?? ''
       return `${(d.agent_id as string) ?? '?'}: "${text.slice(0, 60)}${text.length > 60 ? '...' : ''}"`
     }
     case 'meeting_vote':
