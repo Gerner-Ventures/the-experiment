@@ -172,6 +172,7 @@ async def test_get_agent_speech_metadata_returns_pending_when_not_cached() -> No
     meta = await runtime.get_agent_speech_metadata(eid, agent.agent_id, 1, 0)
     assert meta.status == "pending"
     assert meta.text == "I must warn the others."
+    assert meta.source == "dialogue"
     assert meta.agent_id == agent.agent_id
     assert meta.round_number == 1
     assert meta.index == 0
@@ -212,6 +213,7 @@ async def test_get_agent_speech_metadata_unavailable_without_tts() -> None:
 
     meta = await runtime.get_agent_speech_metadata(eid, agent.agent_id, 1, 0)
     assert meta.status == "unavailable"
+    assert meta.source == "dialogue"
     assert meta.audio_url is None
 
 
@@ -308,6 +310,7 @@ async def test_on_phase_complete_records_speech_entries_and_triggers_pregenerati
                     "agent_name": agent.name,
                     "target": "all",
                     "message": "We need to stick together!",
+                    "source": "inner_thought",
                 },
             ),
         ],
@@ -320,6 +323,7 @@ async def test_on_phase_complete_records_speech_entries_and_triggers_pregenerati
     assert len(entries) == 1
     assert entries[0]["agent_id"] == agent.agent_id
     assert entries[0]["text"] == "We need to stick together!"
+    assert entries[0]["source"] == "inner_thought"
     assert entries[0]["round_number"] == 1
     assert entries[0]["index"] == 0
     assert entries[0]["character_id"] == agent.character_id
@@ -628,6 +632,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
                 "agent_name": agent.name,
                 "target": "all",
                 "message": "First line.",
+                "source": "inner_thought",
             },
             timestamp="2026-01-01T00:00:00Z",
         )
@@ -646,6 +651,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
                 "agent_name": agent.name,
                 "target": "all",
                 "message": "Second line.",
+                "source": "inner_thought",
             },
             timestamp="2026-01-01T00:01:00Z",
         )
@@ -658,6 +664,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     entry = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 0)
     assert entry is not None
     assert entry["text"] == "First line."
+    assert entry["source"] == "inner_thought"
     assert entry["agent_id"] == agent.agent_id
     assert entry["index"] == 0
     assert entry["character_id"] == agent.character_id
@@ -666,6 +673,7 @@ async def test_find_agent_speech_entry_reconstructs_from_persisted_logs() -> Non
     entry2 = await runtime.audio._find_agent_speech_entry(eid, agent.agent_id, 1, 1)
     assert entry2 is not None
     assert entry2["text"] == "Second line."
+    assert entry2["source"] == "inner_thought"
     assert entry2["index"] == 1
 
     # After reconstruction, entries should be cached in memory

@@ -752,17 +752,18 @@ class SimulationEngine:
                             },
                         )
                     )
-                    if turn.decision.dialogue and turn.decision.dialogue.message.strip():
+                    if turn.decision.inner_thought.strip():
                         events.append(
                             RoundEvent(
                                 phase=phase,
-                                summary=turn.decision.dialogue.message,
+                                summary=turn.decision.inner_thought,
                                 data={
                                     "kind": "agent_speak",
                                     "agent_id": agent.agent_id,
                                     "agent_name": agent.name,
-                                    "target": turn.decision.dialogue.target or "all",
-                                    "message": turn.decision.dialogue.message,
+                                    "target": "self",
+                                    "message": turn.decision.inner_thought,
+                                    "source": "inner_thought",
                                 },
                             )
                         )
@@ -1453,6 +1454,7 @@ class SimulationEngine:
                         "agent_name": turn.speaker_name,
                         "message": turn.content,
                         "target": turn.listener_name or "all",
+                        "source": "dialogue",
                         # TODO: remove legacy speaker_*/listener_* fields once
                         # no downstream consumers reference them
                         "speaker_id": turn.speaker_id,

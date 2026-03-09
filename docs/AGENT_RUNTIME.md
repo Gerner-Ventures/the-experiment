@@ -170,6 +170,11 @@ The model chooses:
 - what suspicion thought to surface
 - what progress story to tell about its goal
 
+For action-turn presentation, the current backend also treats `inner_thought` as the canonical
+short narrated line for that turn. Downstream speech/TTS plumbing can therefore narrate the
+agent's intent before the action is shown, while keeping optional `dialogue` available as separate
+spoken content for later UI handling.
+
 ## 3. Immediate post-decision updates
 
 After the decision returns, the backend applies some direct updates immediately:
