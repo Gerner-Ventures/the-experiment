@@ -425,6 +425,67 @@ async def test_corrective_retry_includes_error_context(
     assert len(captured_events) == 0  # No PostHog event on successful retry
 
 
+def test_to_json_schema_format_converts_basemodel() -> None:
+    """BaseModel response_format is converted to json_schema dict for litellm."""
+    result = LLMClient._to_json_schema_format(AgentDecision)
+
+    assert result is not None
+    assert result["type"] == "json_schema"
+    assert result["json_schema"]["name"] == "AgentDecision"
+    assert result["json_schema"]["strict"] is True
+    schema = result["json_schema"]["schema"]
+    assert "inner_thought" in schema["properties"]
+    assert "action" in schema["properties"]
+    # Anthropic requires additionalProperties: false on all object types
+    assert schema["additionalProperties"] is False
+    # Check nested $defs too
+    for defn in schema.get("$defs", {}).values():
+        if defn.get("type") == "object":
+            assert defn["additionalProperties"] is False, f"Missing additionalProperties in {defn}"
+
+
+def test_to_json_schema_format_passes_dict_through() -> None:
+    """Dict response_format is passed through unchanged."""
+    fmt = {"type": "json_object"}
+    assert LLMClient._to_json_schema_format(fmt) is fmt
+
+
+def test_to_json_schema_format_returns_none_for_none() -> None:
+    assert LLMClient._to_json_schema_format(None) is None
+
+
+@pytest.mark.asyncio
+async def test_router_receives_json_schema_dict_not_basemodel() -> None:
+    """When response_format is a BaseModel, the router should receive json_schema dict."""
+    content = json.dumps(
+        {
+            "inner_thought": "Testing.",
+            "suspicion": None,
+            "action": {"type": "observe"},
+            "dialogue": None,
+            "goal_progress": "None.",
+            "cooperation_intent": "medium",
+        }
+    )
+    client = LLMClient()
+    fake_router = _FakeRouter([_FakeResponse("openai/gpt-4o-mini", content)])
+    client.router = fake_router
+
+    await client.generate_structured(
+        request=client_request(
+            "agent",
+            AgentDecision,
+            {"experiment_id": "exp-fmt", "round_number": 1, "agent_id": "a-1"},
+        )
+    )
+
+    # The router should have received a json_schema dict, not the BaseModel class
+    rf = fake_router.calls[0]["response_format"]
+    assert isinstance(rf, dict)
+    assert rf["type"] == "json_schema"
+    assert rf["json_schema"]["name"] == "AgentDecision"
+
+
 def client_request(
     role: str,
     response_format: type[Any],

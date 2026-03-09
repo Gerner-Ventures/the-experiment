@@ -24,7 +24,7 @@ class LLMClient:
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
         self._register_langfuse_callbacks()
-        litellm.enable_json_schema_validation = True
+        litellm.enable_json_schema_validation = False
         router_cls = cast(Any, getattr(litellm, "Router"))
         self.router = router_cls(
             model_list=self._build_model_list(),
@@ -58,11 +58,13 @@ class LLMClient:
         max_attempts = 2 if request.response_format is not None else 1
         result: LLMResult | None = None
 
+        api_response_format = self._to_json_schema_format(request.response_format)
+
         for attempt in range(max_attempts):
             response = await self.router.acompletion(
                 model=request.model_override or model_config.primary_model,
                 messages=cast(Any, messages),
-                response_format=request.response_format,
+                response_format=api_response_format,
                 temperature=request.temperature
                 if request.temperature is not None
                 else model_config.temperature,
@@ -203,6 +205,33 @@ class LLMClient:
             return 0.0
 
     @staticmethod
+    def _to_json_schema_format(
+        response_format: dict[str, Any] | type[BaseModel] | None,
+    ) -> dict[str, Any] | None:
+        """Convert a Pydantic BaseModel to json_schema dict format for litellm.
+
+        Passing BaseModel directly to litellm sometimes produces malformed JSON
+        with Anthropic models. The explicit json_schema dict format is translated
+        more reliably to Anthropic's tool_use mode.
+        """
+        if response_format is None:
+            return None
+        if isinstance(response_format, dict):
+            return response_format
+        if isinstance(response_format, type) and issubclass(response_format, BaseModel):
+            schema = response_format.model_json_schema()
+            _add_additional_properties_false(schema)
+            return {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": response_format.__name__,
+                    "schema": schema,
+                    "strict": True,
+                },
+            }
+        return response_format
+
+    @staticmethod
     def _try_parse(
         content: str,
         response_format: dict[str, Any] | type[BaseModel],
@@ -244,3 +273,26 @@ def _string_or_none(value: object) -> str | None:
 
 def _int_or_none(value: object) -> int | None:
     return value if isinstance(value, int) else None
+
+
+def _add_additional_properties_false(schema: dict[str, Any]) -> None:
+    """Recursively add additionalProperties: false to all object types.
+
+    Anthropic's API requires this on every object in the schema; Pydantic's
+    model_json_schema() does not include it by default.
+    """
+    if schema.get("type") == "object":
+        schema.setdefault("additionalProperties", False)
+    # Process $defs
+    for definition in schema.get("$defs", {}).values():
+        _add_additional_properties_false(definition)
+    # Process nested properties
+    for prop in schema.get("properties", {}).values():
+        _add_additional_properties_false(prop)
+    # Process anyOf / oneOf / allOf variants
+    for key in ("anyOf", "oneOf", "allOf"):
+        for variant in schema.get(key, []):
+            _add_additional_properties_false(variant)
+    # Process items (arrays)
+    if "items" in schema:
+        _add_additional_properties_false(schema["items"])
