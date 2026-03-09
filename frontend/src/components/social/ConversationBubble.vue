@@ -14,14 +14,18 @@ const PENDING_TIMEOUT_MS = 3000
 
 const locale = useLocale()
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   agentName: string
   message: string
   agentId: string
   getPosition: (agentId: string) => { x: number; y: number } | null
   audioStatus: AudioStatus
   audioUrl: string | null
-}>()
+  /** Visual variant: 'speech' for spoken dialog, 'thought' for internal monologue */
+  variant?: 'speech' | 'thought'
+}>(), {
+  variant: 'thought',
+})
 
 const emit = defineEmits<{
   dismiss: [agentId: string]
@@ -29,6 +33,7 @@ const emit = defineEmits<{
 }>()
 
 const visible = ref(false)
+const dismissed = ref(false)
 const revealedChars = ref(0)
 const posX = ref(0)
 const posY = ref(0)
@@ -131,7 +136,8 @@ function stopAudio() {
 }
 
 function dismiss() {
-  if (!visible.value) return
+  if (dismissed.value) return
+  dismissed.value = true
   visible.value = false
   stopAudio()
   emit('dismiss', props.agentId)
@@ -191,7 +197,6 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  const wasPending = dismissTimer !== null || isPlaying.value
   if (dismissTimer) {
     clearTimeout(dismissTimer)
     dismissTimer = null
@@ -209,7 +214,9 @@ onUnmounted(() => {
     pendingTimer = null
   }
   stopAudio()
-  if (wasPending) {
+  // Emit dismiss only if we haven't already — prevents double-fire
+  if (!dismissed.value) {
+    dismissed.value = true
     emit('dismiss', props.agentId)
   }
 })
@@ -227,10 +234,14 @@ onUnmounted(() => {
       }"
     >
       <div
-        class="retro-bubble bg-[#0a0a0f] border-2 border-white/80 rounded-none px-3 py-2 shadow-[4px_4px_0_rgba(0,0,0,0.5)]"
+        class="retro-bubble bg-[#0a0a0f] px-3 py-2"
+        :class="variant === 'thought'
+          ? 'border border-dashed border-white/40 rounded-lg shadow-[2px_2px_0_rgba(0,0,0,0.3)] thought-drift'
+          : 'border-2 border-white/80 rounded-none shadow-[4px_4px_0_rgba(0,0,0,0.5)]'"
       >
         <div
-          class="font-mono text-[10px] text-accent uppercase tracking-wider mb-0.5 flex items-center gap-1"
+          class="font-mono text-[10px] uppercase tracking-wider mb-0.5 flex items-center gap-1"
+          :class="variant === 'thought' ? 'text-white/40' : 'text-accent'"
         >
           {{ agentName }}
           <SoundOutlined v-if="isPlaying" class="text-accent/80" />
@@ -244,13 +255,19 @@ onUnmounted(() => {
         </div>
         <div
           ref="scrollContainer"
-          class="text-xs text-white/80 leading-snug font-mono max-h-[72px] overflow-y-auto bubble-scroll"
+          class="text-xs leading-snug font-mono max-h-[72px] overflow-y-auto bubble-scroll"
+          :class="variant === 'thought' ? 'text-white/50 italic' : 'text-white/80'"
         >
-          "{{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>"
+          <template v-if="variant === 'thought'">
+            {{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>
+          </template>
+          <template v-else>
+            "{{ displayedMessage }}<span v-if="!isFullyRevealed" class="retro-cursor">_</span>"
+          </template>
         </div>
       </div>
       <!-- Pixel-art tail pointer -->
-      <div class="retro-tail" />
+      <div :class="variant === 'thought' ? 'thought-tail' : 'retro-tail'" />
     </div>
   </Transition>
 </template>
@@ -277,6 +294,37 @@ onUnmounted(() => {
   border-left: 4px solid transparent;
   border-right: 4px solid transparent;
   border-top: 6px solid #0a0a0f;
+}
+
+.thought-tail {
+  position: relative;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.25);
+  margin-top: 4px;
+}
+
+.thought-tail::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 2px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.thought-drift {
+  animation: thought-float 4s ease-in-out infinite;
+}
+
+@keyframes thought-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
 }
 
 .retro-cursor {

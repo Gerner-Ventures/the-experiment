@@ -3,7 +3,7 @@ import { ref, computed } from 'vue'
 import { useUIStore } from '@/stores/ui'
 import { useLocale } from '@/locales'
 import { HD_ACTION_TO_ANIMATION as ACTION_TO_ANIMATION } from '@/config/sprites/hd/animations'
-import { SKIP_ACTION_PHASE } from '@/config/action-categories'
+import { SKIP_ACTION_PHASE, SPEECH_ONLY_ACTIONS } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
 
 export interface Turn {
@@ -39,6 +39,9 @@ const HUD_ONLY_DURATION_MS = 1500
 /** Maximum time to wait for audio playback before force-advancing */
 const AUDIO_MAX_TIMEOUT_MS = 15000
 
+/** Brief pause between turns so the user can register the transition */
+const TURN_GAP_MS = 400
+
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
   const queue = ref<Turn[]>([])
@@ -53,6 +56,7 @@ export const useTurnStore = defineStore('turn', () => {
   let hudTimer: ReturnType<typeof setTimeout> | null = null
   let actionFloorTimer: ReturnType<typeof setTimeout> | null = null
   let speechAudioTimer: ReturnType<typeof setTimeout> | null = null
+  let turnGapTimer: ReturnType<typeof setTimeout> | null = null
 
   // External handlers — set by SimulationView to bridge PixiJS and Vue layers
   let handlers: TurnHandlers | null = null
@@ -76,6 +80,26 @@ export const useTurnStore = defineStore('turn', () => {
     if (!activeTurn.value) {
       processNext()
     }
+  }
+
+  /** Schedule the next turn with a brief gap so transitions don't overlap */
+  function scheduleNext() {
+    // Clear any existing gap timer to prevent double-scheduling
+    if (turnGapTimer) {
+      clearTimeout(turnGapTimer)
+      turnGapTimer = null
+    }
+
+    if (queue.value.length === 0) {
+      processNext() // drain immediately
+      return
+    }
+    // Brief pause between turns
+    phase.value = 'idle'
+    turnGapTimer = setTimeout(() => {
+      turnGapTimer = null
+      processNext()
+    }, TURN_GAP_MS)
   }
 
   function processNext() {
@@ -104,6 +128,14 @@ export const useTurnStore = defineStore('turn', () => {
 
     // Update agent status
     handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType))
+
+    // Speech-only actions (meeting_speech, meeting_vote) skip movement and acting —
+    // go straight to speech bubble phase
+    if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
+      console.debug(`[Turn] Speech-only: ${turn.agentName} → ${turn.actionType}`)
+      startSpeechPhase()
+      return
+    }
 
     // Step 1: Move if the agent's target location differs from their current location
     const currentLocation = handlers?.getAgentLocation(turn.agentId)
@@ -186,7 +218,7 @@ export const useTurnStore = defineStore('turn', () => {
       // HUD-only: show status briefly then advance
       phase.value = 'hud-only'
       console.debug(`[Turn] HUD-only: ${turn.agentName} → ${turn.actionType}`)
-      hudTimer = setTimeout(() => processNext(), HUD_ONLY_DURATION_MS)
+      hudTimer = setTimeout(() => scheduleNext(), HUD_ONLY_DURATION_MS)
     }
   }
 
@@ -207,6 +239,10 @@ export const useTurnStore = defineStore('turn', () => {
    * Also called internally by notifyAudioComplete for audio-gated flow.
    */
   function onBubbleDismissed() {
+    // Guard: only advance if we're actually in the talking phase.
+    // Prevents double-advance from bubble dismiss + audio timeout racing.
+    if (phase.value !== 'talking') return
+
     console.debug(`[Turn] Bubble dismissed, advancing`)
     // Reset agent to idle
     if (activeTurn.value) {
@@ -216,7 +252,7 @@ export const useTurnStore = defineStore('turn', () => {
       clearTimeout(speechAudioTimer)
       speechAudioTimer = null
     }
-    processNext()
+    scheduleNext()
   }
 
   function clearTimers() {
@@ -231,6 +267,10 @@ export const useTurnStore = defineStore('turn', () => {
     if (speechAudioTimer) {
       clearTimeout(speechAudioTimer)
       speechAudioTimer = null
+    }
+    if (turnGapTimer) {
+      clearTimeout(turnGapTimer)
+      turnGapTimer = null
     }
   }
 
@@ -255,6 +295,7 @@ export const useTurnStore = defineStore('turn', () => {
 function actionToStatus(action: string): AgentStatus {
   switch (action) {
     case 'talk': case 'trade': case 'accuse': return 'talking'
+    case 'meeting_speech': case 'meeting_vote': return 'talking'
     case 'move': case 'explore': return 'moving'
     case 'gather': case 'repair': return 'working'
     case 'hoard': case 'sabotage': return 'sneaking'

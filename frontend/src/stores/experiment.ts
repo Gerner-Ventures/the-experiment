@@ -6,6 +6,7 @@ import { useWorldStore } from '@/stores/world'
 import { useAgentStore } from '@/stores/agent'
 import { useUIStore } from '@/stores/ui'
 import { useTurnStore } from '@/stores/turn'
+import { useSocialStore } from '@/stores/social'
 import { useLocale } from '@/locales'
 
 export interface ExperimentEvent {
@@ -13,7 +14,10 @@ export interface ExperimentEvent {
   type: string
   round: number
   phase?: string
+  /** Backend-provided timestamp (ISO string) */
   timestamp: string
+  /** Local time when the WS message was received (ms since epoch) */
+  receivedAt: number
   summary: string
   data: Record<string, unknown>
 }
@@ -59,6 +63,7 @@ export const useExperimentStore = defineStore('experiment', () => {
       round: msg.round,
       phase: msg.phase,
       timestamp: msg.timestamp,
+      receivedAt: Date.now(),
       summary,
       data: msg.data as Record<string, unknown>,
     })
@@ -75,6 +80,37 @@ export const useExperimentStore = defineStore('experiment', () => {
       locale.hud.steppingRoundStarted.replace('{round}', String(currentRound.value)),
     )
     addEvent(msg)
+  }
+
+  /**
+   * Wait for both turn queue drain AND meeting dismissal before proceeding.
+   * This prevents phases from advancing while a meeting scene is active.
+   */
+  function waitForReady(callback: () => void, label: string) {
+    const turnStore = useTurnStore()
+    const socialStore = useSocialStore()
+
+    const tryProceed = () => {
+      if (turnStore.isProcessing) {
+        console.debug(`[Experiment] ${label} deferred — waiting for turn queue`)
+        turnStore.onDrained(tryProceed)
+        return
+      }
+      if (socialStore.isMeetingActive) {
+        console.debug(`[Experiment] ${label} deferred — waiting for meeting dismissal`)
+        // Poll for meeting dismissal (watch isn't available in store context)
+        const checkMeeting = setInterval(() => {
+          if (!socialStore.isMeetingActive) {
+            clearInterval(checkMeeting)
+            tryProceed()
+          }
+        }, 200)
+        return
+      }
+      callback()
+    }
+
+    tryProceed()
   }
 
   function onRoundEnd(msg: WSMessage) {
@@ -104,10 +140,7 @@ export const useExperimentStore = defineStore('experiment', () => {
     }
     addEvent(msg)
 
-    // Defer round finalization until the turn store finishes processing all queued turns.
-    // The turn store's onDrained callback fires when every agent's turn has been
-    // displayed (movement + bubble). Only then do we sync agent data and advance.
-    const turnStore = useTurnStore()
+    // Defer round finalization until turns drain AND meeting closes
     const finalize = () => {
       if (data.agents?.length) useAgentStore().setAgents(data.agents)
       completedRounds.value++
@@ -115,25 +148,30 @@ export const useExperimentStore = defineStore('experiment', () => {
       console.debug(`[Experiment] Round ${currentRound.value} finalized`)
     }
 
-    if (turnStore.isProcessing) {
-      console.debug(`[Experiment] Round ${currentRound.value} ended, waiting for turn queue to drain`)
-      useUIStore().setSteppingStatus(locale.hud.steppingWaiting)
-      turnStore.onDrained(finalize)
-    } else {
-      finalize()
-    }
+    useUIStore().setSteppingStatus(locale.hud.steppingWaiting)
+    waitForReady(finalize, `round ${currentRound.value} end`)
   }
 
   function onPhaseChange(msg: WSMessage) {
     const phase = (msg.phase as RoundPhase) ?? null
-    currentPhase.value = phase
     const data = msg.data as Record<string, unknown>
-    const worldStore = useWorldStore()
+    const socialStore = useSocialStore()
 
+    // Always update the world phase immediately — the PixiWorld renders behind
+    // the meeting overlay (opacity-0), so day/night updates are invisible during
+    // meetings. When the meeting closes, the world is already at the correct
+    // time of day (no jarring jump).
+    currentPhase.value = phase
     if (phase) {
-      worldStore.onPhaseChange(phase)
+      useWorldStore().onPhaseChange(phase)
     }
+    if ((data.events as unknown[])?.length) {
+      addEvent(msg)
+    }
+    console.debug(`[Experiment] Phase applied: ${phase}`)
 
+    // HUD status updates are deferred until the meeting closes — showing
+    // "Afternoon starting…" mid-meeting breaks immersion.
     if (data.status === 'starting' && phase) {
       const labels: Record<string, string> = {
         gm_plan: locale.hud.steppingGmPlan,
@@ -143,10 +181,17 @@ export const useExperimentStore = defineStore('experiment', () => {
         afternoon: locale.hud.steppingAfternoon,
         night: locale.hud.steppingNight,
       }
-      useUIStore().setSteppingStatus(labels[phase] ?? phase)
-    }
-    if ((data.events as unknown[])?.length) {
-      addEvent(msg)
+      if (socialStore.isMeetingActive) {
+        // Defer HUD label until meeting dismisses
+        const check = setInterval(() => {
+          if (!socialStore.isMeetingActive) {
+            clearInterval(check)
+            useUIStore().setSteppingStatus(labels[phase] ?? phase)
+          }
+        }, 200)
+      } else {
+        useUIStore().setSteppingStatus(labels[phase] ?? phase)
+      }
     }
   }
 

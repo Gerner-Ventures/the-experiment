@@ -1,5 +1,5 @@
 import type { MapData } from '@/types/world'
-import type { UsePixiWorld } from '@/composables/usePixiWorld'
+import type { UseGameWorld } from '@/composables/useGameWorld'
 import { findPath } from '@/components/world/pixi/pathfinding'
 
 /**
@@ -103,7 +103,7 @@ export function usePathfinding() {
    * Calls onComplete when the agent arrives (or immediately if no path found).
    */
   function moveAgentToLocation(
-    world: UsePixiWorld,
+    world: UseGameWorld,
     agentId: string,
     locationId: string,
     onComplete?: () => void,

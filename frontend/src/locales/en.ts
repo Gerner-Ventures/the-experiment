@@ -249,6 +249,18 @@ export default {
       mute: 'Mute agent voices',
       unmute: 'Unmute agent voices',
     },
+    meetingScene: {
+      proposalLabel: 'PROPOSAL',
+      returnToIsland: 'Return to Island',
+      clickToContinue: 'Click to return to the island',
+      exiled: '{name} has been exiled',
+      noExile: 'No one was exiled',
+      stanceSupport: 'Supports the proposal',
+      stanceOppose: 'Opposes the proposal',
+      stanceAbstain: 'Abstains',
+      votePassed: 'The proposal passed',
+      voteFailed: 'The proposal failed',
+    },
   },
 
   relationshipWeb: {
@@ -299,6 +311,8 @@ export default {
     monologue: 'Monologue',
     panic: 'Panic',
     breakdown: 'Breakdown',
+    meeting_speech: 'Meeting Speech',
+    meeting_vote: 'Meeting Vote',
   },
 
   log: {
@@ -306,7 +320,21 @@ export default {
     search: 'Search events...',
     filterType: 'Event type',
     filterPhase: 'Phase',
+    filterCategory: 'Category',
     empty: 'No events yet',
+    tabAll: 'All',
+    tabTurns: 'Turns',
+    tabSystem: 'System',
+    turnQueueLabel: 'Turn Queue',
+    turnQueueEmpty: 'Idle',
+    turnActive: 'Active',
+    turnPhaseMoving: 'Moving',
+    turnPhaseActing: 'Acting',
+    turnPhaseTalking: 'Talking',
+    turnPhaseHud: 'HUD',
+    turnQueued: 'Queued',
+    turnProcessing: 'Processing',
+    turnCompleted: 'Done',
   },
 
   report: {
