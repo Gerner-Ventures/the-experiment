@@ -31,8 +31,8 @@ skipping the action animation entirely. Sprites are also too small to clearly re
 
 ### The gap
 
-1. No `'acting'` phase — turns skip directly from movement to speech
-2. `ACTION_TO_ANIMATION` is defined but never wired into the turn lifecycle
+1. No `'thinking'` phase — inner thoughts appear during action execution
+2. Speech bubbles replace action-turn inner thoughts when dialogue arrives into the turn lifecycle
 3. No `playAction` handler in `TurnHandlers`
 4. Sprites too small to distinguish action poses at typical zoom
 5. No action label overlay during animations
@@ -52,6 +52,7 @@ Insert a thought-first turn lifecycle where `'thinking'` precedes `'moving'`, fo
 <!-- canon:realized-in:PR#116 file:frontend/src/stores/turn.ts -->
 - [x] Thought narration phase happens before movement begins when a turn has `inner_thought`
 - [x] `startActionPhase()` added to turn store, called after movement completes
+<!-- canon:realized-in:PR#190 file:frontend/src/stores/turn.ts -->
 - [x] Action phase looks up `ACTION_TO_ANIMATION[turn.actionType]` to resolve the animation
 - [x] Calls `playAction` handler with agent ID, animation name, and `onComplete` callback
 - [x] `onComplete` transitions to turn completion (`hud-only` for silent turns, immediate advance for narrated turns)
