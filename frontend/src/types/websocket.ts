@@ -32,7 +32,8 @@ export type NarrationAudioStatus = 'pending' | 'ready' | 'error' | 'unavailable'
 /** Payload for gm_audio_status WebSocket message */
 export interface GMAudioStatusData {
   status: NarrationAudioStatus
-  audio_url?: string
+  narration_id: string
+  audio_url?: string | null
   error?: string
 }
 

@@ -79,6 +79,29 @@ const activeBubbleAudio = computed(() => {
   ) ?? null
 })
 
+let narrationHydrationToken = 0
+
+async function syncRoundNarration(experimentId: string, round: number, fallbackText: string) {
+  const token = ++narrationHydrationToken
+  gmStore.setNarrationFallback(fallbackText, round)
+
+  try {
+    const meta = await api.getRoundNarration(experimentId, round)
+    if (token !== narrationHydrationToken) return
+
+    gmStore.hydrateNarration(
+      meta.text,
+      meta.round_number,
+      meta.narration_id,
+      meta.status,
+      meta.audio_url,
+    )
+  } catch (err) {
+    if (token !== narrationHydrationToken) return
+    console.warn('Failed to load round narration metadata:', err)
+  }
+}
+
 async function initExperiment() {
   const experimentId = route.params.id as string
 
@@ -123,18 +146,7 @@ async function initExperiment() {
       const planRound = (planData.plan?.round as number) ?? detail.current_round
       const planNarration = (planData.plan?.narration as string) ?? ''
       if (planData.status === 'applied' && planNarration) {
-        try {
-          const meta = await api.getRoundNarration(detail.experiment_id, planRound)
-          gmStore.hydrateNarration(
-            planNarration,
-            planRound,
-            meta.status === 'ready' ? 'ready' : 'unavailable',
-            meta.status === 'ready' ? meta.audio_url ?? null : null,
-          )
-        } catch {
-          // Backend narration endpoint unavailable — show text only
-          gmStore.hydrateNarration(planNarration, planRound, 'unavailable', null)
-        }
+        await syncRoundNarration(detail.experiment_id, planRound, planNarration)
       }
     }
 
@@ -208,6 +220,22 @@ watch(() => uiStore.isPlaying, (playing) => {
     uiStore.clearStepping()
   }
 })
+
+watch(
+  () => {
+    const plan = gmStore.currentPlan
+    if (!experimentStore.id || !plan?.narration) return null
+    return `${experimentStore.id}:${plan.round}:${plan.narration}`
+  },
+  (planKey) => {
+    if (!planKey || !experimentStore.id || !gmStore.currentPlan?.narration) return
+    void syncRoundNarration(
+      experimentStore.id,
+      gmStore.currentPlan.round,
+      gmStore.currentPlan.narration,
+    )
+  },
+)
 
 // When a round completes (from WS round_end), schedule next step if auto-playing
 watch(() => experimentStore.completedRounds, () => {

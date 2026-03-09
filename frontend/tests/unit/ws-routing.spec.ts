@@ -11,7 +11,7 @@ import { useWorldStore } from '@/stores/world'
 import { useGMStore } from '@/stores/gm'
 import { useSocialStore } from '@/stores/social'
 import { useTurnStore } from '@/stores/turn'
-import type { WSMessage, WSMessageType } from '@/types/websocket'
+import type { GMAudioStatusData, WSMessage, WSMessageType } from '@/types/websocket'
 
 // We can't import useWebSocket directly (it creates a real WebSocket),
 // so we re-implement routeMessage to test routing logic in isolation.
@@ -31,6 +31,7 @@ function routeMessage(msg: WSMessage) {
     phase_change: (m) => experimentStore.onPhaseChange(m),
     gm_plan: (m) => gmStore.onPlan(m),
     gm_narration: (m) => gmStore.onNarration(m),
+    gm_audio_status: (m) => gmStore.onAudioStatus(m as WSMessage<GMAudioStatusData>),
     agent_action: (m) => agentStore.onAction(m),
     agent_speak: (m) => socialStore.onSpeak(m),
     agent_speech_audio: (m) => socialStore.onSpeechAudio(m),
@@ -116,6 +117,18 @@ describe('WebSocket message routing', () => {
     routeMessage(makeMsg('gm_narration', { text: 'The storm breaks.' }))
     expect(gmStore.narrationText).toBe('The storm breaks.')
     expect(gmStore.showNarration).toBe(true)
+  })
+
+  it('routes gm_audio_status to gmStore', () => {
+    const gmStore = useGMStore()
+    gmStore.hydrateNarration('Resolved narration.', 2, 'narr-2', 'pending', null)
+    routeMessage(makeMsg('gm_audio_status', {
+      status: 'ready',
+      narration_id: 'narr-2',
+      audio_url: '/api/experiments/e1/rounds/2/narration/audio?v=narr-2',
+    }, undefined, 2))
+    expect(gmStore.narrationAudioStatus).toBe('ready')
+    expect(gmStore.narrationAudioUrl).toBe('/api/experiments/e1/rounds/2/narration/audio?v=narr-2')
   })
 
   it('routes agent_action to agentStore (enqueues in turn store)', () => {

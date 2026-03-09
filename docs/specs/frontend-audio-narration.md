@@ -1,7 +1,7 @@
 ---
 title: "[P1] Frontend audio narration playback — consume backend narration stream"
-status: in_progress
-issue: 102
+status: done
+issue: 182
 priority: P1
 tags: [stream-1, frontend, backend, narration, audio]
 ---
@@ -130,12 +130,12 @@ Expected behavior:
 
 ## Acceptance Criteria
 
-- [ ] `gm_audio_status` is added to frontend websocket types and routed correctly
-- [ ] the frontend no longer depends on `gm_narration` for live narration text
-- [ ] `gm_plan.plan.narration` populates GM narration text
-- [ ] `GET /rounds/{round}/narration` is wired into the API client
-- [ ] the frontend treats `(round, narration_id)` as the identity for narration playback state
-- [ ] the narration overlay can play audio from backend `audio_url`
+- [x] `gm_audio_status` is added to frontend websocket types and routed correctly
+- [x] the frontend no longer depends on `gm_narration` for live narration text
+- [x] `gm_plan.plan.narration` populates GM narration text
+- [x] `GET /rounds/{round}/narration` is wired into the API client
+- [x] the frontend treats `(round, narration_id)` as the identity for narration playback state
+- [x] the narration overlay can play audio from backend `audio_url`
 - [x] text narration still appears immediately while audio is pending
 <!-- canon:realized-in:PR#114 file:frontend/src/components/hud/NarrationOverlay.vue -->
 - [x] autoplay-blocked browsers fall back to a manual play path

@@ -49,22 +49,32 @@ const showAudioError = computed(() =>
   props.audioStatus === 'error' || props.audioStatus === 'unavailable' || audioLoadFailed.value
 )
 
-watch(() => props.visible, (show) => {
-  if (show && props.text) {
-    startTypewriter()
-    audioEnded.value = false
-    audioLoadFailed.value = false
-  } else {
-    stopTypewriter()
-    stopAudio()
-  }
-}, { immediate: true })
+watch(
+  () => [props.visible, props.text] as const,
+  ([visible, text], previous) => {
+    const [wasVisible, previousText] = previous ?? [false, '']
+    if (visible && text) {
+      const shouldRestartTypewriter = !wasVisible || text !== previousText
+      if (shouldRestartTypewriter) {
+        stopTypewriter()
+        stopAudio()
+        startTypewriter()
+        audioEnded.value = false
+        audioLoadFailed.value = false
+      }
+    } else {
+      stopTypewriter()
+      stopAudio()
+    }
+  },
+  { immediate: true },
+)
 
-// When audio becomes ready while overlay is visible, try autoplay.
-// immediate: true handles the reconnect case where props are already set on mount.
-watch(() => props.audioStatus, (status) => {
-  if (status === 'ready' && props.visible && props.audioUrl) {
+watch(() => [props.audioStatus, props.audioUrl, props.visible] as const, ([status, audioUrl, visible]) => {
+  if (status === 'ready' && visible && audioUrl) {
     tryPlayAudio()
+  } else if (status !== 'ready') {
+    stopAudio()
   }
 }, { immediate: true })
 
