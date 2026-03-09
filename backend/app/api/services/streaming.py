@@ -133,10 +133,12 @@ class StreamingHook:
         cm = self._broadcaster.connection_manager
         msg = self._broadcaster.message_builder
         eid = self._experiment_id
-        narration_audio = await self._broadcaster.audio_service.resolve_narration_audio_snapshot_for_plan(
-            eid,
-            gm_plan,
-            prewarm=True,
+        narration_audio = (
+            await self._broadcaster.audio_service.resolve_narration_audio_snapshot_for_plan(
+                eid,
+                gm_plan,
+                prewarm=True,
+            )
         )
         gm_plan_payload = gm_plan.model_dump(mode="json")
         gm_plan_payload["narration_audio"] = narration_audio
