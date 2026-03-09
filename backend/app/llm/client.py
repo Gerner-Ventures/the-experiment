@@ -24,10 +24,7 @@ class LLMClient:
         self.model_configs = get_default_model_configs()
         self.tracker = tracker or UsageTracker()
         self._register_langfuse_callbacks()
-        # Disable litellm's client-side JSON schema validation — it rejects responses
-        # that violate constraints like maxLength even though the structure is correct.
-        # We validate with Pydantic ourselves in _parse_structured_content.
-        litellm.enable_json_schema_validation = False
+        litellm.enable_json_schema_validation = True
         router_cls = cast(Any, getattr(litellm, "Router"))
         self.router = router_cls(
             model_list=self._build_model_list(),
@@ -49,16 +46,6 @@ class LLMClient:
     async def generate_structured(self, request: LLMRequest) -> LLMResult:
         model_config = self._resolve_model_config(request)
         messages = list(request.messages)
-        api_response_format: dict[str, Any] | type[BaseModel] | None = request.response_format
-
-        # Pass Pydantic BaseModel classes directly to litellm as response_format.
-        # LiteLLM handles provider-specific translation (e.g. Anthropic tool_use,
-        # OpenAI json_schema) automatically.
-        if isinstance(request.response_format, type) and issubclass(
-            request.response_format, BaseModel
-        ):
-            api_response_format = request.response_format
-
         metadata = self._build_metadata(request)
         log.debug(
             "langfuse_context",
@@ -75,7 +62,7 @@ class LLMClient:
             response = await self.router.acompletion(
                 model=request.model_override or model_config.primary_model,
                 messages=cast(Any, messages),
-                response_format=api_response_format,
+                response_format=request.response_format,
                 temperature=request.temperature
                 if request.temperature is not None
                 else model_config.temperature,
@@ -232,37 +219,30 @@ class LLMClient:
         content: str,
         response_format: dict[str, Any] | type[BaseModel],
     ) -> dict[str, Any] | None:
-        text = content.strip()
-        # Strip markdown code fences if present
-        if text.startswith("```"):
-            lines = text.split("\n")
-            # Remove first line (```json or ```) and last line (```)
-            if lines[-1].strip() == "```":
-                lines = lines[1:-1]
-            else:
-                lines = lines[1:]
-            text = "\n".join(lines).strip()
-        try:
-            payload = json.loads(text)
-        except json.JSONDecodeError:
-            return None
-
         if isinstance(response_format, type) and issubclass(response_format, BaseModel):
             try:
-                return response_format.model_validate(payload).model_dump(mode="json")
-            except ValidationError as exc:
+                return response_format.model_validate_json(content).model_dump(mode="json")
+            except (ValidationError, ValueError) as exc:
                 log.warning(
                     "llm_pydantic_validation_failed",
                     schema=response_format.__name__,
-                    errors=exc.error_count(),
                     detail=str(exc),
                 )
-                # Attempt structural repair before giving up
+                # Attempt structural repair for nesting failures (e.g. Haiku
+                # wrapping all fields inside "action")
+                try:
+                    payload = json.loads(content)
+                except json.JSONDecodeError:
+                    return None
                 repaired = self._try_repair_nesting(payload, response_format)
                 if repaired is not None:
                     return repaired
                 return None
 
+        try:
+            payload = json.loads(content)
+        except json.JSONDecodeError:
+            return None
         return payload if isinstance(payload, dict) else None
 
     @staticmethod
