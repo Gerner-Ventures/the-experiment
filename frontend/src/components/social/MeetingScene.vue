@@ -165,7 +165,7 @@ function advancePhase(phase: MeetingScenePhase) {
 // Watch active turn to detect phase transitions
 watch(
   () => props.activeTurn?.actionType,
-  (actionType, prevActionType) => {
+  (actionType) => {
     if (!actionType) return
 
     // First speech turn starts → advance to speeches (if entrance is done)
@@ -332,8 +332,8 @@ onUnmounted(() => {
   >
     <!-- Backdrop — themed gradient -->
     <div
-      ref="backdropRef"
       v-show="showBackdrop"
+      ref="backdropRef"
       class="absolute inset-0"
       :style="backdropStyle"
     />
@@ -379,7 +379,7 @@ onUnmounted(() => {
             :show-vote="!!revealedVotes[agent.id]"
             :vote="revealedVotes[agent.id] ?? null"
             :is-exile-target="meeting.exileTarget === agent.id"
-            :exile-phase="(exileStage.get(agent.id) ?? 'none') as 'none' | 'flashing' | 'dead' | 'faded'"
+            :exile-phase="(exileStage.get(agent.id) ?? 'none')"
           />
         </div>
       </div>

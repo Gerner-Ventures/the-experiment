@@ -10,7 +10,7 @@ import { query } from 'bitecs'
 import { Position, PathState } from '../components'
 import { tileToScreen } from '@/components/world/pixi/isometric-utils'
 
-export function movementSystem(world: World, _dt: number): void {
+export function movementSystem(world: World): void {
   const entities = query(world, [Position, PathState])
 
   for (const eid of entities) {

@@ -143,7 +143,7 @@ export function useGameWorld(): UseGameWorld {
     if (!world) return
 
     pathfindingSystem(world, dt)
-    movementSystem(world, dt)
+    movementSystem(world)
     animationSystem(world, dt)
 
     if (renderBridge) {

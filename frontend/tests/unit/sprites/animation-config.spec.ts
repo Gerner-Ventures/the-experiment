@@ -158,7 +158,7 @@ describe('HD animation registry config', () => {
 
   describe('ACTION_TO_ANIMATION completeness', () => {
     it('every mapped animation name exists in the registry', () => {
-      for (const [action, animName] of Object.entries(HD_ACTION_TO_ANIMATION)) {
+      for (const [, animName] of Object.entries(HD_ACTION_TO_ANIMATION)) {
         expect(HD_ANIMATION_REGISTRY[animName]).toBeDefined()
       }
     })

@@ -22,9 +22,9 @@ export interface ThemeAtlas {
 const TILE_TYPES = ['grass', 'path', 'building', 'fence', 'field'] as const
 
 /** Special tile frame keys for theme-specific overrides. */
-const SPECIAL_KEYS = ['code_river', 'water', 'sand_fence', 'crop_field'] as const
+type SpecialKey = 'code_river' | 'water' | 'sand_fence' | 'crop_field'
 
-type FrameKey = (typeof TILE_TYPES)[number] | (typeof SPECIAL_KEYS)[number]
+type FrameKey = (typeof TILE_TYPES)[number] | SpecialKey
 
 /**
  * Build a programmatic tile atlas texture for a given map theme.
@@ -59,7 +59,7 @@ export function buildThemeAtlas(theme: MapTheme): ThemeAtlas {
     const ox = i * TILE_W
     const oy = 1 // 1px top padding for stroke
 
-    drawTileFrame(ctx, ox, oy, key, palette, theme.id)
+    drawTileFrame(ctx, ox, oy, key, palette)
     frames.set(key, { x: ox, y: 0, w: TILE_W, h: TILE_H + 2 })
   }
 
@@ -74,7 +74,6 @@ function drawTileFrame(
   oy: number,
   key: FrameKey,
   palette: TilePalette,
-  themeId: string,
 ) {
   const hw = TILE_W / 2
   const hh = TILE_H / 2
