@@ -207,15 +207,15 @@ Use sections like:
 - <commands run>
 ```
 
-Submit it as a new review comment. Use the helper so the step is idempotent for the current head commit and body:
+Submit it as a new review comment:
 
 ```bash
 review_file="$(mktemp -t address-feedback.XXXXXX)"
-python3 .codex/skills/address-feedback/scripts/post_summary_review.py <number> "$review_file"
+gh pr review <number> --comment --body-file "$review_file"
 rm -f "$review_file"
 ```
 
-The helper checks existing PR reviews from the authenticated GitHub user. If an identical summary review is already present on the current `HEAD` commit, it exits successfully without posting again. Do not fall back to a raw `gh pr review` retry after the helper reports success.
+Before posting, check whether you already submitted an identical `COMMENTED` review on the current `HEAD` commit during this feedback pass. If you did, do not post another one. If `gh pr review --comment` succeeds, treat the summary review as posted and do not retry the command unless you first confirm that no matching review exists on the PR.
 
 If a top-level PR comment needs a direct answer that would be lost in the summary review, add one normal PR comment that links back to the original feedback item. Do this only when the summary review is not enough on its own. Never restate the same disposition in both the summary review and a separate PR comment unless the extra comment adds information the summary cannot carry.
 
