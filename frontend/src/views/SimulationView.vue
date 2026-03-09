@@ -94,16 +94,6 @@ const activeBubbleAudio = computed(() => {
   return null
 })
 
-const activeDialogueBubble = computed(() => {
-  if (turnStore.phase === 'thinking') return null
-  for (let i = socialStore.conversations.length - 1; i >= 0; i--) {
-    const conversation = socialStore.conversations[i]
-    if (conversation.source === 'dialogue') {
-      return conversation
-    }
-  }
-  return null
-})
 
 let narrationHydrationToken = 0
 
@@ -535,26 +525,10 @@ function goBack() {
           :agent-name="turnStore.activeTurn.agentName"
           :message="turnStore.activeTurn.thought"
           :agent-id="turnStore.activeTurn.agentId"
-          variant="thought"
+          :variant="turnStore.activeTurn.thoughtSource === 'dialogue' ? 'dialogue' : 'thought'"
           :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
           :audio-status="activeBubbleAudio?.audioStatus ?? 'idle'"
           :audio-url="activeBubbleAudio?.audioUrl ?? null"
-          @dismiss="turnStore.onBubbleDismissed($event)"
-          @audio-end="turnStore.notifyAudioComplete($event)"
-        />
-
-        <ConversationBubble
-          v-else-if="activeDialogueBubble && !socialStore.isMeetingActive"
-          :key="`dialogue-${activeDialogueBubble.id}`"
-          class="pointer-events-auto"
-          :turn-id="activeDialogueBubble.id"
-          :agent-name="activeDialogueBubble.agentName"
-          :message="activeDialogueBubble.message"
-          :agent-id="activeDialogueBubble.agentId"
-          variant="dialogue"
-          :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
-          :audio-status="activeDialogueBubble.audioStatus"
-          :audio-url="activeDialogueBubble.audioUrl"
           @dismiss="turnStore.onBubbleDismissed($event)"
           @audio-end="turnStore.notifyAudioComplete($event)"
         />
