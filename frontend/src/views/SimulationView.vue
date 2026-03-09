@@ -525,7 +525,7 @@ function goBack() {
           :agent-name="turnStore.activeTurn.agentName"
           :message="turnStore.activeTurn.thought"
           :agent-id="turnStore.activeTurn.agentId"
-          :variant="turnStore.activeTurn.thoughtSource === 'dialogue' ? 'dialogue' : 'thought'"
+          variant="thought"
           :get-position="(id: string) => pixiWorldRef?.getAgentScreenPosition(id) ?? null"
           :audio-status="activeBubbleAudio?.audioStatus ?? 'idle'"
           :audio-url="activeBubbleAudio?.audioUrl ?? null"
