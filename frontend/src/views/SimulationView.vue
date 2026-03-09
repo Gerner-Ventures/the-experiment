@@ -294,6 +294,8 @@ function onMeetingSceneExited() {
 
 function onExileComplete(agentId: string) {
   console.debug(`[Simulation] Exile complete: ${agentId}`)
+  // Mark agent as exiled (deferred until after meeting animation completes)
+  agentStore.updateAgentStatus(agentId, 'exiled')
   // Remove exiled agent from game world
   pixiWorldRef.value?.removeAgent(agentId)
 }

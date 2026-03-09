@@ -220,7 +220,7 @@ describe('Social store – comprehensive', () => {
       expect(store.exileEvents[0]).toMatchObject({ outcome: 'exiled', phase: 'result' })
     })
 
-    it('onExileResult transitions meeting to exile phase when exiled_agent_id present', () => {
+    it('onExileResult records exile target without changing scene phase', () => {
       const store = useSocialStore()
       store.onMeetingStart(makeMsg('meeting_start', { proposal: 'Exile vote' }))
       store.advanceMeetingPhase('result')
@@ -230,7 +230,8 @@ describe('Social store – comprehensive', () => {
         exiled_agent_id: 'a1',
       }))
 
-      expect(store.meeting!.scenePhase).toBe('exile')
+      // Scene phase stays at 'result' — MeetingScene triggers 'exile' on Continue
+      expect(store.meeting!.scenePhase).toBe('result')
       expect(store.meeting!.exileTarget).toBe('a1')
       expect(store.meeting!.exileOutcome).toBe('exiled')
     })

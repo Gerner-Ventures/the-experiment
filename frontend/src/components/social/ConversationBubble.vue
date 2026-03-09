@@ -20,11 +20,14 @@ const props = withDefaults(defineProps<{
   message: string
   agentId: string
   variant?: 'thought' | 'dialogue'
+  /** Override hold-after-typing duration (ms). Lower = snappier meeting pacing. */
+  holdMs?: number
   getPosition: (agentId: string) => { x: number; y: number } | null
   audioStatus: AudioStatus
   audioUrl: string | null
 }>(), {
   variant: 'dialogue',
+  holdMs: HOLD_AFTER_TYPING_MS,
 })
 
 const emit = defineEmits<{
@@ -48,7 +51,7 @@ let audio: HTMLAudioElement | null = null
 
 const TOTAL_LIFETIME_MS = Math.max(
   MIN_LIFETIME_MS,
-  props.message.length * TYPEWRITER_MS + HOLD_AFTER_TYPING_MS,
+  props.message.length * TYPEWRITER_MS + props.holdMs,
 )
 
 const displayedMessage = computed(() => props.message.slice(0, revealedChars.value))

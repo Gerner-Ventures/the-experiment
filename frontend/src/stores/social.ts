@@ -227,6 +227,17 @@ export const useSocialStore = defineStore('social', () => {
       // Scene phase is NOT advanced here — MeetingScene advances to 'result'
       // once the turn queue drains all speech/vote turns
     }
+
+    // meeting_result may embed exile data (backend sends MeetingOutcome.exile inline)
+    const raw = data as unknown as Record<string, unknown>
+    const exile = raw.exile as Record<string, unknown> | undefined
+    if (exile?.enacted) {
+      const agentId = extractExiledAgentId(exile)
+      if (agentId) {
+        applyExile(agentId, (exile.reason as string) ?? undefined)
+      }
+    }
+
     console.debug('[Social] Meeting result:', data.summary)
   }
 
@@ -246,20 +257,35 @@ export const useSocialStore = defineStore('social', () => {
     exileEvents.value.push({ ...msg.data as Record<string, unknown>, phase: 'vote' })
   }
 
+  /**
+   * Extract the exiled agent ID from exile data.
+   * Backend sends `target_agent_id`; frontend type also has `exiled_agent_id` as alias.
+   */
+  function extractExiledAgentId(data: Record<string, unknown>): string | null {
+    return (data.target_agent_id as string)
+      ?? (data.exiled_agent_id as string)
+      ?? null
+  }
+
+  /**
+   * Record the exile target on meeting state.
+   * Does NOT mark agent status or change scene phase — the exile animation
+   * plays after the result phase, and status is set on animation completion.
+   */
+  function applyExile(agentId: string, outcome?: string) {
+    if (meeting.value && !meeting.value.exileTarget) {
+      meeting.value.exileTarget = agentId
+      meeting.value.exileOutcome = outcome ?? 'exiled'
+    }
+  }
+
   function onExileResult(msg: WSMessage<ExileResultData>) {
     const data = msg.data
     exileEvents.value.push({ ...data, phase: 'result' })
 
-    // Mark the agent as exiled immediately so round_end sync won't resurrect them
-    if (data.exiled_agent_id) {
-      useAgentStore().updateAgentStatus(data.exiled_agent_id, 'exiled')
-    }
-
-    // If meeting is active, transition to exile animation phase
-    if (meeting.value && data.exiled_agent_id) {
-      meeting.value.exileTarget = data.exiled_agent_id
-      meeting.value.exileOutcome = data.outcome ?? 'exiled'
-      meeting.value.scenePhase = 'exile'
+    const agentId = extractExiledAgentId(data as Record<string, unknown>)
+    if (agentId) {
+      applyExile(agentId, data.outcome)
     }
   }
 

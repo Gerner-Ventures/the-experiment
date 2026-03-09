@@ -119,10 +119,14 @@ export type ExileVoteData = {
 } & Record<string, unknown>
 
 export type ExileResultData = {
+  target_agent_id?: string
+  target_agent_name?: string
   target_agent?: string
   exiled?: boolean
+  enacted?: boolean
   exiled_agent_id?: string
   outcome?: string
+  reason?: string
 } & Record<string, unknown>
 
 // ─── Round / world payloads ───

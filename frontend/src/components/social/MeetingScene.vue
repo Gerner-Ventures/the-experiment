@@ -287,6 +287,8 @@ function playExileAnimation(agentId: string) {
 
       exileTimers.push(setTimeout(() => {
         emit('exile-complete', agentId)
+        // Auto-exit the meeting scene after exile animation
+        emit('scene-exited')
       }, 800))
     }, 500))
   }, 450))
@@ -311,8 +313,10 @@ watch(() => props.meeting.scenePhase, (phase) => {
 })
 
 function handleContinue() {
+  // If there's an exile target, play the death animation before exiting
   if (props.meeting.exileTarget && !exileStage.value.has(props.meeting.exileTarget)) {
-    emit('exile-complete', props.meeting.exileTarget)
+    advancePhase('exile')
+    return
   }
   emit('scene-exited')
 }
@@ -403,7 +407,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Meeting conversation bubble (anchored to seats) -->
+    <!-- Meeting conversation bubble (anchored to seats, snappier pacing) -->
     <ConversationBubble
       v-if="turnPhase === 'thinking' && activeTurn?.thought"
       :key="activeTurn.id"
@@ -412,6 +416,7 @@ onUnmounted(() => {
       :agent-name="activeTurn.agentName"
       :message="activeTurn.thought"
       :agent-id="activeTurn.agentId"
+      :hold-ms="800"
       :get-position="getMeetingSeatPosition"
       :audio-status="(activeBubbleAudio?.audioStatus ?? 'idle') as AudioStatus"
       :audio-url="activeBubbleAudio?.audioUrl ?? null"
