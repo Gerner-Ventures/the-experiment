@@ -1,6 +1,6 @@
 ---
 title: "Consequence Action Types"
-status: draft
+status: in_progress
 issue: 110
 priority: P1
 tags: [stream-2, backend, engine, actions, consequences, animation]

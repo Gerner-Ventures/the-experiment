@@ -1,6 +1,6 @@
 ---
 title: "HUD Controls Disappear on Pan/Refresh"
-status: in_progress
+status: done
 issue: 96
 priority: P1
 tags: [stream-1, frontend, bugfix, hud, pixi]
@@ -34,7 +34,7 @@ Once gone, only a hard refresh recovers them — and even that is inconsistent.
 ---
 
 ## 1. Diagnose Root Cause
-<!-- status: todo -->
+<!-- canon:system:1 status:done -->
 
 ### Acceptance Criteria
 
@@ -42,7 +42,7 @@ Once gone, only a hard refresh recovers them — and even that is inconsistent.
 - [ ] Confirm whether the issue is CSS (z-index/visibility), Vue reactivity (conditional rendering), or store state
 
 ## 2. Fix HUD Persistence
-<!-- status: todo -->
+<!-- canon:system:2 status:done -->
 
 ### Acceptance Criteria
 

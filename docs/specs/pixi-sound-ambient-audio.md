@@ -1,6 +1,6 @@
 ---
 title: "[P3] Ambient audio with @pixi/sound"
-status: todo
+status: in_progress
 priority: P3
 tags: [stream-1, frontend, audio, pixi, ambience]
 depends_on: [S1.3-isometric-world, agent-voice-narration]

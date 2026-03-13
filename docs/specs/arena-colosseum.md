@@ -1,6 +1,6 @@
 ---
 title: "[P3] Arena colosseum — circular design with tiered seating"
-status: todo
+status: in_progress
 issue: 44
 priority: P3
 tags: [stream-1, frontend, arena, building-renderer]

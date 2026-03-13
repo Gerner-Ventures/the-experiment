@@ -1,6 +1,6 @@
 ---
 title: "[P1] Agent voice narration — unique TTS voice per character sprite"
-status: draft
+status: in_progress
 priority: P1
 tags: [stream-1, frontend, backend, audio, tts, agents]
 ---

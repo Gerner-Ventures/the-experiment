@@ -1,6 +1,6 @@
 ---
 title: "Step error UX — surface failures to user"
-status: todo
+status: in_progress
 issue: 91
 priority: P2
 tags: [frontend, ux, error-handling]

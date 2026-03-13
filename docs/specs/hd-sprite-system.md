@@ -195,7 +195,7 @@ renderCharacter(definition, poseName)
 ## 3. Requirements
 
 ### 3.1 Composable Body Part Registry
-<!-- status: done -->
+<!-- canon:system:1 status:in_progress -->
 
 **Acceptance criteria:**
 - [x] `BodyPartGrid` type with width, height, pixels, anchor
@@ -212,7 +212,7 @@ renderCharacter(definition, poseName)
 - [ ] All parts use palette tokens, not hardcoded colors
 
 ### 3.2 Auto-Derived Palette System
-<!-- status: done -->
+<!-- canon:system:2 status:in_progress -->
 
 **Acceptance criteria:**
 - [x] `BasePalette` → `FullPalette` derivation function
@@ -225,7 +225,7 @@ renderCharacter(definition, poseName)
 - [ ] Child variant overrides (rosier cheeks)
 
 ### 3.3 Pose Definitions for All 42 Action Types
-<!-- status: done -->
+<!-- canon:system:3 status:in_progress -->
 
 **Acceptance criteria:**
 - [x] All 34 decision actions have distinct PoseDefinitions
@@ -236,7 +236,7 @@ renderCharacter(definition, poseName)
 - [ ] Animation sequences with frame order, timing, entry/exit transitions
 
 ### 3.4 3D Shading as Post-Process
-<!-- status: done -->
+<!-- canon:system:4 status:todo -->
 
 **Acceptance criteria:**
 - [ ] `applyShading(grid, palette, lightDir)` compositing function
@@ -248,7 +248,7 @@ renderCharacter(definition, poseName)
 - [ ] Head outline as final compositing step
 
 ### 3.5 Prop Registry
-<!-- status: done -->
+<!-- canon:system:5 status:todo -->
 
 **Acceptance criteria:**
 - [ ] Each prop is a small independent `BodyPartGrid` with attachment point
@@ -261,7 +261,7 @@ renderCharacter(definition, poseName)
 - [ ] Props use fixed colors for cross-character consistency
 
 ### 3.6 PixiJS Integration & Frame Cache
-<!-- status: done -->
+<!-- canon:system:6 status:in_progress -->
 
 **Acceptance criteria:**
 - [x] `AgentSprite.ts` uses composable renderer

@@ -1,6 +1,6 @@
 ---
 title: "[P2] Optimized tile rendering with @pixi/tilemap"
-status: todo
+status: in_progress
 priority: P2
 tags: [stream-1, frontend, pixi, rendering, performance]
 depends_on: [S1.3-isometric-world, isometric-aesthetics]
