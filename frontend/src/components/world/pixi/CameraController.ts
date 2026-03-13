@@ -1,6 +1,6 @@
 import { Container } from 'pixi.js'
 
-const MIN_ZOOM = 0.3
+const MIN_ZOOM = 0.15
 const MAX_ZOOM = 3
 const PAN_SPEED = 8
 

@@ -4,27 +4,38 @@
  * Owns: bitECS world, entities, systems, tick loop, entity registry.
  * Child: useRenderer (PixiJS rendering backend).
  *
- * Replaces usePixiWorld as the single entry point for all game world operations.
+ * Tick loop uses fixed timestep accumulator (Gaffer on Games pattern):
+ * - Simulation runs at fixed 60Hz (FIXED_DT = 1/60s)
+ * - Rendering interpolates between previous/current Position for smooth visuals
+ * - usePerformanceMonitor instruments every system
  */
 
 import type { MapTheme, MapData } from '@/types/world'
 import type { CharacterSprite } from '@/config/character-sprites'
 import type { RoundPhase } from '@/types/websocket'
 import type { World } from 'bitecs'
-import { addEntity, removeEntity, addComponent, removeComponent, hasComponent, observe, onRemove, onAdd } from 'bitecs'
+import { addEntity, removeEntity, addComponent, removeComponent, hasComponent, observe, onRemove, onAdd, query } from 'bitecs'
 import { createGameWorld } from '@/ecs/world'
 import {
   Position, PathState, AnimState, AgentId, SpriteRef, StatusEffect,
+  TileRef, WaterState, WATER_VARIANTS,
 } from '@/ecs/components'
 import { pathfindingSystem, setEntityPath, clearEntityPath } from '@/ecs/systems/pathfindingSystem'
 import { movementSystem } from '@/ecs/systems/movementSystem'
 import { animationSystem, registerAnimation, resetAnimationRegistry } from '@/ecs/systems/animationSystem'
-import { renderSyncSystem, type RenderBridge } from '@/ecs/systems/renderSyncSystem'
+import { renderSyncSystem, type RenderBridge, type PrevPositions } from '@/ecs/systems/renderSyncSystem'
+import { waterSystem, computeWaterPhaseOffset, OCEAN_FRAME_DURATION, CODE_RIVER_FRAME_DURATION } from '@/ecs/systems/waterSystem'
 import { useRenderer, type UseRenderer } from './useRenderer'
+import { usePerformanceMonitor, type PerformanceMonitor } from './usePerformanceMonitor'
 import { tileToScreen } from '@/components/world/pixi/isometric-utils'
 import { getHDAnimationForAction, getHDAnimation, HD_SILLY_ANIMATIONS } from '@/config/sprites/hd/animations'
 import type { HDAnimationDef } from '@/config/sprites/hd/types'
 import type { AgentSpriteObject } from '@/components/world/pixi/AgentSprite'
+
+// ─── Fixed Timestep Constants ───
+
+const FIXED_DT = 1 / 60       // 16.67ms simulation step
+const MAX_ACCUMULATOR = FIXED_DT * 5  // safety cap: max 5 catch-up steps
 
 export interface UseGameWorld {
   mount(container: HTMLElement): Promise<void>
@@ -57,6 +68,7 @@ export interface UseGameWorld {
 export function useGameWorld(): UseGameWorld {
   let world: World | null = null
   const renderer: UseRenderer = useRenderer()
+  const perfMonitor: PerformanceMonitor = usePerformanceMonitor()
 
   // Entity registry: agentId string → ECS entity ID
   const agentEntityMap = new Map<string, number>()
@@ -72,6 +84,13 @@ export function useGameWorld(): UseGameWorld {
 
   // Demo mode timers
   const demoTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+  // Fixed timestep state
+  let accumulator = 0
+  let prevPositions: PrevPositions | null = null
+
+  // Tile entity registry: "x,y" → ECS entity ID
+  const tileEntityMap = new Map<string, number>()
 
   function initECS(): void {
     world = createGameWorld()
@@ -129,6 +148,23 @@ export function useGameWorld(): UseGameWorld {
     })
   }
 
+  /** Snapshot positions of all entities with Position + SpriteRef for render interpolation */
+  function snapshotPositions(w: World): PrevPositions {
+    const snapshot: PrevPositions = prevPositions ?? new Map()
+    snapshot.clear()
+
+    const entities = query(w, [Position, SpriteRef])
+    for (const eid of entities) {
+      snapshot.set(eid, {
+        x: Position.x[eid] as number,
+        y: Position.y[eid] as number,
+        screenX: Position.screenX[eid] as number,
+        screenY: Position.screenY[eid] as number,
+      })
+    }
+    return snapshot
+  }
+
   async function mount(container: HTMLElement): Promise<void> {
     await renderer.mount(container)
     initECS()
@@ -137,24 +173,124 @@ export function useGameWorld(): UseGameWorld {
     renderer.onTick((dt: number) => {
       tick(dt)
     })
+
+    // Expose dev panel in development
+    if (typeof window !== 'undefined') {
+      (window as unknown as Record<string, unknown>).__devWorld = {
+        perf: {
+          getPercentiles: () => perfMonitor.getPercentiles(),
+          getSystemBreakdown: () => perfMonitor.getSystemBreakdown(),
+          exportLast: (n?: number) => perfMonitor.exportMetrics(n),
+        },
+        getEntityCount: () => agentEntityMap.size,
+        getTileEntityCount: () => tileEntityMap.size,
+      }
+    }
   }
 
   function tick(dt: number): void {
     if (!world) return
 
-    pathfindingSystem(world, dt)
-    movementSystem(world)
-    animationSystem(world, dt)
+    perfMonitor.beginFrame()
 
-    if (renderBridge) {
-      renderSyncSystem(world, dt, renderBridge)
+    // Fixed timestep accumulator — clamp to prevent spiral of death
+    accumulator += Math.min(dt, MAX_ACCUMULATOR)
+
+    while (accumulator >= FIXED_DT) {
+      // Snapshot current positions for render interpolation
+      prevPositions = snapshotPositions(world)
+
+      // --- Simulation systems (fixed dt) ---
+
+      perfMonitor.beginSystem('water')
+      waterSystem(world, FIXED_DT)
+      perfMonitor.endSystem()
+
+      perfMonitor.beginSystem('pathfinding')
+      pathfindingSystem(world, FIXED_DT)
+      perfMonitor.endSystem()
+
+      perfMonitor.beginSystem('movement')
+      movementSystem(world)
+      perfMonitor.endSystem()
+
+      perfMonitor.beginSystem('animation')
+      animationSystem(world, FIXED_DT)
+      perfMonitor.endSystem()
+
+      accumulator -= FIXED_DT
     }
 
+    // Render with interpolation alpha
+    const alpha = accumulator / FIXED_DT
+
+    perfMonitor.beginSystem('renderSync')
+    if (renderBridge) {
+      renderSyncSystem(world, dt, renderBridge, alpha, prevPositions)
+    }
+    perfMonitor.endSystem()
+
     renderer.updateVisuals(dt)
+
+    perfMonitor.endFrame(agentEntityMap.size, 0)
   }
 
   function loadMap(theme: MapTheme, mapData: MapData): void {
+    // Clean up previous tile entities before loading new map
+    destroyTileEntities()
+
     renderer.loadMap(theme, mapData)
+
+    // Spawn water tile entities
+    if (world) {
+      const isoMap = renderer.getIsoMap()
+      if (isoMap) {
+        const waterPositions = isoMap.getWaterPositions()
+        for (const pos of waterPositions) {
+          spawnWaterEntity(pos.x, pos.y, pos.variant)
+        }
+      }
+    }
+  }
+
+  function spawnWaterEntity(tileX: number, tileY: number, variant: 'ocean' | 'code_river'): void {
+    if (!world) return
+
+    const variantNum = variant === 'code_river' ? WATER_VARIANTS.CODE_RIVER : WATER_VARIANTS.OCEAN
+    const frameKey = variant === 'code_river' ? 'code_river_0' : 'ocean_0'
+    const tileSpriteIndex = renderer.createTileSprite(tileX, tileY, frameKey)
+    if (tileSpriteIndex < 0) return
+
+    const eid = addEntity(world)
+
+    addComponent(world, eid, TileRef)
+    TileRef.tileX[eid] = tileX
+    TileRef.tileY[eid] = tileY
+    TileRef.tileSpriteIndex[eid] = tileSpriteIndex
+
+    addComponent(world, eid, WaterState)
+    WaterState.variant[eid] = variantNum
+    WaterState.frame[eid] = 0
+    // Set phase offset for staggered ripple animation
+    const frameDuration = variantNum === WATER_VARIANTS.CODE_RIVER
+      ? CODE_RIVER_FRAME_DURATION
+      : OCEAN_FRAME_DURATION
+    WaterState.elapsed[eid] = computeWaterPhaseOffset(tileX, tileY, frameDuration)
+    WaterState.phase[eid] = WaterState.elapsed[eid]
+
+    tileEntityMap.set(`${tileX},${tileY}`, eid)
+  }
+
+  function destroyTileEntities(): void {
+    if (!world) return
+    for (const eid of tileEntityMap.values()) {
+      if (hasComponent(world, eid, TileRef)) {
+        renderer.removeTileSprite(TileRef.tileSpriteIndex[eid] as number)
+      }
+      removeEntity(world, eid)
+    }
+    tileEntityMap.clear()
+    renderer.removeAllTileSprites()
   }
 
   function spawnAgent(id: string, name: string, sprite: CharacterSprite, tile: { x: number; y: number }): void {
@@ -405,6 +541,8 @@ export function useGameWorld(): UseGameWorld {
     demoTimers.clear()
     pendingCallbacks.clear()
 
+    destroyTileEntities()
+
     for (const eid of agentEntityMap.values()) {
       clearEntityPath(eid)
     }
@@ -414,6 +552,13 @@ export function useGameWorld(): UseGameWorld {
     resetAnimationRegistry()
     renderBridge = null
     world = null
+    accumulator = 0
+    prevPositions = null
+
+    // Clean up dev panel
+    if (typeof window !== 'undefined') {
+      delete (window as unknown as Record<string, unknown>).__devWorld
+    }
 
     renderer.destroy()
   }

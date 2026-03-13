@@ -71,9 +71,9 @@ describe('CameraController', () => {
       expect(world.scale.set).toHaveBeenCalledWith(2)
     })
 
-    it('clamps zoom to minimum (0.3)', () => {
+    it('clamps zoom to minimum (0.15)', () => {
       camera.setZoom(0.1)
-      expect(world.scale.set).toHaveBeenCalledWith(0.3)
+      expect(world.scale.set).toHaveBeenCalledWith(0.15)
     })
 
     it('clamps zoom to maximum (3)', () => {
@@ -102,9 +102,9 @@ describe('CameraController', () => {
       camera.setTargetZoom(0.01)
       // Run many updates to converge
       for (let i = 0; i < 200; i++) camera.update()
-      // Should have converged near 0.3
+      // Should have converged near 0.15
       const lastCall = world.scale.set.mock.calls[world.scale.set.mock.calls.length - 1]
-      expect(lastCall[0]).toBeCloseTo(0.3, 2)
+      expect(lastCall[0]).toBeCloseTo(0.15, 2)
     })
 
     it('clamps target to maximum', () => {

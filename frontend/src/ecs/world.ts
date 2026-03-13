@@ -8,6 +8,7 @@ import {
   Position, Velocity, PathState, AnimState,
   AgentId, SpriteRef, StatusEffect,
   Mood, Social, Inventory, TaskAssignment,
+  TileRef, WaterState,
 } from './components'
 
 /** Create a fresh ECS world with all components registered. */
@@ -26,6 +27,8 @@ export function createGameWorld(): World {
     Social,
     Inventory,
     TaskAssignment,
+    TileRef,
+    WaterState,
   ])
 
   return world
