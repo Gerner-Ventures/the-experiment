@@ -13,6 +13,8 @@ import { Position, PathState, AnimState, SpriteRef } from '@/ecs/components'
 import { pathfindingSystem, setEntityPath } from '@/ecs/systems/pathfindingSystem'
 import { movementSystem } from '@/ecs/systems/movementSystem'
 import { animationSystem, registerAnimation, resetAnimationRegistry } from '@/ecs/systems/animationSystem'
+import { createDevMonitor } from '@/composables/usePerformanceMonitor'
+import { renderSyncSystem } from '@/ecs/systems/renderSyncSystem'
 
 const FIXED_DT = 1 / 60
 
@@ -141,8 +143,6 @@ describe('ECS performance benchmarks', () => {
 
 describe('usePerformanceMonitor', () => {
   it('tracks frame timing and returns valid percentiles', () => {
-    // Import the dev monitor directly for testing
-    const { createDevMonitor } = require('@/composables/usePerformanceMonitor')
     const monitor = createDevMonitor()
 
     // Simulate 100 frames
@@ -178,7 +178,6 @@ describe('usePerformanceMonitor', () => {
 
 describe('renderSyncSystem interpolation', () => {
   it('interpolates between previous and current positions', () => {
-    const { renderSyncSystem } = require('@/ecs/systems/renderSyncSystem')
     const world = createGameWorld()
 
     const eid = addEntity(world)
@@ -213,7 +212,6 @@ describe('renderSyncSystem interpolation', () => {
   })
 
   it('uses current position when alpha=1 (no interpolation)', () => {
-    const { renderSyncSystem } = require('@/ecs/systems/renderSyncSystem')
     const world = createGameWorld()
 
     const eid = addEntity(world)

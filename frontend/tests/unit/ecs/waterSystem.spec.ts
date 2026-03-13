@@ -11,7 +11,6 @@ import {
   waterSystem,
   computeWaterPhaseOffset,
   OCEAN_FRAME_DURATION,
-  CODE_RIVER_FRAME_DURATION,
   WATER_FRAME_COUNT,
 } from '@/ecs/systems/waterSystem'
 
