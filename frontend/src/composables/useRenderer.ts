@@ -12,6 +12,7 @@ import type { MapTheme, MapData } from '@/types/world'
 import type { CharacterSprite } from '@/config/character-sprites'
 import type { RoundPhase } from '@/types/websocket'
 import { IsometricMap, tileToScreen } from '@/components/world/pixi/IsometricMap'
+import type { ThemeAtlas } from '@/components/world/pixi/tile-atlas'
 import { CameraController } from '@/components/world/pixi/CameraController'
 import { AgentSpriteObject } from '@/components/world/pixi/AgentSprite'
 import { AmbientOverlay } from '@/components/world/pixi/AmbientOverlay'
@@ -212,29 +213,34 @@ export function useRenderer(): UseRenderer {
     spriteIdMap.delete(id)
   }
 
+  /** Get or create a cached sub-texture from the tile atlas */
+  function getOrCreateTileTexture(atlas: ThemeAtlas, frameKey: string): Texture | undefined {
+    let tex = tileTextureCache.get(frameKey)
+    if (!tex) {
+      const frame = atlas.frames.get(frameKey)
+      if (!frame) return undefined
+      tex = new Texture({
+        source: atlas.texture.source,
+        frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
+      })
+      tileTextureCache.set(frameKey, tex)
+    }
+    return tex
+  }
+
   function createTileSprite(tileX: number, tileY: number, frameKey: string): number {
     if (!isoMap) return -1
     const dynamicLayer = isoMap.getDynamicTileLayer()
     const atlas = isoMap.getAtlas()
     if (!dynamicLayer || !atlas) return -1
 
-    const frame = atlas.frames.get(frameKey)
-    if (!frame) return -1
-
-    // Use cached sub-texture or create and cache on first use
-    let subTex = tileTextureCache.get(frameKey)
-    if (!subTex) {
-      subTex = new Texture({
-        source: atlas.texture.source,
-        frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
-      })
-      tileTextureCache.set(frameKey, subTex)
-    }
+    const subTex = getOrCreateTileTexture(atlas, frameKey)
+    if (!subTex) return -1
 
     const sprite = new Sprite(subTex)
     const screen = tileToScreen(tileX, tileY)
-    sprite.x = screen.x - frame.w / 2
-    sprite.y = screen.y - (frame.h / 2) - 1
+    sprite.x = screen.x - subTex.frame.width / 2
+    sprite.y = screen.y - (subTex.frame.height / 2) - 1
     sprite.zIndex = tileY * 100 + tileX
     dynamicLayer.addChild(sprite)
 
@@ -351,19 +357,8 @@ export function useRenderer(): UseRenderer {
           const sprite = tileSpritePool[index]
           if (!sprite) continue
 
-          // Use cached sub-texture or create and cache on first use
-          let tex = tileTextureCache.get(frameKey)
-          if (!tex) {
-            const frame = atlas.frames.get(frameKey)
-            if (!frame) continue
-            tex = new Texture({
-              source: atlas.texture.source,
-              frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
-            })
-            tileTextureCache.set(frameKey, tex)
-          }
-
-          sprite.texture = tex
+          const tex = getOrCreateTileTexture(atlas, frameKey)
+          if (tex) sprite.texture = tex
         }
         pendingTileUpdates.length = 0
       },

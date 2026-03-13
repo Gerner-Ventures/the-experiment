@@ -23,7 +23,7 @@ import {
 import { pathfindingSystem, setEntityPath, clearEntityPath } from '@/ecs/systems/pathfindingSystem'
 import { movementSystem } from '@/ecs/systems/movementSystem'
 import { animationSystem, registerAnimation, resetAnimationRegistry } from '@/ecs/systems/animationSystem'
-import { renderSyncSystem, type RenderBridge, type PrevPositions } from '@/ecs/systems/renderSyncSystem'
+import { renderSyncSystem, resetTileFrameTracking, type RenderBridge, type PrevPositions } from '@/ecs/systems/renderSyncSystem'
 import { waterSystem, computeWaterPhaseOffset, OCEAN_FRAME_DURATION, CODE_RIVER_FRAME_DURATION, WATER_FRAME_COUNT } from '@/ecs/systems/waterSystem'
 import { useRenderer, type UseRenderer } from './useRenderer'
 import { usePerformanceMonitor, type PerformanceMonitor } from './usePerformanceMonitor'
@@ -193,8 +193,8 @@ export function useGameWorld(): UseGameWorld {
 
     perfMonitor.beginFrame()
 
-    // Fixed timestep accumulator — clamp to prevent spiral of death
-    accumulator += Math.min(dt, MAX_ACCUMULATOR)
+    // Fixed timestep accumulator — clamp total to prevent spiral of death
+    accumulator = Math.min(accumulator + dt, MAX_ACCUMULATOR)
 
     while (accumulator >= FIXED_DT) {
       // Snapshot current positions for render interpolation
@@ -289,6 +289,7 @@ export function useGameWorld(): UseGameWorld {
     }
     tileEntityMap.clear()
     renderer.removeAllTileSprites()
+    resetTileFrameTracking()
   }
 
   function spawnAgent(id: string, name: string, sprite: CharacterSprite, tile: { x: number; y: number }): void {

@@ -15,6 +15,14 @@ import { query, hasComponent } from 'bitecs'
 import { Position, SpriteRef, AnimState, PathState, TileRef, WaterState, WATER_VARIANTS } from '../components'
 import { getAnimationByIndex } from './animationSystem'
 
+/** Tracks last synced frame per tile entity — avoids redundant texture swaps */
+const _lastTileFrame = new Map<number, number>()
+
+/** Clear tile frame tracking (call on map reload/destroy) */
+export function resetTileFrameTracking(): void {
+  _lastTileFrame.clear()
+}
+
 export interface RenderBridge {
   /** Update sprite position and z-index */
   updateSpritePosition(spriteIndex: number, screenX: number, screenY: number, tileX: number, tileY: number): void
@@ -73,12 +81,16 @@ export function renderSyncSystem(
     }
   }
 
-  // Batch tile updates (water, hazards)
+  // Batch tile updates (water, hazards) — only when frame has changed
   const tileEntities = query(world, [TileRef, WaterState])
 
   for (const eid of tileEntities) {
-    const variant = WaterState.variant[eid] as number
     const frame = WaterState.frame[eid] as number
+    const lastFrame = _lastTileFrame.get(eid)
+    if (lastFrame === frame) continue
+
+    _lastTileFrame.set(eid, frame)
+    const variant = WaterState.variant[eid] as number
     const prefix = variant === WATER_VARIANTS.CODE_RIVER ? 'code_river' : 'ocean'
     bridge.queueTileUpdate(TileRef.tileSpriteIndex[eid] as number, `${prefix}_${frame}`)
   }
