@@ -24,7 +24,7 @@ import { pathfindingSystem, setEntityPath, clearEntityPath } from '@/ecs/systems
 import { movementSystem } from '@/ecs/systems/movementSystem'
 import { animationSystem, registerAnimation, resetAnimationRegistry } from '@/ecs/systems/animationSystem'
 import { renderSyncSystem, type RenderBridge, type PrevPositions } from '@/ecs/systems/renderSyncSystem'
-import { waterSystem, computeWaterPhaseOffset, OCEAN_FRAME_DURATION, CODE_RIVER_FRAME_DURATION } from '@/ecs/systems/waterSystem'
+import { waterSystem, computeWaterPhaseOffset, OCEAN_FRAME_DURATION, CODE_RIVER_FRAME_DURATION, WATER_FRAME_COUNT } from '@/ecs/systems/waterSystem'
 import { useRenderer, type UseRenderer } from './useRenderer'
 import { usePerformanceMonitor, type PerformanceMonitor } from './usePerformanceMonitor'
 import { tileToScreen } from '@/components/world/pixi/isometric-utils'
@@ -174,8 +174,8 @@ export function useGameWorld(): UseGameWorld {
       tick(dt)
     })
 
-    // Expose dev panel in development
-    if (typeof window !== 'undefined') {
+    // Expose dev panel in development only
+    if (typeof window !== 'undefined' && import.meta.env.DEV) {
       (window as unknown as Record<string, unknown>).__devWorld = {
         perf: {
           getPercentiles: () => perfMonitor.getPercentiles(),
@@ -270,13 +270,14 @@ export function useGameWorld(): UseGameWorld {
 
     addComponent(world, eid, WaterState)
     WaterState.variant[eid] = variantNum
-    WaterState.frame[eid] = 0
-    // Set phase offset for staggered ripple animation
+    // Set phase offset for staggered ripple animation — decompose into
+    // initial frame index + intra-frame remainder to avoid frame-skipping on spawn
     const frameDuration = variantNum === WATER_VARIANTS.CODE_RIVER
       ? CODE_RIVER_FRAME_DURATION
       : OCEAN_FRAME_DURATION
-    WaterState.elapsed[eid] = computeWaterPhaseOffset(tileX, tileY, frameDuration)
-    WaterState.phase[eid] = WaterState.elapsed[eid]
+    const totalOffset = computeWaterPhaseOffset(tileX, tileY, frameDuration)
+    WaterState.frame[eid] = Math.floor(totalOffset / frameDuration) % WATER_FRAME_COUNT
+    WaterState.elapsed[eid] = totalOffset % frameDuration
 
     tileEntityMap.set(`${tileX},${tileY}`, eid)
   }
@@ -284,9 +285,6 @@ export function useGameWorld(): UseGameWorld {
   function destroyTileEntities(): void {
     if (!world) return
     for (const eid of tileEntityMap.values()) {
-      if (hasComponent(world, eid, TileRef)) {
-        renderer.removeTileSprite(TileRef.tileSpriteIndex[eid] as number)
-      }
       removeEntity(world, eid)
     }
     tileEntityMap.clear()
@@ -556,7 +554,7 @@ export function useGameWorld(): UseGameWorld {
     prevPositions = null
 
     // Clean up dev panel
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && import.meta.env.DEV) {
       delete (window as unknown as Record<string, unknown>).__devWorld
     }
 

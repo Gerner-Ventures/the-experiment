@@ -221,10 +221,15 @@ export function useRenderer(): UseRenderer {
     const frame = atlas.frames.get(frameKey)
     if (!frame) return -1
 
-    const subTex = new Texture({
-      source: atlas.texture.source,
-      frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
-    })
+    // Use cached sub-texture or create and cache on first use
+    let subTex = tileTextureCache.get(frameKey)
+    if (!subTex) {
+      subTex = new Texture({
+        source: atlas.texture.source,
+        frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
+      })
+      tileTextureCache.set(frameKey, subTex)
+    }
 
     const sprite = new Sprite(subTex)
     const screen = tileToScreen(tileX, tileY)
@@ -262,6 +267,9 @@ export function useRenderer(): UseRenderer {
     }
     tileSpritePool.length = 0
     pendingTileUpdates.length = 0
+    for (const tex of tileTextureCache.values()) {
+      tex.destroy()
+    }
     tileTextureCache.clear()
   }
 

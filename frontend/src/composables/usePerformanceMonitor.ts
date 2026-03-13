@@ -87,7 +87,6 @@ function createDevMonitor(): PerformanceMonitor {
   }
 
   function getFilledFrames(): FrameMetrics[] {
-    const count = Math.min(writeIndex, RING_SIZE)
     const frames: FrameMetrics[] = []
     const start = writeIndex > RING_SIZE ? writeIndex - RING_SIZE : 0
     for (let i = start; i < writeIndex; i++) {

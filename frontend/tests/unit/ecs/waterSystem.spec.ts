@@ -32,7 +32,6 @@ function spawnWaterTile(
   WaterState.variant[eid] = variant
   WaterState.frame[eid] = 0
   WaterState.elapsed[eid] = initialElapsed
-  WaterState.phase[eid] = initialElapsed
 
   return eid
 }

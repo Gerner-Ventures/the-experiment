@@ -11,7 +11,6 @@ export const TileRef = {
 
 /** Water tile animation state */
 export const WaterState = {
-  phase: [] as number[],    // 0-2PI offset per tile (staggered ripples)
   frame: [] as number[],    // current frame index (0-3)
   elapsed: [] as number[],  // time accumulator
   variant: [] as number[],  // 0=ocean, 1=code_river
