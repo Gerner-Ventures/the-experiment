@@ -35,6 +35,12 @@ help: ## Show this help message
 .PHONY: setup env
 
 setup: install-hooks ## Install all dependencies (backend + frontend) + git hooks
+	@command -v poetry >/dev/null 2>&1 || { \
+		echo "poetry not found — installing via uv..."; \
+		command -v uv >/dev/null 2>&1 || { echo "Error: uv not found. Install: https://docs.astral.sh/uv/"; exit 1; }; \
+		uv tool install poetry; \
+	}
+	@command -v mise >/dev/null 2>&1 && mise install 2>/dev/null || true
 	cd backend && poetry install
 	cd frontend && npm install
 

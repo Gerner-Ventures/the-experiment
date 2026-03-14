@@ -19,6 +19,7 @@ node_modules/
 dist/
 .output/
 *.tsbuildinfo
+vite.config.d.ts
 
 # Yarn
 **/.yarn/install-state.gz
