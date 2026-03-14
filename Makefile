@@ -356,43 +356,15 @@ local-db-shell: ## Open psql shell to local k8s postgres
 
 ##@ Canon
 
-CANON_REPO ?= Gerner-Ventures/gv-exp-specwright
-CANON_LOCAL ?= $(abspath ../gv-exp-specwright)
-CANON_URL ?= https://canonhq.co
+.PHONY: canon-setup
 
-.PHONY: canon-setup canon-plugin canon-status
-
-canon-setup: canon-plugin ## Install Canon CLI + Claude plugin + authenticate
-	@command -v uv >/dev/null 2>&1 || { echo "Error: uv not found. Install: https://docs.astral.sh/uv/"; exit 1; }
-	@command -v canon >/dev/null 2>&1 || { echo "Installing Canon CLI from $(CANON_LOCAL)..."; uv tool install --from "$(CANON_LOCAL)" canonhq; }
-	@echo "Checking Canon auth..."
-	@CANON_URL=$(CANON_URL) canon auth status 2>/dev/null | grep -q "valid" \
-		|| { echo "Logging in to Canon..."; CANON_URL=$(CANON_URL) canon login --server $(CANON_URL) \
-		|| echo "Warning: Auth failed (server unreachable?). Canon works locally without auth. Run 'canon login --server $(CANON_URL)' later."; }
-	@echo "Canon setup complete. Restart Claude Code to load the plugin."
-
-canon-plugin: ## Install Canon Claude plugin (requires clone of specwright repo)
+canon-setup: ## Install Canon Claude plugin from GitHub
 	@command -v claude >/dev/null 2>&1 || { echo "Error: Claude Code CLI not found. Install Claude Code first."; exit 1; }
-	@if [ ! -d "$(CANON_LOCAL)" ]; then \
-		echo "Canon repo not found at $(CANON_LOCAL)"; \
-		echo "Clone it first:"; \
-		echo "  git clone git@github.com:$(CANON_REPO).git $(CANON_LOCAL)"; \
-		exit 1; \
-	fi
-	@if [ ! -f "$(CANON_LOCAL)/.claude-plugin/marketplace.json" ]; then \
-		echo "Ensuring Canon repo is on main..."; \
-		git -C "$(CANON_LOCAL)" fetch origin 2>/dev/null; \
-		git -C "$(CANON_LOCAL)" checkout main 2>/dev/null; \
-	fi
-	@echo "Registering Canon marketplace..."
-	@claude plugin marketplace add "$(CANON_LOCAL)"
+	@echo "Adding Canon marketplace..."
+	@claude plugin marketplace add canonhq/canon-claude-plugin
 	@echo "Installing Canon plugin..."
-	@claude plugin install canon@canon --scope project
+	@claude plugin install canon --scope project
 	@echo "Done. Restart Claude Code to load the plugin."
-
-canon-status: ## Show Canon spec coverage for this project
-	@command -v canon >/dev/null 2>&1 || { echo "Error: Canon not installed. Run: make canon-setup"; exit 1; }
-	@canon status
 
 # ============================================================================
 # Cleanup
