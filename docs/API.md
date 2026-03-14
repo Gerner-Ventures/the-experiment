@@ -372,7 +372,7 @@ Connection semantics:
 |------|----------------|
 | `connected` | `{ "experiment_id": "<id>" }` |
 | `round_start` | `{ "theme": "<round theme>" }` |
-| `gm_plan` | Full `GMPlanRecord` payload |
+| `gm_plan` | Full `GMPlanRecord` payload plus `narration_audio: { "status", "narration_id", "audio_url"?, "error"? }` for live round-start synchronization |
 | `gm_audio_status` | `{ "status": "pending|ready|error", "narration_id": "<id>", "audio_url"?, "error"? }` |
 | `crisis_event` | Crisis event payload with `type`, `description`, `affects`, `severity` |
 | `phase_change` | `{ "events": [<RoundEvent>, ...] }` for the phase |

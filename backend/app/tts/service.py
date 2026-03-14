@@ -109,12 +109,13 @@ class NarrationTTSService:
         round_number: int,
         text: str,
         character_id: str,
+        voice_id_override: str | None = None,
     ) -> NarrationAudioRequest:
         return NarrationAudioRequest(
             experiment_id=experiment_id,
             round_number=round_number,
             text=text,
-            voice_id=self.voice_id_for_character(character_id),
+            voice_id=voice_id_override or self.voice_id_for_character(character_id),
             model_id=self.model_id,
             output_format=self.output_format,
             voice_settings=self._voice_settings(),

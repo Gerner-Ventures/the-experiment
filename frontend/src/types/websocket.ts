@@ -72,6 +72,7 @@ export interface AgentSpeechAudioData {
   source?: AgentSpeechSource
   status: NarrationAudioStatus
   audio_url: string | null
+  error?: string
 }
 
 // ─── Meeting message payloads ───

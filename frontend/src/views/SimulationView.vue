@@ -74,6 +74,23 @@ function toggleMute() {
 const activeBubbleAudio = computed(() => {
   const turn = turnStore.activeTurn
   if (!turn?.thought) return null
+  if (turn.thoughtConversationId != null) {
+    const byId = socialStore.conversations.find((conversation) => conversation.id === turn.thoughtConversationId)
+    if (byId) {
+      return byId
+    }
+  }
+  if (turn.thoughtAudioIndex != null) {
+    const byIndex = socialStore.conversations.find((conversation) =>
+      conversation.agentId === turn.agentId
+      && conversation.round === turn.round
+      && conversation.index === turn.thoughtAudioIndex
+      && conversation.source === (turn.thoughtSource ?? 'inner_thought'),
+    )
+    if (byIndex) {
+      return byIndex
+    }
+  }
   for (let i = socialStore.conversations.length - 1; i >= 0; i--) {
     const conversation = socialStore.conversations[i]
     if (
@@ -90,33 +107,91 @@ const activeBubbleAudio = computed(() => {
     round: turn.round,
     source: turn.thoughtSource ?? 'inner_thought',
     thought: turn.thought,
+    thoughtConversationId: turn.thoughtConversationId ?? null,
+    thoughtAudioIndex: turn.thoughtAudioIndex ?? null,
+    conversations: socialStore.conversations
+      .filter(c => c.agentId === turn.agentId && c.round === turn.round)
+      .map(c => ({
+        id: c.id,
+        index: c.index,
+        source: c.source,
+        message: c.message,
+        audioStatus: c.audioStatus,
+        audioUrl: c.audioUrl,
+      })),
   })
   return null
 })
 
 
 let narrationHydrationToken = 0
+const NARRATION_METADATA_RETRY_MS = 500
+const NARRATION_METADATA_MAX_ATTEMPTS = 8
+let lastNarrationRecoveryUrl: string | null = null
+
+function apiErrorStatus(err: unknown): number | null {
+  if (!(err instanceof Error)) return null
+  const match = err.message.match(/^API (\d+):/)
+  return match ? Number(match[1]) : null
+}
+
+function delay(ms: number) {
+  return new Promise<void>(resolve => window.setTimeout(resolve, ms))
+}
 
 async function syncRoundNarration(experimentId: string, round: number, fallbackText: string) {
   const token = ++narrationHydrationToken
   gmStore.setNarrationFallback(fallbackText, round)
 
-  try {
-    const meta = await api.getRoundNarration(experimentId, round)
-    if (token !== narrationHydrationToken) return
+  for (let attempt = 0; attempt <= NARRATION_METADATA_MAX_ATTEMPTS; attempt++) {
+    try {
+      const meta = await api.getRoundNarration(experimentId, round)
+      if (token !== narrationHydrationToken) return
 
-    gmStore.hydrateNarration(
-      meta.text,
-      meta.round_number,
-      meta.narration_id,
-      meta.status,
-      meta.audio_url ?? null,
-    )
-  } catch (err) {
-    if (token !== narrationHydrationToken) return
-    console.warn('Failed to load round narration metadata:', err)
-    gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+      gmStore.hydrateNarration(
+        meta.text,
+        meta.round_number,
+        meta.narration_id,
+        meta.status,
+        meta.audio_url ?? null,
+      )
+      if (meta.audio_url !== lastNarrationRecoveryUrl) {
+        lastNarrationRecoveryUrl = null
+      }
+
+      if (meta.status !== 'pending') {
+        return
+      }
+    } catch (err) {
+      if (token !== narrationHydrationToken) return
+      const status = apiErrorStatus(err)
+      const retryable = status === 409
+      if (!retryable || attempt === NARRATION_METADATA_MAX_ATTEMPTS) {
+        if (!retryable) {
+          console.warn('Failed to load round narration metadata:', err)
+        }
+        gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+        return
+      }
+    }
+
+    if (attempt === NARRATION_METADATA_MAX_ATTEMPTS) {
+      gmStore.hydrateNarration(fallbackText, round, null, 'unavailable', null)
+      return
+    }
+    await delay(NARRATION_METADATA_RETRY_MS)
   }
+}
+
+function handleNarrationAudioError() {
+  const experimentId = experimentStore.id
+  const round = gmStore.narrationRound
+  const text = gmStore.narrationText
+  const audioUrl = gmStore.narrationAudioUrl
+  if (!experimentId || round === null || !text || !audioUrl) return
+  if (lastNarrationRecoveryUrl === audioUrl) return
+  lastNarrationRecoveryUrl = audioUrl
+  void syncRoundNarration(experimentId, round, text)
 }
 
 async function initExperiment() {
@@ -239,22 +314,11 @@ watch(() => uiStore.isPlaying, (playing) => {
 })
 
 watch(
-  () => {
-    const plan = gmStore.currentPlan
-    if (!experimentStore.id || !plan?.narration) return null
-    return `${experimentStore.id}:${plan.round}:${plan.narration}`
+  () => gmStore.showNarration,
+  (visible) => {
+    turnStore.setBlocked(visible)
   },
-  (planKey) => {
-    if (!planKey) return
-    const experimentId = experimentStore.id
-    const currentPlan = gmStore.currentPlan
-    if (!experimentId || !currentPlan?.narration) return
-    void syncRoundNarration(
-      experimentId,
-      currentPlan.round,
-      currentPlan.narration,
-    )
-  },
+  { immediate: true },
 )
 
 // When a round completes (from WS round_end), schedule next step if auto-playing
@@ -323,7 +387,7 @@ function wireTurnHandlers() {
       agentStore.updateAgentStatus(agentId, status, location)
     },
     addConversation(agentId: string, agentName: string, message: string, source, round) {
-      socialStore.addConversation(agentId, agentName, message, '', undefined, round, source)
+      return socialStore.addConversation(agentId, agentName, message, '', undefined, round, source)
     },
     getAgentLocation(agentId: string) {
       return agentStore.getAgent(agentId)?.location
@@ -555,6 +619,7 @@ function goBack() {
       @dismiss="gmStore.dismissNarration()"
       @update:playing="gmStore.setNarrationPlaying($event)"
       @update:autoplay-blocked="gmStore.setAutoplayBlocked($event)"
+      @audio-error="handleNarrationAudioError"
     />
 
     <!-- Agent Dossier Drawer -->

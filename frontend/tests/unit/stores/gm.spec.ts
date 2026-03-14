@@ -30,6 +30,54 @@ describe('useGMStore', () => {
       expect(store.narrationId).toBeNull()
       expect(store.showNarration).toBe(true)
     })
+
+    it('hydrates ready narration audio from gm_plan payload before revealing', () => {
+      const store = useGMStore()
+      store.onPlan(makeMsg('gm_plan', {
+        plan: {
+          round: 1,
+          round_theme: 'Test',
+          reasoning: '',
+          crisis_event: { type: 'resource', description: '', severity: 'low' },
+          resource_modifiers: {},
+          narration: 'Day one begins.',
+          meta_hint: null,
+        },
+        narration_audio: {
+          status: 'ready',
+          narration_id: 'narr-1',
+          audio_url: '/api/experiments/exp_1/rounds/1/narration/audio?v=narr-1',
+        },
+      }))
+      expect(store.narrationText).toBe('Day one begins.')
+      expect(store.narrationId).toBe('narr-1')
+      expect(store.narrationAudioStatus).toBe('ready')
+      expect(store.narrationAudioUrl).toBe('/api/experiments/exp_1/rounds/1/narration/audio?v=narr-1')
+      expect(store.showNarration).toBe(true)
+    })
+
+    it('keeps narration hidden while audio is still pending', () => {
+      const store = useGMStore()
+      store.onPlan(makeMsg('gm_plan', {
+        plan: {
+          round: 1,
+          round_theme: 'Test',
+          reasoning: '',
+          crisis_event: { type: 'resource', description: '', severity: 'low' },
+          resource_modifiers: {},
+          narration: 'Day one begins.',
+          meta_hint: null,
+        },
+        narration_audio: {
+          status: 'pending',
+          narration_id: 'narr-1',
+          audio_url: null,
+        },
+      }))
+      expect(store.narrationText).toBe('Day one begins.')
+      expect(store.narrationAudioStatus).toBe('pending')
+      expect(store.showNarration).toBe(false)
+    })
   })
 
   describe('narration audio status', () => {
@@ -81,6 +129,7 @@ describe('useGMStore', () => {
       } as GMAudioStatusData, 1))
       expect(store.narrationAudioStatus).toBe('error')
       expect(store.narrationAudioError).toBe('TTS failed')
+      expect(store.showNarration).toBe(true)
     })
 
     it('ignores stale queued ready status after a same-round narration revision', () => {
@@ -203,11 +252,32 @@ describe('useGMStore', () => {
           narration: 'Day one.',
           meta_hint: null,
         },
+        narration_audio: {
+          status: 'ready',
+          narration_id: 'narr-1',
+          audio_url: '/audio/r1',
+        },
       }))
       store.setNarrationPlaying(true)
       store.dismissNarration()
       expect(store.showNarration).toBe(false)
       expect(store.isNarrationPlaying).toBe(false)
+    })
+
+    it('does not reopen a dismissed narration when ready audio arrives later', () => {
+      const store = useGMStore()
+      store.hydrateNarration('Day one.', 1, 'narr-1', 'pending', null)
+      expect(store.showNarration).toBe(false)
+
+      store.dismissNarration()
+      store.onAudioStatus(makeMsg('gm_audio_status', {
+        status: 'ready',
+        narration_id: 'narr-1',
+        audio_url: '/audio/r1',
+      } as GMAudioStatusData, 1))
+
+      expect(store.showNarration).toBe(false)
+      expect(store.narrationAudioStatus).toBe('ready')
     })
   })
 })

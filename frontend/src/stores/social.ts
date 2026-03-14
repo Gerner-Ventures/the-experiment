@@ -59,12 +59,27 @@ export interface MeetingState {
   exileOutcome: string | null
 }
 
+export interface ConversationRef {
+  id: number
+  index: number
+}
+
+function audioEntryKey(
+  agentId: string,
+  round: number,
+  index: number,
+  source?: AgentSpeechSource,
+) {
+  return `${agentId}:${round}:${index}:${source ?? '*'}`
+}
+
 let msgCounter = 0
 
 export const useSocialStore = defineStore('social', () => {
   const locale = useLocale()
   const conversations = ref<ConversationMessage[]>([])
   const meeting = ref<MeetingState | null>(null)
+  const queuedAudio = ref<Record<string, AgentSpeechAudioData>>({})
 
   const recentConversations = computed(() =>
     conversations.value.slice(-20)
@@ -93,12 +108,12 @@ export const useSocialStore = defineStore('social', () => {
     timestamp?: string,
     round = 0,
     source: AgentSpeechSource = 'dialogue',
-  ) {
+  ): ConversationRef {
     // Compute index: count of messages from the same agent in the same round
     const index = conversations.value.filter(
       (c) => c.agentId === agentId && c.round === round,
     ).length
-    conversations.value.push({
+    const conversation: ConversationMessage = {
       id: ++msgCounter,
       agentId,
       agentName,
@@ -110,10 +125,28 @@ export const useSocialStore = defineStore('social', () => {
       index,
       audioStatus: 'idle',
       audioUrl: null,
-    })
+    }
+    conversations.value.push(conversation)
+    reconcileQueuedAudio(conversation)
     if (conversations.value.length > 100) {
       conversations.value = conversations.value.slice(-100)
     }
+    return { id: conversation.id, index: conversation.index }
+  }
+
+  function applySpeechAudio(entry: ConversationMessage, data: AgentSpeechAudioData) {
+    entry.audioStatus = data.status
+    entry.audioUrl = data.audio_url ?? null
+  }
+
+  function reconcileQueuedAudio(entry: ConversationMessage) {
+    const exactKey = audioEntryKey(entry.agentId, entry.round, entry.index, entry.source)
+    const wildcardKey = audioEntryKey(entry.agentId, entry.round, entry.index)
+    const queued = queuedAudio.value[exactKey] ?? queuedAudio.value[wildcardKey]
+    if (!queued) return
+    applySpeechAudio(entry, queued)
+    delete queuedAudio.value[exactKey]
+    delete queuedAudio.value[wildcardKey]
   }
 
   function onSpeechAudio(msg: WSMessage<AgentSpeechAudioData>) {
@@ -126,9 +159,9 @@ export const useSocialStore = defineStore('social', () => {
         && (!data.source || c.source === data.source),
     )
     if (entry) {
-      entry.audioStatus = data.status
-      entry.audioUrl = data.audio_url ?? null
+      applySpeechAudio(entry, data)
     } else {
+      queuedAudio.value[audioEntryKey(data.agent_id, data.round, data.index, data.source)] = data
       console.warn('[Social] Missing conversation entry for audio update', data)
     }
   }
@@ -303,6 +336,7 @@ export const useSocialStore = defineStore('social', () => {
   function $reset() {
     conversations.value = []
     meeting.value = null
+    queuedAudio.value = {}
     factionUpdates.value = []
     exileEvents.value = []
     msgCounter = 0

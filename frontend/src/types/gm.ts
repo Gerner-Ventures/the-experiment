@@ -1,4 +1,5 @@
 import type { Resources } from './experiment'
+import type { NarrationAudioStatus } from './websocket'
 
 /** Crisis event types the GM can generate */
 export type CrisisEventType = 'resource' | 'structural' | 'social' | 'environmental' | 'discovery' | 'meta'
@@ -24,6 +25,13 @@ export interface GMPlan {
   environmental?: string
   narration: string
   metaHint: string | null
+}
+
+export interface NarrationAudioSnapshot {
+  status: NarrationAudioStatus
+  narration_id: string | null
+  audio_url?: string | null
+  error?: string | null
 }
 
 /** Narration metadata returned by the backend narration endpoint */
