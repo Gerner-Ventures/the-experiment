@@ -157,10 +157,18 @@ function stopAudio() {
   isPlaying.value = false
 }
 
+let mountedAt = 0
+let dismissReason = ''
+
 function dismiss() {
   if (!visible.value) return
   visible.value = false
+  const wasPlaying = isPlaying.value
   stopAudio()
+  const aliveMs = Date.now() - mountedAt
+  console.debug(
+    `[Bubble] Dismissed: ${props.agentName} | reason: ${dismissReason || 'timer'} | alive: ${(aliveMs / 1000).toFixed(1)}s | audio: ${wasPlaying ? 'playing' : props.audioStatus}`,
+  )
   emit('dismiss', props.turnId)
 }
 
@@ -168,7 +176,11 @@ function dismiss() {
 watch(
   () => [props.audioStatus, props.audioUrl] as const,
   ([newStatus, audioUrl]) => {
+    const aliveMs = mountedAt ? Date.now() - mountedAt : 0
     if (newStatus === 'ready' && audioUrl && !audio && !isMuted()) {
+      console.debug(
+        `[Bubble] Audio ready for ${props.agentName} after ${(aliveMs / 1000).toFixed(1)}s`,
+      )
       if (pendingTimer) {
         clearTimeout(pendingTimer)
         pendingTimer = null
@@ -179,7 +191,11 @@ watch(
 )
 
 onMounted(() => {
-  console.debug(`[Bubble] Mounted for ${props.agentName} (${props.agentId})`)
+  mountedAt = Date.now()
+  const audioInfo = props.audioStatus === 'ready' ? 'ready' : props.audioStatus === 'pending' ? 'pending' : `idle(url:${props.audioUrl ? 'yes' : 'no'})`
+  console.debug(
+    `[Bubble] Mounted: ${props.agentName} | turnId: ${props.turnId} | audio: ${audioInfo} | muted: ${isMuted()} | textLen: ${props.message.length} | lifetime: ${(TOTAL_LIFETIME_MS / 1000).toFixed(1)}s`,
+  )
 
   updatePosition()
   positionTimer = setInterval(updatePosition, 33)
@@ -205,7 +221,9 @@ onMounted(() => {
     pendingTimer = setTimeout(() => {
       pendingTimer = null
       // Audio didn't arrive in time — fall back to text-only dismiss
+      console.debug(`[Bubble] Audio pending timeout for ${props.agentName} — falling back to text-only`)
       if (!dismissTimer) {
+        dismissReason = 'pending-timeout'
         dismissTimer = setTimeout(dismiss, TOTAL_LIFETIME_MS)
       }
     }, PENDING_TIMEOUT_MS)
@@ -213,6 +231,7 @@ onMounted(() => {
 
   // Text-only dismiss timer (overridden if audio starts playing)
   if (!audio && !pendingTimer) {
+    dismissReason = 'text-only'
     dismissTimer = setTimeout(dismiss, TOTAL_LIFETIME_MS)
   }
 })
@@ -237,6 +256,10 @@ onUnmounted(() => {
   }
   stopAudio()
   if (wasPending) {
+    const aliveMs = Date.now() - mountedAt
+    console.debug(
+      `[Bubble] Force-unmounted: ${props.agentName} | alive: ${(aliveMs / 1000).toFixed(1)}s | reason: v-if changed (meeting or phase shift)`,
+    )
     emit('dismiss', props.turnId)
   }
 })

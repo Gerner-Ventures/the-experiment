@@ -65,7 +65,8 @@ describe('agent store', () => {
       expect(turnStore.activeTurn).not.toBeNull()
       expect(turnStore.activeTurn!.thought).toBe('I should move first.')
       expect(turnStore.activeTurn!.round).toBe(4)
-      expect(turnStore.activeTurn!.fromSpeakEvent).toBe(true)
+      // No prior agent_speak event → fromSpeakEvent should be false
+      expect(turnStore.activeTurn!.fromSpeakEvent).toBe(false)
     })
 
     it('does not mutate agent location before the turn executes', () => {

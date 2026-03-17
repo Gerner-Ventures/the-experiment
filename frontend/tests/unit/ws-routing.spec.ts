@@ -152,7 +152,8 @@ describe('WebSocket message routing', () => {
     routeMessage(makeMsg('meeting_start', { proposal: 'Ration food?' }))
     expect(socialStore.meeting).not.toBeNull()
     expect(socialStore.meeting!.proposal).toBe('Ration food?')
-    expect(socialStore.isMeetingActive).toBe(true)
+    // Meeting is staged but not active until turn store reaches a meeting turn
+    expect(socialStore.isMeetingActive).toBe(false)
   })
 
   it('routes meeting_speech to socialStore', () => {
@@ -175,8 +176,8 @@ describe('WebSocket message routing', () => {
     routeMessage(makeMsg('meeting_start', { proposal: 'test' }))
     routeMessage(makeMsg('meeting_result', { summary: 'Passed', votes: { a1: 'agree' } }))
     expect(socialStore.meeting!.result).toBe('Passed')
-    // Meeting stays active until explicitly dismissed
-    expect(socialStore.isMeetingActive).toBe(true)
+    // Meeting stays staged (not active) — turn store would activate it
+    expect(socialStore.isMeetingActive).toBe(false)
   })
 
   it('routes faction_update to socialStore', () => {

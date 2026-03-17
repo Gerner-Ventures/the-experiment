@@ -42,8 +42,13 @@ describe('Social store meeting handlers', () => {
     expect(store.meeting!.result).toBeNull()
     expect(store.meeting!.tally).toBeNull()
     expect(store.meeting!.passed).toBeNull()
-    expect(store.meeting!.active).toBe(true)
+    // Meeting is staged but not yet active — turn store activates it
+    expect(store.meeting!.active).toBe(false)
     expect(store.meeting!.scenePhase).toBe('entering')
+
+    // Activation flips it to true
+    store.activateMeeting()
+    expect(store.meeting!.active).toBe(true)
   })
 
   // ─── onMeetingSpeech ───
@@ -233,6 +238,9 @@ describe('Social store meeting handlers', () => {
     const store = useSocialStore()
     store.onMeetingStart(makeMsg('meeting_start', { proposal: 'Rest day' }))
 
+    // Meeting starts staged (not active)
+    expect(store.meeting!.active).toBe(false)
+    store.activateMeeting()
     expect(store.meeting!.active).toBe(true)
     store.dismissMeeting()
     expect(store.meeting!.active).toBe(false)

@@ -175,7 +175,23 @@ export const useSocialStore = defineStore('social', () => {
 
   function onMeetingStart(msg: WSMessage<MeetingStartData>) {
     const data = msg.data
-    // Initialize meeting state — the MeetingScene reacts to this
+
+    // Phase gate warning: check if turn queue still has pre-meeting turns
+    const turnStore = useTurnStore()
+    const pendingNonMeeting = turnStore.queue.filter(
+      t => t.actionType !== 'meeting_speech' && t.actionType !== 'meeting_vote',
+    ).length
+    const activeTurnAction = turnStore.activeTurn?.actionType
+    if (pendingNonMeeting > 0 || (activeTurnAction && activeTurnAction !== 'meeting_speech' && activeTurnAction !== 'meeting_vote')) {
+      console.warn(
+        `[Social] meeting_start arrived with ${pendingNonMeeting} non-meeting turns queued` +
+        (activeTurnAction ? ` | active: ${turnStore.activeTurn?.agentName} → ${activeTurnAction}` : ''),
+      )
+    }
+
+    // Stage meeting data but DON'T activate yet — the turn store will activate
+    // when it reaches the first meeting_speech turn. This prevents the meeting
+    // scene from interrupting queued morning/afternoon turns.
     meeting.value = {
       proposal: data.proposal,
       votes: {},
@@ -183,12 +199,12 @@ export const useSocialStore = defineStore('social', () => {
       result: null,
       tally: null,
       passed: null,
-      active: true,
+      active: false,
       scenePhase: 'entering',
       exileTarget: null,
       exileOutcome: null,
     }
-    console.debug('[Social] Meeting started:', data.proposal)
+    console.debug('[Social] Meeting staged (pending activation):', data.proposal)
   }
 
   function onMeetingSpeech(msg: WSMessage<MeetingSpeechData>) {
@@ -220,6 +236,7 @@ export const useSocialStore = defineStore('social', () => {
       agentId: data.agent_id,
       agentName,
       round: msg.round,
+      phase: msg.phase,
       actionType: 'meeting_speech',
       thought: bubbleText,
       thoughtSource: 'dialogue',
@@ -242,6 +259,7 @@ export const useSocialStore = defineStore('social', () => {
       agentId: data.agent_id,
       agentName,
       round: msg.round,
+      phase: msg.phase,
       actionType: 'meeting_vote',
       thought: locale.social.meetingScene.votePrefix.replace('{vote}', data.vote),
       thoughtSource: 'dialogue',
@@ -327,6 +345,14 @@ export const useSocialStore = defineStore('social', () => {
     }
   }
 
+  /** Called by the turn store when it reaches the first meeting turn */
+  function activateMeeting() {
+    if (meeting.value && !meeting.value.active) {
+      meeting.value.active = true
+      console.debug('[Social] Meeting activated (turn store reached meeting turn)')
+    }
+  }
+
   function dismissMeeting() {
     if (meeting.value) {
       meeting.value.active = false
@@ -348,6 +374,6 @@ export const useSocialStore = defineStore('social', () => {
     onSpeak, addConversation, onSpeechAudio,
     onMeetingStart, onMeetingSpeech, onMeetingVote, onMeetingResult,
     onFactionUpdate, onCultActivity, onExileVote, onExileResult,
-    advanceMeetingPhase, dismissMeeting, $reset,
+    advanceMeetingPhase, activateMeeting, dismissMeeting, $reset,
   }
 })

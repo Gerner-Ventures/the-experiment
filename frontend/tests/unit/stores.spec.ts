@@ -597,10 +597,14 @@ describe('socialStore', () => {
       }))
       expect(store.meeting).not.toBeNull()
       expect(store.meeting!.proposal).toBe('Should we ration food?')
-      expect(store.meeting!.active).toBe(true)
+      // Meeting is staged but not active until turn store activates it
+      expect(store.meeting!.active).toBe(false)
       expect(store.meeting!.votes).toEqual({})
       expect(store.meeting!.speeches).toEqual([])
       expect(store.meeting!.result).toBeNull()
+      expect(store.isMeetingActive).toBe(false)
+      // Activation flips it
+      store.activateMeeting()
       expect(store.isMeetingActive).toBe(true)
     })
   })
@@ -631,9 +635,8 @@ describe('socialStore', () => {
       }))
       expect(store.meeting!.result).toBe('Proposal passed')
       expect(store.meeting!.votes).toEqual({ a1: 'agree', a2: 'disagree' })
-      // Meeting stays active until explicitly dismissed
-      expect(store.meeting!.active).toBe(true)
-      expect(store.isMeetingActive).toBe(true)
+      // Meeting stays staged — not activated by WS messages alone
+      expect(store.meeting!.active).toBe(false)
     })
   })
 

@@ -51,6 +51,8 @@ export const useExperimentStore = defineStore('experiment', () => {
   const currentRound = ref(0)
   const totalRounds = ref(15)
   const currentPhase = ref<RoundPhase | null>(null)
+  /** Latest phase the backend reported — may be ahead of the visual when turns are active */
+  const latestBackendPhase = ref<RoundPhase | null>(null)
   const completedRounds = ref(0)
   const events = ref<ExperimentEvent[]>([])
 
@@ -169,44 +171,55 @@ export const useExperimentStore = defineStore('experiment', () => {
     waitForReady(finalize, `round ${currentRound.value} end`)
   }
 
-  function onPhaseChange(msg: WSMessage) {
-    const phase = (msg.phase as RoundPhase) ?? null
-    const data = msg.data as Record<string, unknown>
-    const socialStore = useSocialStore()
-
-    // Always update the world phase immediately — the PixiWorld renders behind
-    // the meeting overlay (opacity-0), so day/night updates are invisible during
-    // meetings. When the meeting closes, the world is already at the correct
-    // time of day (no jarring jump).
+  /**
+   * Apply a phase visually — updates currentPhase, PixiWorld day/night, and HUD label.
+   * Called either immediately (when queue idle) or by the turn store (when queue drives phase).
+   */
+  function applyPhase(phase: RoundPhase) {
+    if (currentPhase.value === phase) return
     currentPhase.value = phase
-    if (phase) {
-      useWorldStore().onPhaseChange(phase)
-    }
+    useWorldStore().onPhaseChange(phase)
     console.debug(`[Experiment] Phase applied: ${phase}`)
 
-    // HUD status updates are deferred until the meeting closes — showing
-    // "Afternoon starting…" mid-meeting breaks immersion.
-    if (data.status === 'starting' && phase) {
-      const labels: Record<string, string> = {
-        gm_plan: locale.hud.steppingGmPlan,
-        dawn: locale.hud.steppingDawn,
-        morning: locale.hud.steppingMorning,
-        midday: locale.hud.steppingMidday,
-        afternoon: locale.hud.steppingAfternoon,
-        night: locale.hud.steppingNight,
-      }
-      if (socialStore.isMeetingActive) {
-        // Defer HUD label until meeting dismisses
-        const check = trackInterval(setInterval(() => {
-          if (!socialStore.isMeetingActive) {
-            clearTrackedInterval(check)
-            useUIStore().setSteppingStatus(labels[phase] ?? phase)
-          }
-        }, 200))
-      } else {
-        useUIStore().setSteppingStatus(labels[phase] ?? phase)
-      }
+    const labels: Record<string, string> = {
+      gm_plan: locale.hud.steppingGmPlan,
+      dawn: locale.hud.steppingDawn,
+      morning: locale.hud.steppingMorning,
+      midday: locale.hud.steppingMidday,
+      afternoon: locale.hud.steppingAfternoon,
+      night: locale.hud.steppingNight,
     }
+    useUIStore().setSteppingStatus(labels[phase] ?? phase)
+  }
+
+  function onPhaseChange(msg: WSMessage) {
+    const phase = (msg.phase as RoundPhase) ?? null
+    if (!phase) return
+
+    const turnStore = useTurnStore()
+
+    // When no turns are active, apply immediately (pre-turn phases: gm_plan, dawn, morning)
+    if (!turnStore.isProcessing) {
+      applyPhase(phase)
+      return
+    }
+
+    // When turns are active, store the latest backend phase. The turn store drives
+    // the visual phase from turn.phase, and flushes latestBackendPhase when the
+    // queue drains (handles phases with no tagged turns, like night).
+    latestBackendPhase.value = phase
+    console.debug(`[Experiment] Phase received: ${phase} (visual driven by turn queue)`)
+  }
+
+  /**
+   * Called by the turn store when the queue drains. Applies the latest backend
+   * phase if turns didn't cover it (e.g., night phase has no agent actions).
+   */
+  function flushLatestPhase() {
+    if (latestBackendPhase.value && latestBackendPhase.value !== currentPhase.value) {
+      applyPhase(latestBackendPhase.value)
+    }
+    latestBackendPhase.value = null
   }
 
   function onEnd(msg: WSMessage) {
@@ -224,6 +237,7 @@ export const useExperimentStore = defineStore('experiment', () => {
     currentRound.value = 0
     totalRounds.value = 15
     currentPhase.value = null
+    latestBackendPhase.value = null
     completedRounds.value = 0
     events.value = []
     eventCounter = 0
@@ -233,7 +247,7 @@ export const useExperimentStore = defineStore('experiment', () => {
     id, name, status, currentRound, totalRounds, currentPhase, completedRounds,
     events,
     isRunning, isComplete, progress,
-    setExperiment, addEvent, onRoundStart, onRoundEnd, onPhaseChange, onEnd,
+    setExperiment, addEvent, onRoundStart, onRoundEnd, onPhaseChange, applyPhase, flushLatestPhase, onEnd,
     $reset,
   }
 })
