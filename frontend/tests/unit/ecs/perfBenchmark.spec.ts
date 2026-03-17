@@ -10,9 +10,9 @@
 import { createGameWorld } from '@/ecs/world'
 import { addEntity, addComponent } from 'bitecs'
 import { Position, PathState, AnimState, SpriteRef, TileRef, WaterState, WATER_VARIANTS } from '@/ecs/components'
-import { pathfindingSystem, setEntityPath } from '@/ecs/systems/pathfindingSystem'
+import { pathfindingSystem, setEntityPath, type PathDataMap } from '@/ecs/systems/pathfindingSystem'
 import { movementSystem } from '@/ecs/systems/movementSystem'
-import { animationSystem, registerAnimation, resetAnimationRegistry } from '@/ecs/systems/animationSystem'
+import { animationSystem, AnimationRegistry } from '@/ecs/systems/animationSystem'
 import { waterSystem } from '@/ecs/systems/waterSystem'
 import { createDevMonitor } from '@/composables/usePerformanceMonitor'
 import { renderSyncSystem } from '@/ecs/systems/renderSyncSystem'
@@ -26,6 +26,10 @@ jest.mock('@/components/world/pixi/isometric-utils', () => ({
     y: (x + y) * 16,
   }),
 }))
+
+// Session-owned data structures (fresh per test)
+let pathData: PathDataMap
+let animReg: AnimationRegistry
 
 function spawnTestEntity(world: ReturnType<typeof createGameWorld>, index: number) {
   const eid = addEntity(world)
@@ -44,7 +48,7 @@ function spawnTestEntity(world: ReturnType<typeof createGameWorld>, index: numbe
     const targetX = (index + 3) % 20
     const targetY = Math.floor(index / 20)
     const path = [{ x: targetX, y: targetY }]
-    setEntityPath(eid, path)
+    setEntityPath(pathData, eid, path)
 
     addComponent(world, eid, PathState)
     PathState.waypointIndex[eid] = 0
@@ -85,9 +89,9 @@ function spawnWaterTileEntity(world: ReturnType<typeof createGameWorld>, index: 
 
 describe('ECS performance benchmarks', () => {
   beforeEach(() => {
-    resetAnimationRegistry()
-    // Register a test animation
-    registerAnimation({
+    pathData = new Map()
+    animReg = new AnimationRegistry()
+    animReg.register({
       name: 'test-walk',
       poses: ['idle', 'walk1', 'walk2', 'walk3'],
       speed: 0.1,
@@ -109,18 +113,18 @@ describe('ECS performance benchmarks', () => {
     // Warm up
     for (let f = 0; f < 10; f++) {
       waterSystem(world, FIXED_DT)
-      pathfindingSystem(world, FIXED_DT)
+      pathfindingSystem(world, FIXED_DT, pathData)
       movementSystem(world)
-      animationSystem(world, FIXED_DT)
+      animationSystem(world, FIXED_DT, animReg)
     }
 
     const FRAMES = 1000
     const start = performance.now()
     for (let frame = 0; frame < FRAMES; frame++) {
       waterSystem(world, FIXED_DT)
-      pathfindingSystem(world, FIXED_DT)
+      pathfindingSystem(world, FIXED_DT, pathData)
       movementSystem(world)
-      animationSystem(world, FIXED_DT)
+      animationSystem(world, FIXED_DT, animReg)
     }
     const totalMs = performance.now() - start
     const avgMs = totalMs / FRAMES
@@ -142,9 +146,9 @@ describe('ECS performance benchmarks', () => {
     // Warm up
     for (let f = 0; f < 10; f++) {
       waterSystem(world, FIXED_DT)
-      pathfindingSystem(world, FIXED_DT)
+      pathfindingSystem(world, FIXED_DT, pathData)
       movementSystem(world)
-      animationSystem(world, FIXED_DT)
+      animationSystem(world, FIXED_DT, animReg)
     }
 
     const FRAMES = 1000
@@ -153,9 +157,9 @@ describe('ECS performance benchmarks', () => {
     for (let frame = 0; frame < FRAMES; frame++) {
       const frameStart = performance.now()
       waterSystem(world, FIXED_DT)
-      pathfindingSystem(world, FIXED_DT)
+      pathfindingSystem(world, FIXED_DT, pathData)
       movementSystem(world)
-      animationSystem(world, FIXED_DT)
+      animationSystem(world, FIXED_DT, animReg)
       frameTimes.push(performance.now() - frameStart)
     }
 
@@ -182,7 +186,7 @@ describe('usePerformanceMonitor', () => {
       monitor.endSystem()
       monitor.beginSystem('movement')
       monitor.endSystem()
-      monitor.endFrame(50, 10)
+      monitor.endFrame(50)
     }
 
     const percentiles = monitor.getPercentiles()

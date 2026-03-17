@@ -83,10 +83,15 @@ export function useRenderer(): UseRenderer {
 
   // Tile sprite pool: for ECS-driven dynamic tiles (water, hazards)
   const tileSpritePool: (Sprite | null)[] = []
+  // Free-list of available tile sprite pool indices (O(1) allocation)
+  const tileFreeList: number[] = []
   // Batched tile update queue: [poolIndex, frameKey] pairs flushed once per frame
   const pendingTileUpdates: { index: number; frameKey: string }[] = []
   // Cached sub-textures by frame key — avoids allocating new Texture objects every frame
   const tileTextureCache = new Map<string, Texture>()
+
+  /** Pixel offset for tile stroke overflow padding */
+  const TILE_STROKE_PAD = 1
 
   async function mount(container: HTMLElement): Promise<void> {
     app = new Application()
@@ -127,7 +132,10 @@ export function useRenderer(): UseRenderer {
   }
 
   function loadMap(theme: MapTheme, mapData: MapData) {
-    if (!worldContainer || !app || !canvasEl) return
+    if (!worldContainer || !app || !canvasEl) {
+      console.warn('[Renderer] loadMap() called before mount — skipping')
+      return
+    }
 
     // Clean previous
     if (isoMap) {
@@ -240,17 +248,18 @@ export function useRenderer(): UseRenderer {
     const sprite = new Sprite(subTex)
     const screen = tileToScreen(tileX, tileY)
     sprite.x = screen.x - subTex.frame.width / 2
-    sprite.y = screen.y - (subTex.frame.height / 2) - 1
+    sprite.y = screen.y - (subTex.frame.height / 2) - TILE_STROKE_PAD
     sprite.zIndex = tileY * 100 + tileX
     dynamicLayer.addChild(sprite)
 
-    // Find empty slot or append
-    let index = tileSpritePool.indexOf(null)
-    if (index === -1) {
+    // O(1) allocation from free-list, or append
+    let index: number
+    if (tileFreeList.length > 0) {
+      index = tileFreeList.pop()!
+      tileSpritePool[index] = sprite
+    } else {
       index = tileSpritePool.length
       tileSpritePool.push(sprite)
-    } else {
-      tileSpritePool[index] = sprite
     }
     return index
   }
@@ -261,6 +270,7 @@ export function useRenderer(): UseRenderer {
     sprite.removeFromParent()
     sprite.destroy()
     tileSpritePool[poolIndex] = null
+    tileFreeList.push(poolIndex)
   }
 
   function removeAllTileSprites(): void {
@@ -272,6 +282,7 @@ export function useRenderer(): UseRenderer {
       }
     }
     tileSpritePool.length = 0
+    tileFreeList.length = 0
     pendingTileUpdates.length = 0
     for (const tex of tileTextureCache.values()) {
       tex.destroy()
@@ -284,7 +295,10 @@ export function useRenderer(): UseRenderer {
   }
 
   function centerOn(tileX: number, tileY: number) {
-    if (!camera) return
+    if (!camera) {
+      console.warn('[Renderer] centerOn() called before camera initialized')
+      return
+    }
     const screen = tileToScreen(tileX, tileY)
     camera.centerOn(screen.x, screen.y)
   }
@@ -373,7 +387,7 @@ export function useRenderer(): UseRenderer {
     removeAllTileSprites()
 
     for (const sprite of spritePool) {
-      sprite.destroy()
+      if (sprite) sprite.destroy()
     }
     spritePool.length = 0
     spriteIdMap.clear()

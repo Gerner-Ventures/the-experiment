@@ -13,15 +13,7 @@
 import type { World } from 'bitecs'
 import { query, hasComponent } from 'bitecs'
 import { Position, SpriteRef, AnimState, PathState, TileRef, WaterState, WATER_VARIANTS } from '../components'
-import { getAnimationByIndex } from './animationSystem'
-
-/** Tracks last synced frame per tile entity — avoids redundant texture swaps */
-const _lastTileFrame = new Map<number, number>()
-
-/** Clear tile frame tracking (call on map reload/destroy) */
-export function resetTileFrameTracking(): void {
-  _lastTileFrame.clear()
-}
+import type { AnimationRegistry } from './animationSystem'
 
 export interface RenderBridge {
   /** Update sprite position and z-index */
@@ -43,6 +35,8 @@ export function renderSyncSystem(
   bridge: RenderBridge,
   alpha: number = 1,
   prevPositions: PrevPositions | null = null,
+  lastTileFrame: Map<number, number> | null = null,
+  animRegistry: AnimationRegistry | null = null,
 ): void {
   const entities = query(world, [Position, SpriteRef])
 
@@ -71,9 +65,13 @@ export function renderSyncSystem(
     if (hasComponent(world, eid, AnimState)) {
       const animIndex = AnimState.animIndex[eid] as number
       const frameIndex = AnimState.frameIndex[eid] as number
-      const anim = getAnimationByIndex(animIndex)
+      const anim = animRegistry?.getByIndex(animIndex)
       if (anim && frameIndex < anim.poses.length) {
         bridge.updateSpriteTexture(spriteIndex, anim.poses[frameIndex])
+      } else {
+        // Stale or invalid animation — fall back to idle to prevent frozen sprites
+        console.warn(`[renderSync] Stale animation: entity ${eid}, animIndex=${animIndex}, frameIndex=${frameIndex}`)
+        bridge.updateSpriteTexture(spriteIndex, 'idle')
       }
     } else if (!hasComponent(world, eid, PathState)) {
       // Not animating and not moving — idle pose
@@ -86,10 +84,11 @@ export function renderSyncSystem(
 
   for (const eid of tileEntities) {
     const frame = WaterState.frame[eid] as number
-    const lastFrame = _lastTileFrame.get(eid)
-    if (lastFrame === frame) continue
-
-    _lastTileFrame.set(eid, frame)
+    if (lastTileFrame) {
+      const lastFrame = lastTileFrame.get(eid)
+      if (lastFrame === frame) continue
+      lastTileFrame.set(eid, frame)
+    }
     const variant = WaterState.variant[eid] as number
     const prefix = variant === WATER_VARIANTS.CODE_RIVER ? 'code_river' : 'ocean'
     bridge.queueTileUpdate(TileRef.tileSpriteIndex[eid] as number, `${prefix}_${frame}`)

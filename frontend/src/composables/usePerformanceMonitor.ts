@@ -1,8 +1,8 @@
 /**
  * usePerformanceMonitor — Ring buffer performance instrumentation for ECS tick loop.
  *
- * Tracks per-frame and per-system timing, entity counts, and draw calls.
- * Zero-cost in production: all instrumentation is behind import.meta.env.DEV.
+ * Tracks per-frame and per-system timing and entity counts.
+ * Zero-cost in production: all instrumentation is behind isDev().
  */
 
 export interface SystemTiming {
@@ -15,7 +15,6 @@ export interface FrameMetrics {
   totalMs: number
   systems: SystemTiming[]
   entityCount: number
-  drawCalls: number
 }
 
 export interface PercentileResult {
@@ -28,7 +27,7 @@ export interface PerformanceMonitor {
   beginFrame(): void
   beginSystem(name: string): void
   endSystem(): void
-  endFrame(entityCount: number, drawCalls: number): void
+  endFrame(entityCount: number): void
   getPercentiles(): PercentileResult
   getSystemBreakdown(): Record<string, number>
   exportMetrics(count?: number): FrameMetrics[]
@@ -38,7 +37,7 @@ const RING_SIZE = 300 // 5 seconds at 60fps
 
 /** Create a no-op monitor for production builds */
 function createNoopMonitor(): PerformanceMonitor {
-  const noop = { p50: 0, p95: 0, p99: 0 }
+  const noop: PercentileResult = Object.freeze({ p50: 0, p95: 0, p99: 0 })
   return {
     beginFrame() {},
     beginSystem() {},
@@ -61,7 +60,6 @@ function createDevMonitor(): PerformanceMonitor {
       totalMs: performance.now(),
       systems: [],
       entityCount: 0,
-      drawCalls: 0,
     }
   }
 
@@ -76,11 +74,10 @@ function createDevMonitor(): PerformanceMonitor {
     if (sys) sys.durationMs = performance.now() - sys.startMs
   }
 
-  function endFrame(entityCount: number, drawCalls: number): void {
+  function endFrame(entityCount: number): void {
     if (!currentFrame) return
     currentFrame.totalMs = performance.now() - currentFrame.totalMs
     currentFrame.entityCount = entityCount
-    currentFrame.drawCalls = drawCalls
     ring[writeIndex % RING_SIZE] = currentFrame
     writeIndex++
     currentFrame = null
@@ -138,18 +135,13 @@ function createDevMonitor(): PerformanceMonitor {
   return { beginFrame, beginSystem, endSystem, endFrame, getPercentiles, getSystemBreakdown, exportMetrics }
 }
 
+/** Jest-compatible dev check — see GameSession.ts isDevMode() for rationale. */
 function isDev(): boolean {
-  // Node/test environment
   if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
     return true
   }
-  // Vite environment — wrapped in try/catch for Jest compatibility
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const meta = (globalThis as any).__import_meta_env
-    if (meta?.DEV) return true
-  } catch { /* ignore */ }
-  return false
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return !!(globalThis as any).import_meta_env?.DEV
 }
 
 export function usePerformanceMonitor(): PerformanceMonitor {

@@ -4,6 +4,8 @@
  * Each tick, advances progress by MOVE_SPEED * dt. When progress >= 1,
  * snaps to waypoint and advances to the next one. When all waypoints
  * are consumed, removes PathState (which fires the completion observer).
+ *
+ * Path data is owned by GameSession and passed as a parameter — no module-level state.
  */
 
 import type { World } from 'bitecs'
@@ -12,26 +14,26 @@ import { Position, PathState } from '../components'
 import { MOVE_SPEED } from '@/config/sprites/hd/theme'
 
 /** Path data stored per entity (indexed by entity ID) */
-const pathDataMap = new Map<number, { x: number; y: number }[]>()
+export type PathDataMap = Map<number, { x: number; y: number }[]>
 
-/** Store a path for an entity. Called by useGameWorld when initiating movement. */
-export function setEntityPath(eid: number, path: { x: number; y: number }[]): void {
-  pathDataMap.set(eid, path)
+/** Store a path for an entity. */
+export function setEntityPath(pathData: PathDataMap, eid: number, path: { x: number; y: number }[]): void {
+  pathData.set(eid, path)
 }
 
 /** Clean up path data for a destroyed entity. */
-export function clearEntityPath(eid: number): void {
-  pathDataMap.delete(eid)
+export function clearEntityPath(pathData: PathDataMap, eid: number): void {
+  pathData.delete(eid)
 }
 
-export function pathfindingSystem(world: World, dt: number): void {
+export function pathfindingSystem(world: World, dt: number, pathData: PathDataMap): void {
   const entities = query(world, [Position, PathState])
 
   for (const eid of entities) {
-    const path = pathDataMap.get(eid)
+    const path = pathData.get(eid)
     if (!path || path.length === 0) {
       removeComponent(world, eid, PathState)
-      pathDataMap.delete(eid)
+      pathData.delete(eid)
       continue
     }
 
@@ -49,7 +51,7 @@ export function pathfindingSystem(world: World, dt: number): void {
       if (nextIndex >= path.length) {
         // Path complete — remove PathState (fires onRemove observer)
         removeComponent(world, eid, PathState)
-        pathDataMap.delete(eid)
+        pathData.delete(eid)
       } else {
         // Advance to next waypoint
         PathState.waypointIndex[eid] = nextIndex

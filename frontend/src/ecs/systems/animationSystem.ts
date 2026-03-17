@@ -3,6 +3,8 @@
  *
  * Reads/Writes: AnimState (frameIndex, elapsed)
  * Removes: AnimState when non-looping animation completes (triggers onRemove observer)
+ *
+ * Animation registry is owned by GameSession and passed as a parameter — no module-level state.
  */
 
 import type { World } from 'bitecs'
@@ -10,42 +12,44 @@ import { query, removeComponent } from 'bitecs'
 import { AnimState } from '../components'
 import type { HDAnimationDef } from '@/config/sprites/hd/types'
 
-/** Animation lookup table: animIndex → animation definition */
-const animTable: HDAnimationDef[] = []
-const animNameToIndex = new Map<string, number>()
+/** Animation registry — maps indices to animation definitions. Owned by GameSession. */
+export class AnimationRegistry {
+  private table: HDAnimationDef[] = []
+  private nameToIndex = new Map<string, number>()
 
-/** Register an animation and return its index. Deduplicates by name. */
-export function registerAnimation(anim: HDAnimationDef): number {
-  const existing = animNameToIndex.get(anim.name)
-  if (existing !== undefined) return existing
-  const index = animTable.length
-  animTable.push(anim)
-  animNameToIndex.set(anim.name, index)
-  return index
+  /** Register an animation and return its index. Deduplicates by name. */
+  register(anim: HDAnimationDef): number {
+    const existing = this.nameToIndex.get(anim.name)
+    if (existing !== undefined) return existing
+    const index = this.table.length
+    this.table.push(anim)
+    this.nameToIndex.set(anim.name, index)
+    return index
+  }
+
+  /** Get animation definition by index. */
+  getByIndex(index: number): HDAnimationDef | undefined {
+    return this.table[index]
+  }
+
+  /** Get animation index by name. */
+  getIndex(name: string): number | undefined {
+    return this.nameToIndex.get(name)
+  }
+
+  /** Reset the registry. Call on session dispose. */
+  reset(): void {
+    this.table.length = 0
+    this.nameToIndex.clear()
+  }
 }
 
-/** Get animation definition by index. */
-export function getAnimationByIndex(index: number): HDAnimationDef | undefined {
-  return animTable[index]
-}
-
-/** Get animation index by name. */
-export function getAnimationIndex(name: string): number | undefined {
-  return animNameToIndex.get(name)
-}
-
-/** Reset the animation registry. Call on world destroy to prevent cross-lifecycle leaks. */
-export function resetAnimationRegistry(): void {
-  animTable.length = 0
-  animNameToIndex.clear()
-}
-
-export function animationSystem(world: World, dt: number): void {
+export function animationSystem(world: World, dt: number, registry: AnimationRegistry): void {
   const entities = query(world, [AnimState])
 
   for (const eid of entities) {
     const animIndex = AnimState.animIndex[eid] as number
-    const anim = animTable[animIndex]
+    const anim = registry.getByIndex(animIndex)
     if (!anim) {
       removeComponent(world, eid, AnimState)
       continue

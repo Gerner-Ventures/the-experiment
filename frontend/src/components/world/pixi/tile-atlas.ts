@@ -1,6 +1,7 @@
 import { Texture } from 'pixi.js'
 import type { MapTheme, TilePalette } from '@/types/world'
 import { TILE_W, TILE_H } from './isometric-utils'
+import { THEME_IDS } from './map-themes'
 
 /**
  * Frame entry in the tile atlas — maps a tile type key to its
@@ -41,12 +42,12 @@ export function buildThemeAtlas(theme: MapTheme): ThemeAtlas {
   const allKeys: FrameKey[] = [...TILE_TYPES]
 
   // Add special keys based on theme
-  if (theme.id === 'matrix') {
+  if (theme.id === THEME_IDS.MATRIX) {
     allKeys.push('code_river')
     // Animated code river frames
     allKeys.push('code_river_0', 'code_river_1', 'code_river_2', 'code_river_3')
   }
-  if (theme.id === 'lord-of-the-flies') {
+  if (theme.id === THEME_IDS.LORD_OF_THE_FLIES) {
     allKeys.push('water', 'sand_fence', 'crop_field')
     // Animated ocean frames
     allKeys.push('ocean_0', 'ocean_1', 'ocean_2', 'ocean_3')
@@ -59,7 +60,10 @@ export function buildThemeAtlas(theme: MapTheme): ThemeAtlas {
   const canvas = document.createElement('canvas')
   canvas.width = canvasW
   canvas.height = canvasH
-  const ctx = canvas.getContext('2d')!
+  const ctx = canvas.getContext('2d')
+  if (!ctx) {
+    throw new Error('[tile-atlas] Failed to create 2D canvas context — OffscreenCanvas or canvas element unavailable')
+  }
 
   const frames = new Map<string, AtlasFrame>()
 
@@ -98,7 +102,7 @@ function drawTileFrame(
     case 'code_river_1':
     case 'code_river_2':
     case 'code_river_3': {
-      const crFrame = key === 'code_river' ? 0 : parseInt(key.split('_')[2])
+      const crFrame = key === 'code_river' ? 0 : parseInt(key.slice(-1), 10)
 
       // Pulsing background glow — gradient shifts per frame
       const bgColors = ['#001200', '#001400', '#001600', '#001400']
@@ -254,7 +258,7 @@ function drawTileFrame(
     case 'ocean_1':
     case 'ocean_2':
     case 'ocean_3': {
-      const oceanFrame = parseInt(key.split('_')[1])
+      const oceanFrame = parseInt(key.slice(-1), 10)
 
       // Base color cycles subtly (ping-pong: 0→1→2→1)
       const baseColors = ['#1a6b8a', '#1c6d8c', '#1e6f8e', '#1c6d8c']
@@ -393,5 +397,6 @@ function drawDiamondCanvas(
 function getTileColors(tileType: string, palette: TilePalette): [string, string] {
   const p = palette[tileType as keyof TilePalette]
   if (p) return [p[0], p[1]]
+  console.warn(`[tile-atlas] Unknown tile type "${tileType}", falling back to grass palette`)
   return [palette.grass[0], palette.grass[1]]
 }
