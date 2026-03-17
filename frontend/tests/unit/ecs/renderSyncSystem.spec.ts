@@ -23,7 +23,7 @@ function createMockBridge() {
 
   return {
     bridge: {
-      updateSpritePosition(spriteIndex: number, screenX: number, screenY: number, tileX: number, tileY: number) {
+      updateSpritePosition(spriteIndex: number, screenX: number, screenY: number) {
         positionUpdates.push({ spriteIndex, screenX, screenY })
       },
       updateSpriteTexture(spriteIndex: number, pose: string) {

@@ -6,8 +6,6 @@
  */
 
 import { GameSession } from '@/game/GameSession'
-import { hasComponent } from 'bitecs'
-import { Position, PathState, AnimState, SpriteRef, AgentId } from '@/ecs/components'
 
 // ─── Mock Infrastructure ───
 
