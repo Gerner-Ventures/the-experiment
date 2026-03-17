@@ -81,6 +81,14 @@ Stream 3 (Infra)  ──starts first──>  scaffolding ready
 - Filter by: agent, event type, round, act
 - Post-game report screen: cooperation chart, goal completion table, betrayal graph, GM narration timeline, "highlight reel" of key moments
 
+### S1.9 — Visual Polish
+- Placeholder sprite assets (buildings, agents, effects)
+- Threat-based visual degradation (cracks, dim lights, debris)
+- Transition animations between phases
+- Sound effects (optional)
+- Responsive layout
+- Error states + WebSocket reconnection UI
+
 ### S1.10 — ECS TypedArray Migration
 - Migrate all 13 ECS components from `[] as number[]` to TypedArrays (`Types.f32`, `Types.ui8`, `Types.ui32`)
 - Benchmark at 50/150/500 entities
@@ -99,14 +107,6 @@ Stream 3 (Infra)  ──starts first──>  scaffolding ready
 - Spec: `docs/specs/agent-ecs-state-bridge.md`
 - **Depends on:** S2.4 (Agent System), S2.8 (WebSocket Layer)
 - **Blocked on:** Backend Stream 2 active
-
-### S1.9 — Visual Polish
-- Placeholder sprite assets (buildings, agents, effects)
-- Threat-based visual degradation (cracks, dim lights, debris)
-- Transition animations between phases
-- Sound effects (optional)
-- Responsive layout
-- Error states + WebSocket reconnection UI
 
 ---
 

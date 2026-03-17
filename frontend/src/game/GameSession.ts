@@ -37,20 +37,7 @@ import { tileToScreen } from '@/components/world/pixi/isometric-utils'
 import { getHDAnimationForAction, getHDAnimation, HD_SILLY_ANIMATIONS } from '@/config/sprites/hd/animations'
 import type { HDAnimationDef } from '@/config/sprites/hd/types'
 import type { AgentSpriteObject } from '@/components/world/pixi/AgentSprite'
-
-// ─── Environment ───
-
-/**
- * Jest-compatible dev mode check. Vite statically replaces `import.meta.env.DEV`
- * at build time (not available at runtime), so we check `process.env` first
- * (works in Node/Jest) and fall back to a globalThis check for edge cases.
- * In production Vite builds, both branches return false.
- */
-function isDevMode(): boolean {
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') return true
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return !!(globalThis as any).import_meta_env?.DEV
-}
+import { isDevMode } from '@/utils/env'
 
 // ─── Fixed Timestep Constants ───
 
@@ -179,18 +166,18 @@ export class GameSession {
     this.agentEntityMap.clear()
     this.agentIdTable.length = 0
 
-    // 8. Null ECS references
+    // 6. Null ECS references
     this.renderBridge = null
     this.world = null
     this.accumulator = 0
     this.prevPositions = null
 
-    // 9. Clean up dev panel
+    // 7. Clean up dev panel
     if (typeof window !== 'undefined' && isDevMode()) {
       delete (window as unknown as Record<string, unknown>).__devWorld
     }
 
-    // 10. Destroy renderer (last — GPU resources)
+    // 8. Destroy renderer (last — GPU resources)
     this.renderer.destroy()
   }
 
@@ -265,10 +252,10 @@ export class GameSession {
     // Fixed timestep accumulator — clamp to prevent spiral of death
     this.accumulator = Math.min(this.accumulator + dt, MAX_ACCUMULATOR)
 
-    while (this.accumulator >= FIXED_DT) {
-      // Snapshot current positions for render interpolation (fresh Map each tick)
-      this.prevPositions = this.snapshotPositions(this.world)
+    // Snapshot positions once before simulation for render interpolation
+    this.prevPositions = this.snapshotPositions(this.world)
 
+    while (this.accumulator >= FIXED_DT) {
       // --- Simulation systems (fixed dt) ---
 
       this.perfMonitor.beginSystem('water')

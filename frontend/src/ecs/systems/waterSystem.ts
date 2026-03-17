@@ -2,7 +2,7 @@
  * Water System — animates water tile frames with staggered ripple patterns.
  *
  * Reads/Writes: WaterState (frame, elapsed)
- * Reads: TileRef (for phase offset computation at spawn)
+ * Queries: TileRef + WaterState (phase offset is computed at spawn in GameSession)
  *
  * Each water tile has a phase offset computed from its grid position,
  * creating organic stagger so adjacent tiles don't animate in lockstep.

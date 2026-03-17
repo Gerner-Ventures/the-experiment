@@ -228,8 +228,8 @@ describe('GameSession tick loop', () => {
     const lastTexture = bridgeCalls.updateSpriteTexture[bridgeCalls.updateSpriteTexture.length - 1]
     expect(lastTexture[1]).toBe('idle') // idle pose for stationary agent
 
-    // flushTileUpdates called
-    expect(bridgeCalls.flushTileUpdates.length).toBeGreaterThan(0)
+    // flushTileUpdates not called (no water tile entities spawned)
+    expect(bridgeCalls.flushTileUpdates.length).toBe(0)
 
     session.dispose()
   })

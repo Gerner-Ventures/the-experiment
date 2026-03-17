@@ -70,7 +70,6 @@ export function renderSyncSystem(
         bridge.updateSpriteTexture(spriteIndex, anim.poses[frameIndex])
       } else {
         // Stale or invalid animation — fall back to idle to prevent frozen sprites
-        console.warn(`[renderSync] Stale animation: entity ${eid}, animIndex=${animIndex}, frameIndex=${frameIndex}`)
         bridge.updateSpriteTexture(spriteIndex, 'idle')
       }
     } else if (!hasComponent(world, eid, PathState)) {
@@ -94,5 +93,5 @@ export function renderSyncSystem(
     bridge.queueTileUpdate(TileRef.tileSpriteIndex[eid] as number, `${prefix}_${frame}`)
   }
 
-  bridge.flushTileUpdates()
+  if (tileEntities.length > 0) bridge.flushTileUpdates()
 }

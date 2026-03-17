@@ -135,17 +135,10 @@ function createDevMonitor(): PerformanceMonitor {
   return { beginFrame, beginSystem, endSystem, endFrame, getPercentiles, getSystemBreakdown, exportMetrics }
 }
 
-/** Jest-compatible dev check — see GameSession.ts isDevMode() for rationale. */
-function isDev(): boolean {
-  if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
-    return true
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return !!(globalThis as any).import_meta_env?.DEV
-}
+import { isDevMode } from '@/utils/env'
 
 export function usePerformanceMonitor(): PerformanceMonitor {
-  return isDev() ? createDevMonitor() : createNoopMonitor()
+  return isDevMode() ? createDevMonitor() : createNoopMonitor()
 }
 
 // Export for direct use in tests
