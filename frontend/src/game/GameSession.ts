@@ -180,12 +180,12 @@ export class GameSession {
     this.accumulator = 0
     this.prevPositions = null
 
-    // 9. Clean up dev panel
+    // 8. Clean up dev panel
     if (typeof window !== 'undefined' && isDevMode()) {
       delete (window as unknown as Record<string, unknown>).__devWorld
     }
 
-    // 10. Destroy renderer (last — GPU resources)
+    // 9. Destroy renderer (last — GPU resources)
     this.renderer.destroy()
   }
 

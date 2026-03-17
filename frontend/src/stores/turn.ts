@@ -246,7 +246,9 @@ export const useTurnStore = defineStore('turn', () => {
       }
     }
 
-    // Activate meeting scene when we reach the first meeting turn
+    // Activate meeting scene when we reach the first meeting turn.
+    // SPEECH_ONLY_ACTIONS includes both meeting_speech and meeting_vote,
+    // so activation triggers regardless of which arrives first in the queue.
     if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
       const socialStore = useSocialStore()
       if (socialStore.meeting && !socialStore.isMeetingActive) {
@@ -454,7 +456,7 @@ export const useTurnStore = defineStore('turn', () => {
    * Advances the matching thought phase once audio playback completes.
    */
   function notifyAudioComplete(turnId?: number) {
-    if (lifecycle) lifecycle.thoughtDismissReason = 'audio-complete'
+    if (lifecycle && !lifecycle.thoughtDismissReason) lifecycle.thoughtDismissReason = 'audio-complete'
     completeThoughtPhase(turnId)
   }
 
