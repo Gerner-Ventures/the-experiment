@@ -70,6 +70,9 @@ export class GameSession {
   private accumulator = 0
   private prevPositions: PrevPositions | null = null
 
+  // Observer cleanup functions returned by bitECS observe()
+  private observerCleanups: (() => void)[] = []
+
   // Session lifecycle
   private sessionId = 0
   private disposed = true
@@ -130,8 +133,9 @@ export class GameSession {
             getSystemBreakdown: () => this.perfMonitor.getSystemBreakdown(),
             exportLast: (n?: number) => this.perfMonitor.exportMetrics(n),
           },
-          getEntityCount: () => this.agentEntityMap.size,
-          getTileEntityCount: () => this.tileEntityMap.size,
+          getAgentCount: () => this.agentEntityMap.size,
+          getTileCount: () => this.tileEntityMap.size,
+          getEntityCount: () => this.agentEntityMap.size + this.tileEntityMap.size,
         }
       }
     } catch (err) {
@@ -151,33 +155,37 @@ export class GameSession {
     }
     this.demoTimers.clear()
 
-    // 2. Clear pending callbacks (prevents stale firings)
+    // 2. Clean up ECS observers (prevents world memory leaks)
+    this.observerCleanups.forEach(fn => fn())
+    this.observerCleanups = []
+
+    // 3. Clear pending callbacks (prevents stale firings)
     this.pendingCallbacks.clear()
 
-    // 3. Clear session-owned ECS data
+    // 4. Clear session-owned ECS data
     this.lastTileFrame.clear()
     this.pathData.clear()
     this.animRegistry.reset()
 
-    // 4. Destroy tile entities
+    // 5. Destroy tile entities
     this.destroyTileEntities()
 
-    // 5. Clear entity registries
+    // 6. Clear entity registries
     this.agentEntityMap.clear()
     this.agentIdTable.length = 0
 
-    // 6. Null ECS references
+    // 7. Null ECS references
     this.renderBridge = null
     this.world = null
     this.accumulator = 0
     this.prevPositions = null
 
-    // 7. Clean up dev panel
+    // 9. Clean up dev panel
     if (typeof window !== 'undefined' && isDevMode()) {
       delete (window as unknown as Record<string, unknown>).__devWorld
     }
 
-    // 8. Destroy renderer (last — GPU resources)
+    // 10. Destroy renderer (last — GPU resources)
     this.renderer.destroy()
   }
 
@@ -187,8 +195,9 @@ export class GameSession {
     this.world = createGameWorld()
 
     // Path complete → stop walk animation, fire callback
-    observe(this.world, onRemove(PathState), (eid: number) => {
+    this.observerCleanups.push(observe(this.world, onRemove(PathState), (eid: number) => {
       if (this.disposed) return
+      if (!hasComponent(this.world!, eid, AgentId)) return
       const idIndex = AgentId.idIndex[eid] as number
       const agentId = this.agentIdTable[idIndex]
       if (!agentId) return
@@ -203,11 +212,12 @@ export class GameSession {
         this.pendingCallbacks.delete(agentId + ':path')
         cb()
       }
-    })
+    }))
 
     // Animation complete → fire callback
-    observe(this.world, onRemove(AnimState), (eid: number) => {
+    this.observerCleanups.push(observe(this.world, onRemove(AnimState), (eid: number) => {
       if (this.disposed) return
+      if (!hasComponent(this.world!, eid, AgentId)) return
       const idIndex = AgentId.idIndex[eid] as number
       const agentId = this.agentIdTable[idIndex]
       if (!agentId) return
@@ -216,10 +226,10 @@ export class GameSession {
         this.pendingCallbacks.delete(agentId + ':anim')
         cb()
       }
-    })
+    }))
 
     // Path starts → auto-start walk animation
-    observe(this.world, onAdd(PathState), (eid: number) => {
+    this.observerCleanups.push(observe(this.world, onAdd(PathState), (eid: number) => {
       if (this.disposed || !this.world) return
       const walkAnim = getHDAnimation('walk')
       const animIdx = this.animRegistry.register(walkAnim)
@@ -228,18 +238,11 @@ export class GameSession {
       AnimState.elapsed[eid] = 0
       AnimState.loop[eid] = 1
       AnimState.animIndex[eid] = animIdx
-    })
+    }))
 
-    // StatusEffect lifecycle stubs
-    observe(this.world, onAdd(StatusEffect), (eid: number) => {
-      if (this.disposed) return
-      console.debug('[ECS] StatusEffect added to entity', eid)
-    })
-
-    observe(this.world, onRemove(StatusEffect), (eid: number) => {
-      if (this.disposed) return
-      console.debug('[ECS] StatusEffect removed from entity', eid)
-    })
+    // StatusEffect lifecycle — no-op observers (wired when visual effects are implemented)
+    this.observerCleanups.push(observe(this.world, onAdd(StatusEffect), () => {}))
+    this.observerCleanups.push(observe(this.world, onRemove(StatusEffect), () => {}))
   }
 
   // ─── Tick Loop ───
