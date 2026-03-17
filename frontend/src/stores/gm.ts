@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { GMPlan } from '@/types/gm'
+import type { GMPlan, NarrationAudioSnapshot } from '@/types/gm'
 import type { WSMessage, GMAudioStatusData, NarrationAudioStatus } from '@/types/websocket'
 
 export const useGMStore = defineStore('gm', () => {
@@ -20,6 +20,7 @@ export const useGMStore = defineStore('gm', () => {
   const audioAutoplayBlocked = ref(false)
   const isNarrationPlaying = ref(false)
   const queuedAudioStatus = ref<GMAudioStatusData | null>(null)
+  const dismissedNarrationKey = ref<string | null>(null)
 
   function resetAudioState(options?: { preserveQueuedStatus?: boolean }) {
     narrationAudioStatus.value = 'idle'
@@ -49,9 +50,34 @@ export const useGMStore = defineStore('gm', () => {
     narrationText.value = text
     narrationRound.value = round
     narrationId.value = nextNarrationId
-    showNarration.value = !!text
+    if (identityChanged) {
+      dismissedNarrationKey.value = null
+      showNarration.value = false
+    } else if (!text) {
+      showNarration.value = false
+    }
 
     return identityChanged
+  }
+
+  function currentNarrationKey() {
+    if (!narrationText.value || narrationRound.value === null) return null
+    return `${narrationRound.value}:${narrationId.value ?? 'fallback'}:${narrationText.value}`
+  }
+
+  function revealNarrationIfReady() {
+    if (!narrationText.value) {
+      showNarration.value = false
+      return
+    }
+    if (!['ready', 'unavailable', 'error'].includes(narrationAudioStatus.value)) {
+      return
+    }
+    const key = currentNarrationKey()
+    if (key && key === dismissedNarrationKey.value) {
+      return
+    }
+    showNarration.value = true
   }
 
   function applyAudioStatus(data: GMAudioStatusData) {
@@ -63,6 +89,7 @@ export const useGMStore = defineStore('gm', () => {
     narrationAudioUrl.value = data.status === 'ready' ? data.audio_url ?? null : null
     narrationAudioError.value = data.error ?? null
     queuedAudioStatus.value = null
+    revealNarrationIfReady()
     return true
   }
 
@@ -88,6 +115,7 @@ export const useGMStore = defineStore('gm', () => {
     const plan = (raw.plan as Record<string, unknown>) ?? raw
     const crisis = (plan.crisis_event as Record<string, unknown>) ?? {}
     const mods = (plan.resource_modifiers as Partial<GMPlan['resourceModifiers']>) ?? {}
+    const narrationAudio = (raw.narration_audio as NarrationAudioSnapshot | undefined) ?? null
     currentPlan.value = {
       round: (plan.round as number) ?? msg.round,
       roundTheme: (plan.round_theme as string) ?? '',
@@ -106,13 +134,27 @@ export const useGMStore = defineStore('gm', () => {
     planApproved.value = false
     showPlanPanel.value = true
 
+    if (narrationAudio) {
+      hydrateNarration(
+        currentPlan.value.narration,
+        currentPlan.value.round,
+        narrationAudio.narration_id,
+        narrationAudio.status,
+        narrationAudio.audio_url ?? null,
+        narrationAudio.error ?? null,
+      )
+      return
+    }
+
     setNarrationFallback(currentPlan.value.narration, currentPlan.value.round)
+    showNarration.value = !!currentPlan.value.narration
   }
 
   function onNarration(msg: WSMessage) {
     // Legacy handler — kept for backward compatibility
     const data = msg.data as { text: string }
     setNarrationFallback(data.text, msg.round)
+    showNarration.value = !!data.text
   }
 
   function onAudioStatus(msg: WSMessage<GMAudioStatusData>) {
@@ -126,6 +168,7 @@ export const useGMStore = defineStore('gm', () => {
         narrationAudioUrl.value = null
         narrationAudioError.value = null
       }
+      revealNarrationIfReady()
       return
     }
 
@@ -134,6 +177,9 @@ export const useGMStore = defineStore('gm', () => {
 
   function setNarrationFallback(text: string, round: number) {
     syncNarrationIdentity(text, round, null)
+    narrationAudioStatus.value = 'idle'
+    narrationAudioUrl.value = null
+    narrationAudioError.value = null
   }
 
   function hydrateNarration(
@@ -149,6 +195,7 @@ export const useGMStore = defineStore('gm', () => {
     narrationAudioUrl.value = audioUrl
     narrationAudioError.value = audioError
     reconcileQueuedAudioStatus()
+    revealNarrationIfReady()
   }
 
   function approvePlan() {
@@ -165,6 +212,7 @@ export const useGMStore = defineStore('gm', () => {
   }
 
   function dismissNarration() {
+    dismissedNarrationKey.value = currentNarrationKey()
     showNarration.value = false
     isNarrationPlaying.value = false
   }
@@ -177,6 +225,7 @@ export const useGMStore = defineStore('gm', () => {
     planApproved.value = false
     narrationRound.value = null
     narrationId.value = null
+    dismissedNarrationKey.value = null
     resetAudioState()
   }
 

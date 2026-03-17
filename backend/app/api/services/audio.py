@@ -17,6 +17,9 @@ from .runtime_support import AgentSpeechEntry, round_summary_data, string_value
 
 log = structlog.get_logger(__name__)
 
+AGENT_SPEECH_PREWARM_DELAY_SECONDS = 0.15
+AGENT_SPEECH_PREWARM_MAX_CONCURRENCY = 1
+
 
 class RuntimeAudioService:
     def __init__(
@@ -35,6 +38,12 @@ class RuntimeAudioService:
         self.tts_service = tts_service
         self.agent_speech_log = agent_speech_log
         self.message_builder = message_builder
+        # Shared throttle across all experiments on this runtime. Keeping agent
+        # speech prewarm globally bounded avoids provider-side concurrency limits.
+        # This is intentionally separate from the per-batch sequential loop below.
+        self._agent_speech_prewarm_semaphore = asyncio.Semaphore(
+            AGENT_SPEECH_PREWARM_MAX_CONCURRENCY
+        )
 
     async def get_narration_audio_metadata(
         self, experiment_id: str, round_number: int
@@ -82,6 +91,71 @@ class RuntimeAudioService:
             audio_url=audio_url,
             cache_hit=cache_hit,
         )
+
+    async def resolve_narration_audio_snapshot_for_plan(
+        self,
+        experiment_id: str,
+        gm_plan: GMPlanRecord,
+        *,
+        prewarm: bool = False,
+    ) -> dict[str, Any]:
+        if not gm_plan.plan.narration.strip():
+            return {
+                "status": "unavailable",
+                "narration_id": None,
+                "audio_url": None,
+                "error": None,
+            }
+        if self.tts_service is None or not self.tts_service.configured:
+            return {
+                "status": "unavailable",
+                "narration_id": None,
+                "audio_url": None,
+                "error": None,
+            }
+
+        request = await self._narration_audio_request(
+            experiment_id,
+            gm_plan.plan.round,
+            narration_text=gm_plan.plan.narration,
+        )
+        narration_id = self.tts_service.narration_id(request)
+        error: str | None = None
+        if prewarm:
+            try:
+                await self.tts_service.prewarm(request)
+            except NarrationAudioError as exc:
+                log.warning(
+                    "narration_audio_prewarm_failed",
+                    experiment_id=experiment_id,
+                    round_number=request.round_number,
+                    narration_hash=self.tts_service.cache_key(request),
+                    error=str(exc),
+                )
+                error = str(exc)
+
+        if error is not None:
+            return {
+                "status": "error",
+                "narration_id": narration_id,
+                "audio_url": None,
+                "error": error,
+            }
+
+        status, _ = await self.tts_service.get_status(request)
+        audio_url: str | None = None
+        if status == "ready":
+            audio_url = self.tts_service.build_audio_url(
+                experiment_id,
+                request.round_number,
+                narration_id=narration_id,
+            )
+        return {
+            "status": status,
+            "narration_id": narration_id,
+            "audio_url": audio_url,
+            "error": None,
+        }
 
     async def get_narration_audio_stream(
         self,
@@ -143,6 +217,7 @@ class RuntimeAudioService:
             round_number=round_number,
             text=entry["text"],
             character_id=entry["character_id"],
+            voice_id_override=entry.get("voice_id"),
         )
         status, cache_hit = await self.tts_service.get_status(request)
         audio_url: str | None = None
@@ -184,6 +259,7 @@ class RuntimeAudioService:
             round_number=round_number,
             text=entry["text"],
             character_id=entry["character_id"],
+            voice_id_override=entry.get("voice_id"),
         )
         result = await self.tts_service.stream(request)
         log.info(
@@ -244,61 +320,119 @@ class RuntimeAudioService:
             )
 
         async def _prewarm_one(entry: AgentSpeechEntry) -> None:
-            request = tts_service.build_speech_request(
-                experiment_id=experiment_id,
-                round_number=round_number,
-                text=entry["text"],
-                character_id=entry["character_id"],
-            )
-            try:
-                await tts_service.prewarm(request)
-                audio_url = tts_service.build_speech_audio_url(
-                    experiment_id, entry["agent_id"], round_number, entry["index"]
-                )
-                await self.connection_manager.broadcast(
-                    experiment_id,
-                    self.message_builder(
-                        "agent_speech_audio",
-                        round_number=round_number,
-                        phase=phase_result.phase,
-                        data={
-                            "agent_id": entry["agent_id"],
-                            "round": round_number,
-                            "index": entry["index"],
-                            "status": "ready",
-                            "audio_url": audio_url,
-                        },
-                    ),
-                )
-            except NarrationAudioError as exc:
-                log.warning(
-                    "agent_speech_audio_prewarm_failed",
+            async with self._agent_speech_prewarm_semaphore:
+                request = tts_service.build_speech_request(
                     experiment_id=experiment_id,
-                    agent_id=entry["agent_id"],
                     round_number=round_number,
-                    index=entry["index"],
-                    error=str(exc),
+                    text=entry["text"],
+                    character_id=entry["character_id"],
                 )
-                await self.connection_manager.broadcast(
-                    experiment_id,
-                    self.message_builder(
-                        "agent_speech_audio",
+                try:
+                    await tts_service.prewarm(request)
+                    entry["voice_id"] = request.voice_id
+                    audio_url = tts_service.build_speech_audio_url(
+                        experiment_id, entry["agent_id"], round_number, entry["index"]
+                    )
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self.message_builder(
+                            "agent_speech_audio",
+                            round_number=round_number,
+                            phase=phase_result.phase,
+                            data={
+                                "agent_id": entry["agent_id"],
+                                "round": round_number,
+                                "index": entry["index"],
+                                "status": "ready",
+                                "audio_url": audio_url,
+                            },
+                        ),
+                    )
+                except NarrationAudioError as exc:
+                    fallback_request = None
+                    if request.voice_id != tts_service.voice_id:
+                        fallback_request = tts_service.build_speech_request(
+                            experiment_id=experiment_id,
+                            round_number=round_number,
+                            text=entry["text"],
+                            character_id=entry["character_id"],
+                            voice_id_override=tts_service.voice_id,
+                        )
+                    if fallback_request is not None:
+                        log.warning(
+                            "agent_speech_audio_voice_fallback",
+                            experiment_id=experiment_id,
+                            agent_id=entry["agent_id"],
+                            round_number=round_number,
+                            index=entry["index"],
+                            failed_voice_id=request.voice_id,
+                            fallback_voice_id=fallback_request.voice_id,
+                            error=str(exc),
+                        )
+                        try:
+                            await tts_service.prewarm(fallback_request)
+                            entry["voice_id"] = fallback_request.voice_id
+                            audio_url = tts_service.build_speech_audio_url(
+                                experiment_id, entry["agent_id"], round_number, entry["index"]
+                            )
+                            await self.connection_manager.broadcast(
+                                experiment_id,
+                                self.message_builder(
+                                    "agent_speech_audio",
+                                    round_number=round_number,
+                                    phase=phase_result.phase,
+                                    data={
+                                        "agent_id": entry["agent_id"],
+                                        "round": round_number,
+                                        "index": entry["index"],
+                                        "status": "ready",
+                                        "audio_url": audio_url,
+                                    },
+                                ),
+                            )
+                            return
+                        except NarrationAudioError as fallback_exc:
+                            exc = fallback_exc
+
+                    log.warning(
+                        "agent_speech_audio_prewarm_failed",
+                        experiment_id=experiment_id,
+                        agent_id=entry["agent_id"],
                         round_number=round_number,
-                        phase=phase_result.phase,
-                        data={
-                            "agent_id": entry["agent_id"],
-                            "round": round_number,
-                            "index": entry["index"],
-                            "status": "error",
-                            "audio_url": None,
-                        },
-                    ),
-                )
+                        index=entry["index"],
+                        error=str(exc),
+                    )
+                    await self.connection_manager.broadcast(
+                        experiment_id,
+                        self.message_builder(
+                            "agent_speech_audio",
+                            round_number=round_number,
+                            phase=phase_result.phase,
+                            data={
+                                "agent_id": entry["agent_id"],
+                                "round": round_number,
+                                "index": entry["index"],
+                                "status": "error",
+                                "audio_url": None,
+                                "error": str(exc),
+                            },
+                        ),
+                    )
 
         async def _prewarm_all() -> None:
-            await asyncio.gather(
-                *[_prewarm_one(entry) for entry in entries_to_prewarm], return_exceptions=True
-            )
+            for idx, entry in enumerate(entries_to_prewarm):
+                try:
+                    await _prewarm_one(entry)
+                except Exception:
+                    log.exception(
+                        "agent_speech_audio_prewarm_unhandled",
+                        experiment_id=experiment_id,
+                        agent_id=entry["agent_id"],
+                        round_number=round_number,
+                        index=entry["index"],
+                    )
+                if idx < len(entries_to_prewarm) - 1:
+                    await asyncio.sleep(AGENT_SPEECH_PREWARM_DELAY_SECONDS)
 
         asyncio.create_task(_prewarm_all())
 

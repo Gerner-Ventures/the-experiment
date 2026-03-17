@@ -29,7 +29,8 @@ Transport choices:
 
 - narration text and audio metadata are served over REST
 - audio bytes are streamed over REST from the backend
-- websocket messages only carry readiness state via `gm_audio_status`
+- live `gm_plan` websocket messages include a narration-audio snapshot
+- websocket `gm_audio_status` remains available as a readiness update for live listeners
 
 This split is intentional:
 
@@ -40,6 +41,7 @@ This split is intentional:
 ```mermaid
 flowchart LR
     GM["Pending or Applied GM Plan<br/>narration text"] --> RT["ExperimentRuntime"]
+    RT --> PLAN["WebSocket<br/>gm_plan + narration_audio"]
     RT --> WS["WebSocket<br/>gm_audio_status"]
     RT --> META["GET /narration<br/>text + metadata"]
     RT --> TTS["NarrationTTSService"]
@@ -49,6 +51,7 @@ flowchart LR
     CACHE --> AUDIO["GET /narration/audio<br/>audio/mpeg stream"]
     TTS --> AUDIO
     META --> FE["Frontend narration UI"]
+    PLAN --> FE
     WS --> FE
     AUDIO --> FE
 ```
@@ -58,12 +61,14 @@ flowchart LR
 1. A pending GM plan is generated or revised, or an approved plan is applied.
 2. If the plan includes narration text, `ExperimentRuntime` builds a
    `NarrationAudioRequest`.
-3. The runtime immediately broadcasts `gm_audio_status` with `pending` or `ready`.
-4. A background prewarm task asks `NarrationTTSService` to fetch and cache the audio.
-5. The frontend can call:
+3. During live round start, the runtime prewarms narration audio before it broadcasts `gm_plan`.
+4. The `gm_plan` websocket payload includes a `narration_audio` snapshot with `status`,
+   `narration_id`, `audio_url`, and optional `error`.
+5. The runtime also broadcasts `gm_audio_status` for listeners that react to readiness updates.
+6. The frontend can call:
    - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration`
    - `GET /api/experiments/{experiment_id}/rounds/{round_number}/narration/audio?v=<narration_id>`
-6. If the audio is cached, the backend streams cached bytes. Otherwise it proxies the ElevenLabs
+7. If the audio is cached, the backend streams cached bytes. Otherwise it proxies the ElevenLabs
    stream, yields chunks to the client, and stores the completed audio in memory.
 
 Narration text resolution order:
@@ -100,6 +105,7 @@ That allows audio playback for both in-progress and already-completed rounds.
 `ExperimentRuntime` integrates audio into the round lifecycle:
 
 - prepares narration audio once a GM plan draft exists
+- prewarms narration audio before live round-start `gm_plan` broadcast when TTS is configured
 - emits `gm_audio_status`
 - serves narration metadata and audio streams through route handlers
 
@@ -184,13 +190,17 @@ The backend does not disable TLS verification.
 
 ## Websocket Contract
 
-`gm_audio_status` is additive to the existing GM and round messages.
+Live round-start narration state is available in two websocket places:
+
+- `gm_plan.data.narration_audio`: the snapshot the frontend should use for synchronized reveal
+- `gm_audio_status`: additive readiness updates for clients already subscribed to narration state
 
 Payload shape:
 
 - `pending`: `{ "status": "pending", "narration_id": "<id>" }`
 - `ready`: `{ "status": "ready", "narration_id": "<id>", "audio_url": "..." }`
 - `error`: `{ "status": "error", "narration_id": "<id>", "error": "..." }`
+- `unavailable` in `gm_plan.data.narration_audio`: `{ "status": "unavailable", "narration_id": null, "audio_url": null, "error": null }`
 
 The websocket never carries audio bytes.
 

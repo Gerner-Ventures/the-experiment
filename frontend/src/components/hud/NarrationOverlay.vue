@@ -17,6 +17,7 @@ const emit = defineEmits<{
   dismiss: []
   'update:playing': [value: boolean]
   'update:autoplayBlocked': [value: boolean]
+  'audio-error': []
 }>()
 
 const displayedText = ref('')
@@ -36,6 +37,7 @@ function onAudioEnded() {
 function onAudioError() {
   emit('update:playing', false)
   audioLoadFailed.value = true
+  emit('audio-error')
 }
 
 const audioEnded = ref(false)
@@ -101,6 +103,7 @@ function stopTypewriter() {
 
 function tryPlayAudio() {
   if (!props.audioUrl) return
+  audioLoadFailed.value = false
   stopAudio()
 
   audio = new Audio(props.audioUrl)

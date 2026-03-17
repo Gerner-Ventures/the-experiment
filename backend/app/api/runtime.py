@@ -103,6 +103,9 @@ class ExperimentRuntime:
         self._steps_in_progress: dict[str, bool] = {}
         self._current_tasks: dict[str, asyncio.Task[None]] = {}
         self._agent_speech_log: dict[str, list[AgentSpeechEntry]] = defaultdict(list)
+        # While a background step is in flight, narration/audio readers should
+        # prefer this mutable in-memory state over the persisted store.
+        self._live_states: dict[str, SimulationState] = {}
         self.event_log = RuntimeEventLogService(store=self.store)
         self.analytics = RuntimeAnalyticsService(
             store=self.store,
@@ -136,6 +139,7 @@ class ExperimentRuntime:
 
     async def aclose(self) -> None:
         self._agent_speech_log.clear()
+        self._live_states.clear()
         if self.tts_service is not None:
             await self.tts_service.aclose()
 
@@ -249,6 +253,9 @@ class ExperimentRuntime:
             return state
 
     async def get_state(self, experiment_id: str) -> SimulationState:
+        live = self._live_states.get(experiment_id)
+        if live is not None:
+            return live
         return await self.store.load_state(experiment_id)
 
     async def start(self, experiment_id: str) -> SimulationState:
@@ -412,10 +419,13 @@ class ExperimentRuntime:
         try:
             async with self.lock:
                 state = await self.get_state(experiment_id)
+                self._live_states[experiment_id] = state
                 intended_round = state.current_round + 1
                 round_result = await self._run_round_locked(experiment_id, state)
+                self._live_states.pop(experiment_id, None)
             await self.streaming.broadcast_round_end(experiment_id, round_result, state)
         except Exception:
+            self._live_states.pop(experiment_id, None)
             logger.exception("Background step failed for %s", experiment_id)
             try:
                 await self.connection_manager.broadcast(

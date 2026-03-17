@@ -133,6 +133,15 @@ class StreamingHook:
         cm = self._broadcaster.connection_manager
         msg = self._broadcaster.message_builder
         eid = self._experiment_id
+        narration_audio = (
+            await self._broadcaster.audio_service.resolve_narration_audio_snapshot_for_plan(
+                eid,
+                gm_plan,
+                prewarm=True,
+            )
+        )
+        gm_plan_payload = gm_plan.model_dump(mode="json")
+        gm_plan_payload["narration_audio"] = narration_audio
 
         await cm.broadcast(
             eid,
@@ -147,9 +156,28 @@ class StreamingHook:
             msg(
                 "gm_plan",
                 round_number=round_number,
-                data=gm_plan.model_dump(mode="json"),
+                data=gm_plan_payload,
             ),
         )
+        narration_id = narration_audio.get("narration_id")
+        if isinstance(narration_id, str) and narration_id:
+            audio_payload: dict[str, Any] = {
+                "status": narration_audio["status"],
+                "narration_id": narration_id,
+            }
+            if narration_audio.get("audio_url") is not None:
+                audio_payload["audio_url"] = narration_audio["audio_url"]
+            if narration_audio.get("error") is not None:
+                audio_payload["error"] = narration_audio["error"]
+            await cm.broadcast(
+                eid,
+                msg(
+                    "gm_audio_status",
+                    round_number=round_number,
+                    phase="gm_plan",
+                    data=audio_payload,
+                ),
+            )
         await cm.broadcast(
             eid,
             msg(
@@ -158,9 +186,6 @@ class StreamingHook:
                 phase="dawn",
                 data=gm_plan.plan.crisis_event.model_dump(mode="json"),
             ),
-        )
-        await self._broadcaster.audio_service.broadcast_narration_audio_status_for_plan(
-            eid, gm_plan
         )
 
     async def on_phase_start(self, round_number: int, phase: PhaseName) -> None:

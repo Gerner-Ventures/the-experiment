@@ -132,6 +132,33 @@ describe('Social store audio state tracking', () => {
     warn.mockRestore()
   })
 
+  it('reconciles queued audio when the matching conversation arrives later', () => {
+    const store = useSocialStore()
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+
+    store.onSpeechAudio({
+      type: 'agent_speech_audio',
+      round: 1,
+      timestamp: '2026-03-07T00:00:01Z',
+      data: {
+        agent_id: 'a1',
+        round: 1,
+        index: 0,
+        source: 'inner_thought',
+        status: 'ready',
+        audio_url: 'https://example.com/audio.mp3',
+      },
+    })
+
+    store.addConversation('a1', 'Alice', 'Hello', '', undefined, 1, 'inner_thought')
+
+    expect(store.conversations).toHaveLength(1)
+    expect(store.conversations[0].audioStatus).toBe('ready')
+    expect(store.conversations[0].audioUrl).toBe('https://example.com/audio.mp3')
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('onSpeechAudio matches correct entry by agent+round+index', () => {
     const store = useSocialStore()
     // Two messages from same agent in same round

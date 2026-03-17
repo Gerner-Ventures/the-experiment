@@ -144,6 +144,7 @@ describe('NarrationOverlay', () => {
     await wrapper.vm.$nextTick()
 
     expect(wrapper.text()).toContain('Audio unavailable')
+    expect(wrapper.emitted('audio-error')).toBeTruthy()
   })
 
   it('autoplays audio on mount when already ready (reconnect)', async () => {

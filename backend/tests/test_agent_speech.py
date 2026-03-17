@@ -47,6 +47,55 @@ class _FakeProvider:
         return None
 
 
+class _VoiceSelectiveProvider:
+    def __init__(self, failing_voice_id: str) -> None:
+        self.failing_voice_id = failing_voice_id
+        self.calls: list[str] = []
+
+    async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
+        self.calls.append(request.voice_id)
+        if request.voice_id == self.failing_voice_id:
+            raise NarrationAudioError("voice unavailable", status_code=502)
+
+        async def iterate() -> AsyncIterator[bytes]:
+            yield b"agent-audio"
+
+        return ProviderAudioStream(
+            content_type="audio/mpeg",
+            request_id=f"req-{request.round_number}",
+            stream=iterate(),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
+class _ConcurrencyLimitedProvider:
+    def __init__(self) -> None:
+        self.inflight = 0
+        self.max_inflight = 0
+
+    async def start_stream(self, request: NarrationAudioRequest) -> ProviderAudioStream:
+        self.inflight += 1
+        self.max_inflight = max(self.max_inflight, self.inflight)
+
+        async def iterate() -> AsyncIterator[bytes]:
+            try:
+                await asyncio.sleep(0.01)
+                yield b"agent-audio"
+            finally:
+                self.inflight -= 1
+
+        return ProviderAudioStream(
+            content_type="audio/mpeg",
+            request_id=f"req-{request.round_number}",
+            stream=iterate(),
+        )
+
+    async def aclose(self) -> None:
+        return None
+
+
 def _tts_service(provider: _FakeProvider | None = None) -> NarrationTTSService:
     return NarrationTTSService(
         Settings(
@@ -343,7 +392,7 @@ async def test_on_phase_complete_records_speech_entries_and_triggers_pregenerati
 
 
 @pytest.mark.asyncio
-async def test_pregeneration_handles_multiple_agents_concurrently() -> None:
+async def test_pregeneration_handles_multiple_agents() -> None:
     provider = _FakeProvider()
     runtime = ExperimentRuntime(
         store=InMemoryExperimentStore(),
@@ -387,7 +436,7 @@ async def test_pregeneration_handles_multiple_agents_concurrently() -> None:
     )
 
     await hook.on_phase_complete(1, phase_result)
-    await asyncio.sleep(0.1)
+    await asyncio.sleep(0.4)
 
     # Both agents should have speech entries
     entries = runtime._agent_speech_log[eid]
@@ -396,7 +445,7 @@ async def test_pregeneration_handles_multiple_agents_concurrently() -> None:
     assert agent1.agent_id in agent_ids
     assert agent2.agent_id in agent_ids
 
-    # Provider should have been called for both
+    # Provider should still be called for both, even though prewarm is serialized.
     assert provider.calls == 2
 
 
@@ -440,6 +489,106 @@ async def test_pregeneration_failure_does_not_block_round() -> None:
     payloads = [call.args[1] for call in runtime.connection_manager.broadcast.await_args_list]
     speech_audio_msgs = [p for p in payloads if p.get("type") == "agent_speech_audio"]
     assert any(m["data"]["status"] == "error" for m in speech_audio_msgs)
+
+
+@pytest.mark.asyncio
+async def test_pregeneration_falls_back_to_default_voice_when_character_voice_fails() -> None:
+    provider = _VoiceSelectiveProvider(failing_voice_id="TX3LPaxmHKxFdv7VOQHJ")
+    runtime = ExperimentRuntime(
+        store=InMemoryExperimentStore(),
+        tts_service=_tts_service(provider),
+    )
+    runtime.connection_manager.broadcast = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
+
+    state = await runtime.create_experiment(_request())
+    eid = state.experiment_id
+    agent = state.agents[0]
+    agent.character_id = "intern"
+    await runtime.store.save_state(state)
+
+    hook = runtime.streaming.build_hook(eid)
+    phase_result = PhaseResult(
+        phase="morning",
+        events=[
+            RoundEvent(
+                phase="morning",
+                summary="Mara speaks.",
+                data={
+                    "kind": "agent_speak",
+                    "agent_id": agent.agent_id,
+                    "agent_name": agent.name,
+                    "target": "all",
+                    "message": "Fallback voice should work.",
+                },
+            ),
+        ],
+    )
+
+    await hook.on_phase_complete(1, phase_result)
+    await asyncio.sleep(0.1)
+
+    assert provider.calls[0] == "TX3LPaxmHKxFdv7VOQHJ"
+    assert provider.calls[1] == "voice-default"
+    assert runtime._agent_speech_log[eid][0]["voice_id"] == "voice-default"
+
+    payloads = [call.args[1] for call in runtime.connection_manager.broadcast.await_args_list]
+    ready_msgs = [
+        p
+        for p in payloads
+        if p.get("type") == "agent_speech_audio" and p.get("data", {}).get("status") == "ready"
+    ]
+    assert ready_msgs
+
+
+@pytest.mark.asyncio
+async def test_pregeneration_serializes_agent_speech_prewarm_requests() -> None:
+    provider = _ConcurrencyLimitedProvider()
+    runtime = ExperimentRuntime(
+        store=InMemoryExperimentStore(),
+        tts_service=_tts_service(provider),
+    )
+    runtime.connection_manager.broadcast = AsyncMock()
+    runtime.audio.broadcast_narration_audio_status_for_plan = AsyncMock()
+
+    state = await runtime.create_experiment(_request())
+    eid = state.experiment_id
+    agent1 = state.agents[0]
+    agent2 = state.agents[1]
+
+    hook = runtime.streaming.build_hook(eid)
+    phase_result = PhaseResult(
+        phase="morning",
+        events=[
+            RoundEvent(
+                phase="morning",
+                summary="Mara speaks.",
+                data={
+                    "kind": "agent_speak",
+                    "agent_id": agent1.agent_id,
+                    "agent_name": agent1.name,
+                    "target": "all",
+                    "message": "First line.",
+                },
+            ),
+            RoundEvent(
+                phase="morning",
+                summary="Jon speaks.",
+                data={
+                    "kind": "agent_speak",
+                    "agent_id": agent2.agent_id,
+                    "agent_name": agent2.name,
+                    "target": "all",
+                    "message": "Second line.",
+                },
+            ),
+        ],
+    )
+
+    await hook.on_phase_complete(1, phase_result)
+    await asyncio.sleep(0.4)
+
+    assert provider.max_inflight == 1
 
 
 # ---------- Task 4: WS agent_speech_audio messages ----------
