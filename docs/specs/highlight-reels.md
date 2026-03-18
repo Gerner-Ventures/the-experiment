@@ -29,6 +29,7 @@ Curated highlight reels at the end of each round and game, showcasing the most d
 - [x] Selection accounts for variety
 
 ## Frontend: Round Highlight Reel
+<!-- canon:system:2 status:todo -->
 
 - New: `components/highlights/RoundHighlights.vue`
 - Overlay/modal at end of each round (after Night phase)
@@ -43,6 +44,7 @@ Curated highlight reels at the end of each round and game, showcasing the most d
 - [ ] Can be disabled in config
 
 ## Frontend: Game Highlight Reel
+<!-- canon:system:3 status:todo -->
 
 - Integrate into `ReportView.vue` (S1.8)
 - Chronological/ranked display of top moments

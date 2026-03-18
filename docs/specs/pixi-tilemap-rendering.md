@@ -23,15 +23,20 @@ This spec should be picked up when **any** of these become true:
 - The isometric-aesthetics spec adds enough per-tile detail to strain the current approach
 
 ## 1. Install and integrate @pixi/tilemap v5
+<!-- canon:system:1 status:done -->
 
 Replace the procedural ground-layer rendering in `IsometricMap.ts` with `@pixi/tilemap`'s `CompositeTilemap`.
 
 ### Acceptance Criteria
 
-- [ ] `@pixi/tilemap` v5.x is added as a dependency
-- [ ] `CompositeTilemap` replaces the current `Graphics`-based ground tile loop in `IsometricMap.ts`
-- [ ] Tile textures are loaded from a sprite sheet atlas (one per theme)
-- [ ] Existing theme-specific tile coloring (grass, path, building, fence, field) is preserved via theme-specific tile atlas frames
+- [x] `@pixi/tilemap` v5.x is added as a dependency
+<!-- canon:realized-in:audit file:frontend/package.json -->
+- [x] `CompositeTilemap` replaces the current `Graphics`-based ground tile loop in `IsometricMap.ts`
+<!-- canon:realized-in:audit file:frontend/src/components/world/pixi/IsometricMap.ts:71-94 -->
+- [x] Tile textures are loaded from a sprite sheet atlas (one per theme)
+<!-- canon:realized-in:audit file:frontend/src/components/world/pixi/IsometricMap.ts:66 -->
+- [x] Existing theme-specific tile coloring (grass, path, building, fence, field) is preserved via theme-specific tile atlas frames
+<!-- canon:realized-in:audit file:frontend/src/components/world/pixi/IsometricMap.ts -->
 
 ## 2. Tile atlas pipeline
 

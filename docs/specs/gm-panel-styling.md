@@ -96,7 +96,7 @@ Restructure the panel to create clear visual hierarchy that helps players quickl
 - [ ] Approve button uses AutoCountdownButton with 5s countdown, auto-firing when panel is visible. Dismiss button remains standard ghost button.
 
 ## 5. Validate Across Themes
-<!-- canon:system:5 status:in_progress -->
+<!-- canon:system:5 status:done -->
 
 Ensure the panel renders correctly regardless of system or Ant Design theme settings.
 

@@ -1,6 +1,7 @@
 ---
 title: "CI Coverage Gating with diff-cover"
 status: in_progress
+# NOTE: Sections 1-4 done; §5 (dev experience) and §6 (gap analysis) remain
 priority: P1
 tags: [ci, testing, coverage, infrastructure]
 depends_on: []

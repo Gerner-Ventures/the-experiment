@@ -1,6 +1,7 @@
 ---
 title: "[P2] Entity Component System with bitECS"
 status: in_progress
+# NOTE: Sections 1-5 are done; only §6 (serialization) remains
 priority: P2
 tags: [stream-1, frontend, architecture, ecs, agents]
 depends_on: [S1.3-isometric-world, s1.4-agent-rendering]

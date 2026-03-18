@@ -1,3 +1,9 @@
+---
+title: "Action → Animation Mapping"
+status: in_progress
+tags: [stream-1, frontend, animation, sprites]
+---
+
 # Action → Animation Mapping
 
 > **Superseded by**: `hd-sprite-system.md` Section 4 contains the updated 1:1 action→animation map

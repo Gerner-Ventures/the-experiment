@@ -1,6 +1,6 @@
 ---
 title: "[P2] Bug: Arc timeline doesn't recalculate when round count changes"
-status: todo
+status: in_progress
 issue: 43
 priority: P2
 tags: [stream-1, frontend, bug, arc-timeline]
