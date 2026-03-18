@@ -14,6 +14,7 @@ updated: "2026-03-16"
 # ECS TypedArray Migration
 
 ## 1. Background
+<!-- canon:system:1 status:done -->
 
 Every review of PR #201 (claude[bot], njgerner, ecosystem analysis) flagged the same issue: the bitECS foundation spec calls for "SoA layout for cache-friendly iteration," but all 13 components use plain JS arrays (`[] as number[]`) instead of TypedArrays (`Types.f32`, `Types.ui8`, `Types.ui32`). This undermines the cache-friendly iteration that motivates bitECS adoption.
 
@@ -22,6 +23,7 @@ bitECS supports TypedArray-backed components natively. When a component field us
 This is foundation debt, not feature work. It should be resolved before building Phases 2-7 on top of the current component definitions.
 
 ## 2. Current State
+<!-- canon:system:2 status:done -->
 
 All 13 components in `frontend/src/ecs/components.ts` use `[] as number[]`:
 
@@ -42,6 +44,7 @@ All 13 components in `frontend/src/ecs/components.ts` use `[] as number[]`:
 | LocationIndex | locationIndex | Integer value |
 
 ## 3. Type Mapping
+<!-- canon:system:3 status:todo -->
 
 Each field maps to the most appropriate TypedArray backing:
 
@@ -52,6 +55,7 @@ Each field maps to the most appropriate TypedArray backing:
 | `Types.ui8` | Boolean flags, small enums (0-255) | PathState.moving/paused/hasTarget, AnimationState.loop/playing, TileEntity.tileType |
 
 ## 4. Migration Approach
+<!-- canon:system:4 status:todo -->
 
 Migrate component-by-component, updating tests after each component:
 
@@ -72,6 +76,7 @@ Each step:
 3. Verify no behavioral changes
 
 ## 5. Benchmark
+<!-- canon:system:5 status:todo -->
 
 Before/after benchmark at 50, 150, and 500 entities:
 
@@ -88,6 +93,7 @@ Before/after benchmark at 50, 150, and 500 entities:
 **Expected outcome:** At 150 entities, improvement may be marginal. The value is architectural correctness and scaling to 500+ entities.
 
 ## 6. Test Impact
+<!-- canon:system:6 status:todo -->
 
 - Type assertion tests (e.g., `expect(Position.x[eid]).toBe(...)`) should work unchanged — TypedArrays support index access
 - Tests comparing with `===` against float values may need tolerance (`toBeCloseTo`) if they don't already

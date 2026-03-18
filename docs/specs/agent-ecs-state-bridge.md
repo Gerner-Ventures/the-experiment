@@ -14,6 +14,7 @@ updated: "2026-03-16"
 # Agent ECS State Bridge
 
 ## 1. Background
+<!-- canon:system:1 status:done -->
 
 The ECS foundation (PR #201) defined stub components for agent state — Mood, Social, Inventory, TaskAssignment — but they are not wired to any data source. This spec covers wiring these stubs to actual backend agent state via new WebSocket message types.
 
@@ -22,6 +23,7 @@ This is distinct from the GM crisis → fire/weather bridge, which is already sp
 **Blocked on:** Backend Stream 2 being active (S2.4 Agent System, S2.8 WebSocket Layer).
 
 ## 2. New WebSocket Message Types
+<!-- canon:system:2 status:todo -->
 
 Three new message types to add to `shared/schemas/ws_message.json`:
 
@@ -67,6 +69,7 @@ Three new message types to add to `shared/schemas/ws_message.json`:
 **Emitted:** After resource actions (gather, trade, hoard) resolve in the afternoon action phase.
 
 ## 3. Schema Additions
+<!-- canon:system:3 status:todo -->
 
 Extend the `type` enum in `shared/schemas/ws_message.json` to include:
 - `agent_mood_update`
@@ -76,6 +79,7 @@ Extend the `type` enum in `shared/schemas/ws_message.json` to include:
 Both frontend and backend generate types from this shared schema, so the enum extension propagates to both.
 
 ## 4. Backend Emission Points
+<!-- canon:system:4 status:todo -->
 
 | Message | Lifecycle Point | Backend Module |
 |---------|----------------|----------------|
@@ -86,6 +90,7 @@ Both frontend and backend generate types from this shared schema, so the enum ex
 Each emission broadcasts to all connected WebSocket clients for the experiment.
 
 ## 5. Frontend Routing
+<!-- canon:system:5 status:todo -->
 
 ```
 WebSocket message
@@ -108,6 +113,7 @@ syncAgentInventory(agentId: string, itemCount: number): void
 Each method looks up the entity ID from the agent ID mapping and writes to the corresponding ECS component fields.
 
 ## 6. Visual Effects
+<!-- canon:system:6 status:todo -->
 
 ECS systems read the stub component values and apply visual effects during renderSync:
 
@@ -121,6 +127,7 @@ ECS systems read the stub component values and apply visual effects during rende
 These effects are additive — they layer on top of existing animation and rendering without replacing it.
 
 ## 7. Dual-Truth Rules
+<!-- canon:system:7 status:todo -->
 
 Pinia stores remain the authoritative source of agent state. ECS components are write-only mirrors used exclusively for rendering:
 

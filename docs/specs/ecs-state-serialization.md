@@ -14,12 +14,14 @@ updated: "2026-03-16"
 # ECS State Serialization
 
 ## 1. Background
+<!-- canon:system:1 status:done -->
 
 Section 6 of `bitecs-entity-component-system.md` defines four acceptance criteria for state serialization but has no implementation plan. PR #201 introduced session-owned state (pathData Maps, AnimationRegistry, lastTileFrame Map) that lives outside bitECS's component store, complicating serialization beyond bitECS's built-in `serialize`/`deserialize` API.
 
 TypedArray migration (see `ecs-typed-array-migration.md`) is recommended before this work because TypedArrays serialize more cleanly to ArrayBuffer/JSON than plain JS arrays.
 
 ## 2. What Gets Serialized
+<!-- canon:system:2 status:todo -->
 
 ### ECS Component Data
 All component data for all entities, via bitECS `serialize()`:
@@ -39,6 +41,7 @@ Maps and registries owned by the GameSession that are not stored in bitECS compo
 - Entity-to-component membership (which entities have which components)
 
 ## 3. What Gets Excluded
+<!-- canon:system:3 status:todo -->
 
 - `SpriteRef` component — rendering-only, rebuilt on restore from entity→sprite mapping
 - RenderBridge runtime state — PixiJS objects, sprite pools, container references
@@ -46,6 +49,7 @@ Maps and registries owned by the GameSession that are not stored in bitECS compo
 - Performance monitor accumulators — transient diagnostic data
 
 ## 4. bitECS Serialize/Deserialize API
+<!-- canon:system:4 status:todo -->
 
 ```typescript
 import { serialize, deserialize } from 'bitecs'
@@ -68,6 +72,7 @@ Key considerations:
 - After `deserialize()`, queries automatically pick up restored entities
 
 ## 5. Custom Serialization for Session-Owned State
+<!-- canon:system:5 status:todo -->
 
 Session-owned Maps must be serialized separately since they live outside bitECS:
 
@@ -89,6 +94,7 @@ interface SessionSnapshot {
 `SerializedPathData` flattens the path waypoints to a JSON-safe format (array of `{x, y}` pairs + current index).
 
 ## 6. Restore Flow
+<!-- canon:system:6 status:todo -->
 
 1. **Deserialize bitECS components** — `deserialize(world, components, buffers)` for each component
 2. **Restore session Maps** — rebuild `pathDataMap`, `animRegistry`, `lastTileFrame` from snapshot
@@ -98,6 +104,7 @@ interface SessionSnapshot {
 Order matters: components must be restored before renderer bindings (which read Position to place sprites).
 
 ## 7. Use Cases
+<!-- canon:system:7 status:todo -->
 
 ### Reconnect Without Refresh
 - User's WebSocket disconnects (network blip, tab sleep)
