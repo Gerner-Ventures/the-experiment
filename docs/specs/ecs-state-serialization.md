@@ -2,6 +2,7 @@
 title: "ECS State Serialization"
 type: spec
 status: todo
+issue: 205
 owner: ""
 team: "frontend"
 review_status: draft

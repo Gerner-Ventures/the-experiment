@@ -2,6 +2,7 @@
 title: "Agent ECS State Bridge"
 type: spec
 status: todo
+issue: 206
 owner: ""
 team: "frontend, backend"
 review_status: draft

@@ -2,6 +2,7 @@
 title: "ECS TypedArray Migration"
 type: spec
 status: todo
+issue: 207
 owner: ""
 team: "frontend"
 review_status: draft
