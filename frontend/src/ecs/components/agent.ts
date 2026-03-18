@@ -1,17 +1,6 @@
 /**
- * ECS Components — SoA (Structure of Arrays) component definitions.
- *
- * bitECS 0.4 components are plain objects whose values are arrays.
- * Entity data is accessed as Component.field[entityId].
- * We use standard JS arrays (bitECS populates them at runtime).
+ * Agent Components — identity, position, movement, animation, status.
  */
-
-import {
-  createRelation,
-  withAutoRemoveSubject,
-  withStore,
-  makeExclusive,
-} from 'bitecs'
 
 // ─── Core Simulation Components ───
 
@@ -66,42 +55,6 @@ export const StatusEffect = {
   intensity: [] as number[],
   remaining: [] as number[],
 }
-
-// ─── Stub Components (defined, not wired — future use) ───
-
-export const Mood = {
-  happiness: [] as number[],
-  fear: [] as number[],
-  anger: [] as number[],
-}
-
-export const Social = {
-  influence: [] as number[],
-  suspicion: [] as number[],
-}
-
-export const Inventory = {
-  itemCount: [] as number[],
-}
-
-export const TaskAssignment = {
-  taskIndex: [] as number[],
-  progress: [] as number[],
-}
-
-// ─── Relations ───
-
-/** Consequence → aggressor link. Auto-removes if aggressor entity is destroyed. */
-export const CausedBy = createRelation(withAutoRemoveSubject)
-
-/** Aggressor → victim. Exclusive: one target per action at a time. */
-export const Targets = createRelation(makeExclusive)
-
-/** Social trust relationship with data store. */
-export const Trusts = createRelation(withStore(() => ({ level: 0.5 })))
-
-/** Agent → location entity. Exclusive: one location at a time. */
-export const LocatedAt = createRelation(makeExclusive)
 
 // ─── Status Effect Types ───
 

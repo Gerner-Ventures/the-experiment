@@ -7,11 +7,12 @@
  * This is the child composable — useGameWorld (parent) drives it.
  */
 
-import { Application, Container } from 'pixi.js'
+import { Application, Container, Sprite, Texture, Rectangle } from 'pixi.js'
 import type { MapTheme, MapData } from '@/types/world'
 import type { CharacterSprite } from '@/config/character-sprites'
 import type { RoundPhase } from '@/types/websocket'
 import { IsometricMap, tileToScreen } from '@/components/world/pixi/IsometricMap'
+import type { ThemeAtlas } from '@/components/world/pixi/tile-atlas'
 import { CameraController } from '@/components/world/pixi/CameraController'
 import { AgentSpriteObject } from '@/components/world/pixi/AgentSprite'
 import { AmbientOverlay } from '@/components/world/pixi/AmbientOverlay'
@@ -47,6 +48,13 @@ export interface UseRenderer {
   setPhase(phase: RoundPhase): void
   startDemoCycle(): void
 
+  /** Create a tile sprite in the dynamic tile layer, returns pool index */
+  createTileSprite(tileX: number, tileY: number, frameKey: string): number
+  /** Remove a tile sprite by its pool index */
+  removeTileSprite(poolIndex: number): void
+  /** Remove all tile sprites */
+  removeAllTileSprites(): void
+
   /** Get the render bridge for renderSyncSystem */
   getRenderBridge(): RenderBridge
 
@@ -69,9 +77,21 @@ export function useRenderer(): UseRenderer {
   let resizeObserver: ResizeObserver | null = null
   let tickCallbacks: ((dt: number) => void)[] = []
 
-  // Sprite pool: indexed array + ID lookup
+  // Agent sprite pool: indexed array + ID lookup
   const spritePool: AgentSpriteObject[] = []
   const spriteIdMap = new Map<string, number>() // agentId → pool index
+
+  // Tile sprite pool: for ECS-driven dynamic tiles (water, hazards)
+  const tileSpritePool: (Sprite | null)[] = []
+  // Free-list of available tile sprite pool indices (O(1) allocation)
+  const tileFreeList: number[] = []
+  // Batched tile update queue: [poolIndex, frameKey] pairs flushed once per frame
+  const pendingTileUpdates: { index: number; frameKey: string }[] = []
+  // Cached sub-textures by frame key — avoids allocating new Texture objects every frame
+  const tileTextureCache = new Map<string, Texture>()
+
+  /** Pixel offset for tile stroke overflow padding */
+  const TILE_STROKE_PAD = 1
 
   async function mount(container: HTMLElement): Promise<void> {
     app = new Application()
@@ -112,7 +132,10 @@ export function useRenderer(): UseRenderer {
   }
 
   function loadMap(theme: MapTheme, mapData: MapData) {
-    if (!worldContainer || !app || !canvasEl) return
+    if (!worldContainer || !app || !canvasEl) {
+      console.warn('[Renderer] loadMap() called before mount — skipping')
+      return
+    }
 
     // Clean previous
     if (isoMap) {
@@ -144,7 +167,7 @@ export function useRenderer(): UseRenderer {
     worldContainer.addChild(ambientOverlay.container)
 
     camera = new CameraController(worldContainer, canvasEl, w, h)
-    camera.setZoom(1.0)
+    camera.setZoom(0.6)
 
     if (theme.dayNight?.enabled) {
       const palette = getThemePalette(theme.id)
@@ -198,12 +221,84 @@ export function useRenderer(): UseRenderer {
     spriteIdMap.delete(id)
   }
 
+  /** Get or create a cached sub-texture from the tile atlas */
+  function getOrCreateTileTexture(atlas: ThemeAtlas, frameKey: string): Texture | undefined {
+    let tex = tileTextureCache.get(frameKey)
+    if (!tex) {
+      const frame = atlas.frames.get(frameKey)
+      if (!frame) return undefined
+      tex = new Texture({
+        source: atlas.texture.source,
+        frame: new Rectangle(frame.x, frame.y, frame.w, frame.h),
+      })
+      tileTextureCache.set(frameKey, tex)
+    }
+    return tex
+  }
+
+  function createTileSprite(tileX: number, tileY: number, frameKey: string): number {
+    if (!isoMap) return -1
+    const dynamicLayer = isoMap.getDynamicTileLayer()
+    const atlas = isoMap.getAtlas()
+    if (!dynamicLayer || !atlas) return -1
+
+    const subTex = getOrCreateTileTexture(atlas, frameKey)
+    if (!subTex) return -1
+
+    const sprite = new Sprite(subTex)
+    const screen = tileToScreen(tileX, tileY)
+    sprite.x = screen.x - subTex.frame.width / 2
+    sprite.y = screen.y - (subTex.frame.height / 2) - TILE_STROKE_PAD
+    sprite.zIndex = tileY * 100 + tileX
+    dynamicLayer.addChild(sprite)
+
+    // O(1) allocation from free-list, or append
+    let index: number
+    if (tileFreeList.length > 0) {
+      index = tileFreeList.pop()!
+      tileSpritePool[index] = sprite
+    } else {
+      index = tileSpritePool.length
+      tileSpritePool.push(sprite)
+    }
+    return index
+  }
+
+  function removeTileSprite(poolIndex: number): void {
+    const sprite = tileSpritePool[poolIndex]
+    if (!sprite) return
+    sprite.removeFromParent()
+    sprite.destroy()
+    tileSpritePool[poolIndex] = null
+    tileFreeList.push(poolIndex)
+  }
+
+  function removeAllTileSprites(): void {
+    for (let i = 0; i < tileSpritePool.length; i++) {
+      const sprite = tileSpritePool[i]
+      if (sprite) {
+        sprite.removeFromParent()
+        sprite.destroy()
+      }
+    }
+    tileSpritePool.length = 0
+    tileFreeList.length = 0
+    pendingTileUpdates.length = 0
+    for (const tex of tileTextureCache.values()) {
+      tex.destroy()
+    }
+    tileTextureCache.clear()
+  }
+
   function onTick(callback: (dt: number) => void) {
     tickCallbacks.push(callback)
   }
 
   function centerOn(tileX: number, tileY: number) {
-    if (!camera) return
+    if (!camera) {
+      console.warn('[Renderer] centerOn() called before camera initialized')
+      return
+    }
     const screen = tileToScreen(tileX, tileY)
     camera.centerOn(screen.x, screen.y)
   }
@@ -261,6 +356,26 @@ export function useRenderer(): UseRenderer {
         if (!sprite) return
         sprite.setPose(pose)
       },
+      queueTileUpdate(tileSpriteIndex: number, frameKey: string) {
+        pendingTileUpdates.push({ index: tileSpriteIndex, frameKey })
+      },
+      flushTileUpdates() {
+        if (pendingTileUpdates.length === 0) return
+        const atlas = isoMap?.getAtlas()
+        if (!atlas) {
+          pendingTileUpdates.length = 0
+          return
+        }
+
+        for (const { index, frameKey } of pendingTileUpdates) {
+          const sprite = tileSpritePool[index]
+          if (!sprite) continue
+
+          const tex = getOrCreateTileTexture(atlas, frameKey)
+          if (tex) sprite.texture = tex
+        }
+        pendingTileUpdates.length = 0
+      },
     }
   }
 
@@ -269,8 +384,10 @@ export function useRenderer(): UseRenderer {
   }
 
   function destroy() {
+    removeAllTileSprites()
+
     for (const sprite of spritePool) {
-      sprite.destroy()
+      if (sprite) sprite.destroy()
     }
     spritePool.length = 0
     spriteIdMap.clear()
@@ -327,6 +444,9 @@ export function useRenderer(): UseRenderer {
     getAgentScreenPosition,
     setPhase,
     startDemoCycle,
+    createTileSprite,
+    removeTileSprite,
+    removeAllTileSprites,
     getRenderBridge,
     getIsoMap,
     updateVisuals,

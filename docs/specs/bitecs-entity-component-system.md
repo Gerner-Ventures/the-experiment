@@ -96,7 +96,8 @@ Refactor the current class-based agents to use ECS entities with the component/s
 <!-- canon:realized-in: file:frontend/src/composables/useRenderer.ts lines 164-168 -->
 - [x] Demo random behavior works identically to current implementation
 <!-- canon:realized-in: file:frontend/src/composables/useGameWorld.ts func:startDemo/startDemoCycle -->
-- [ ] `AgentSpriteObject` class is removed or reduced to a thin sprite-only wrapper
+- [x] `AgentSpriteObject` class is removed or reduced to a thin sprite-only wrapper
+<!-- canon:realized-in: file:frontend/src/components/world/pixi/AgentSprite.ts reduced from 357 to 147 lines, all movement/animation/demo code removed -->
 
 ## 5. Future-ready component slots
 

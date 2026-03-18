@@ -254,3 +254,35 @@ app.stage
 - **Demo mode.** Auto-cycles through dawn→morning→midday→afternoon→night every 10s via ticker timer.
 
 **Files:** `config/day-night-palettes.ts` (data), `pixi/DayNightCycle.ts` (renderer), `composables/usePixiWorld.ts` (bridge), `views/SimulationView.vue` (watcher).
+
+---
+
+## 7. State Ownership — Pinia vs ECS vs PixiJS
+
+**Decision:** Three distinct state domains with a one-directional bridge.
+
+| Domain | Owns | Examples |
+|--------|------|----------|
+| **Pinia stores** | Episodic game state driven by backend | Agent identity, personality, relationships, inventory, suspicion, resources, turn sequencing, experiment config |
+| **ECS (bitECS)** | Per-frame simulation state | Position interpolation, animation frames, water tile animation, path progress; future: buildings, weather, hazards |
+| **PixiJS (useRenderer)** | GPU resources and display tree | Sprite objects, tilemap, camera, ambient overlay, day/night cycle, tile atlas textures |
+
+**Bridge rules:**
+- `GameSession` is the one-directional bridge: Pinia → ECS. Stores push state into the ECS world via `spawnAgent()`, `moveAgentAlongPath()`, `playAction()`, etc.
+- Callbacks flow back as **timing signals only** (e.g., "movement complete", "animation done"), never state. The callback tells the turn store to advance, not what position the agent is at.
+- `renderSyncSystem` is the ECS → PixiJS bridge, operating through the `RenderBridge` interface. It pushes position, animation pose, and tile texture state into the renderer each frame.
+- PixiJS never reads Pinia stores. ECS systems never import Vue.
+
+**GameSession lifecycle:**
+- `GameSession` owns all non-Vue state: bitECS world, entity registries, pending callbacks, tile frame tracking, performance monitor, fixed-timestep accumulator.
+- `useGameWorld()` is a thin Vue composable wrapper that delegates to `GameSession`, preserving the public API.
+- Session token pattern: every async callback captures `sessionId` at creation. Before executing, it checks `isActive`. If the session has been disposed, the callback is silently discarded.
+- `dispose()` tears down in deterministic order: stop timers → clear callbacks → destroy entities → destroy renderer → null references.
+
+**Stub components** (Mood, Social, Inventory) are defined in ECS for future use as rendering hooks — e.g., angry sprite tint from Mood data. Pinia remains the authoritative source for these values; the ECS components are write-targets for visual effects, not state of record.
+
+**Guidance for Phases 2-7:**
+- `BuildingState` → ECS component (tiles with visual state changes)
+- `WeatherData` → plain object in GameSession (drives ambient overlay, not per-entity)
+- `HazardState` → ECS component (per-tile hazard state with visual effects)
+- Domain-specific bridges (BuildingBridge, WeatherBridge) should be built when those systems are implemented, following the same `RenderBridge` pattern.

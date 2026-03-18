@@ -4,6 +4,7 @@ import type { MapData, MapTheme, TileDef } from '@/types/world'
 import { BuildingRenderer } from './BuildingRenderer'
 import { TILE_W, TILE_H, tileToScreen } from './isometric-utils'
 import { buildThemeAtlas, type ThemeAtlas } from './tile-atlas'
+import { THEME_IDS, CODE_RIVER_COLUMN_X } from './map-themes'
 
 export { tileToScreen, screenToTile } from './isometric-utils'
 
@@ -20,6 +21,13 @@ function drawDiamond(g: Graphics, x: number, y: number, fill: string, stroke: st
   g.stroke({ color: stroke, width: 1, alpha: 0.3 })
 }
 
+/** Water tile position returned by getWaterPositions() */
+export interface WaterTilePosition {
+  x: number
+  y: number
+  variant: 'ocean' | 'code_river'
+}
+
 export class IsometricMap {
   container: Container
   private tileGrid: (TileDef | null)[][] = []
@@ -27,6 +35,8 @@ export class IsometricMap {
   private mapHeight = 0
   private buildingRenderer: BuildingRenderer
   private atlas: ThemeAtlas | null = null
+  private dynamicTileLayer: Container | null = null
+  private currentThemeId: string = ''
 
   constructor() {
     this.container = new Container()
@@ -36,8 +46,10 @@ export class IsometricMap {
 
   load(mapData: MapData, theme: MapTheme) {
     this.container.removeChildren()
+    this.dynamicTileLayer = null
     this.mapWidth = mapData.width
     this.mapHeight = mapData.height
+    this.currentThemeId = theme.id
 
     // Build 2D grid for lookups
     this.tileGrid = Array.from({ length: this.mapHeight }, () =>
@@ -65,7 +77,10 @@ export class IsometricMap {
         const screen = tileToScreen(x, y)
         const frameKey = this.resolveFrameKey(tile, theme)
         const frame = this.atlas.frames.get(frameKey)
-        if (!frame) continue
+        if (!frame) {
+          console.warn(`[IsometricMap] Missing atlas frame "${frameKey}" at tile (${x},${y}) — tile will be invisible`)
+          continue
+        }
 
         // Create a sub-texture from the atlas for this frame
         const subTex = new Texture({
@@ -80,6 +95,12 @@ export class IsometricMap {
 
     groundLayer.addChild(tilemap)
     this.container.addChild(groundLayer)
+
+    // Dynamic tile layer — for ECS-driven animated tiles (water, hazards)
+    this.dynamicTileLayer = new Container()
+    this.dynamicTileLayer.zIndex = 2
+    this.dynamicTileLayer.sortableChildren = true
+    this.container.addChild(this.dynamicTileLayer)
 
     // Decorations layer (trees for island, grid overlay for matrix)
     this.renderDecorations(theme, mapData)
@@ -121,7 +142,7 @@ export class IsometricMap {
     const bg = new Graphics()
     bg.zIndex = -1
 
-    if (theme.id === 'lord-of-the-flies') {
+    if (theme.id === THEME_IDS.LORD_OF_THE_FLIES) {
       // Ocean surrounding the island
       const pad = 5
       const tl = tileToScreen(-pad, -pad)
@@ -144,7 +165,7 @@ export class IsometricMap {
           drawDiamond(bg, s.x, s.y, '#e8d8b0', '#d8c8a0')
         }
       }
-    } else if (theme.id === 'matrix') {
+    } else if (theme.id === THEME_IDS.MATRIX) {
       // Dark void with faint grid
       const pad = 5
       const tl = tileToScreen(-pad, -pad)
@@ -153,7 +174,7 @@ export class IsometricMap {
       const bl = tileToScreen(-pad, this.mapHeight + pad)
       bg.poly([tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y])
       bg.fill('#020202')
-    } else if (theme.id === '1984') {
+    } else if (theme.id === THEME_IDS.NINETEEN_EIGHTY_FOUR) {
       // Smoggy industrial wasteland
       const pad = 3
       const tl = tileToScreen(-pad, -pad)
@@ -170,10 +191,10 @@ export class IsometricMap {
   /** Map a tile definition to its atlas frame key. */
   private resolveFrameKey(tile: TileDef, theme: MapTheme): string {
     // Theme-specific overrides
-    if (theme.id === 'matrix' && tile.tileType === 'path' && tile.x === 9) {
+    if (theme.id === THEME_IDS.MATRIX && tile.tileType === 'path' && tile.x === CODE_RIVER_COLUMN_X) {
       return 'code_river'
     }
-    if (theme.id === 'lord-of-the-flies') {
+    if (theme.id === THEME_IDS.LORD_OF_THE_FLIES) {
       if (tile.tileType === 'fence') return 'sand_fence'
       if (tile.tileType === 'field') return 'crop_field'
     }
@@ -184,9 +205,9 @@ export class IsometricMap {
     const decoLayer = new Container()
     decoLayer.zIndex = 5
 
-    if (theme.id === 'lord-of-the-flies') {
+    if (theme.id === THEME_IDS.LORD_OF_THE_FLIES) {
       this.renderPalmTrees(decoLayer, mapData)
-    } else if (theme.id === 'matrix') {
+    } else if (theme.id === THEME_IDS.MATRIX) {
       this.renderGridOverlay(decoLayer)
     }
 
@@ -196,6 +217,7 @@ export class IsometricMap {
   private renderPalmTrees(layer: Container, mapData: MapData) {
     // Place palm trees on grass tiles near the perimeter
     const g = new Graphics()
+    const S = TILE_W / 64 // Scale factor for pixel offsets
     const perimeterGrass = mapData.tiles.filter(
       t => t.tileType === 'grass' && t.walkable &&
       (t.x <= 2 || t.x >= 17 || t.y <= 2 || t.y >= 17) &&
@@ -209,23 +231,23 @@ export class IsometricMap {
 
       // Trunk
       g.moveTo(s.x, s.y)
-      g.lineTo(s.x + 2, s.y - 22)
-      g.stroke({ color: '#6b4423', width: 2 })
+      g.lineTo(s.x + 2 * S, s.y - 22 * S)
+      g.stroke({ color: '#6b4423', width: 2 * S })
 
       // Fronds (simplified)
-      const top = s.y - 22
-      g.moveTo(s.x + 2, top)
-      g.lineTo(s.x - 8, top + 4)
-      g.stroke({ color: '#3a7a2a', width: 2, alpha: 0.8 })
-      g.moveTo(s.x + 2, top)
-      g.lineTo(s.x + 12, top + 4)
-      g.stroke({ color: '#3a7a2a', width: 2, alpha: 0.8 })
-      g.moveTo(s.x + 2, top)
-      g.lineTo(s.x - 5, top - 3)
-      g.stroke({ color: '#4a8a3a', width: 2, alpha: 0.7 })
-      g.moveTo(s.x + 2, top)
-      g.lineTo(s.x + 9, top - 3)
-      g.stroke({ color: '#4a8a3a', width: 2, alpha: 0.7 })
+      const top = s.y - 22 * S
+      g.moveTo(s.x + 2 * S, top)
+      g.lineTo(s.x - 8 * S, top + 4 * S)
+      g.stroke({ color: '#3a7a2a', width: 2 * S, alpha: 0.8 })
+      g.moveTo(s.x + 2 * S, top)
+      g.lineTo(s.x + 12 * S, top + 4 * S)
+      g.stroke({ color: '#3a7a2a', width: 2 * S, alpha: 0.8 })
+      g.moveTo(s.x + 2 * S, top)
+      g.lineTo(s.x - 5 * S, top - 3 * S)
+      g.stroke({ color: '#4a8a3a', width: 2 * S, alpha: 0.7 })
+      g.moveTo(s.x + 2 * S, top)
+      g.lineTo(s.x + 9 * S, top - 3 * S)
+      g.stroke({ color: '#4a8a3a', width: 2 * S, alpha: 0.7 })
     }
 
     layer.addChild(g)
@@ -277,6 +299,49 @@ export class IsometricMap {
       if (tile?.walkable) neighbors.push(tile)
     }
     return neighbors
+  }
+
+  /** Get water tile positions for ECS entity spawning. */
+  getWaterPositions(): WaterTilePosition[] {
+    const positions: WaterTilePosition[] = []
+
+    if (this.currentThemeId === THEME_IDS.LORD_OF_THE_FLIES) {
+      // Ocean border ring: tiles just outside the fence perimeter
+      // Top and bottom edges
+      for (let x = -1; x <= this.mapWidth; x++) {
+        for (const y of [-1, this.mapHeight]) {
+          positions.push({ x, y, variant: 'ocean' })
+        }
+      }
+      // Left and right edges (excluding corners already added)
+      for (let y = 0; y < this.mapHeight; y++) {
+        for (const x of [-1, this.mapWidth]) {
+          positions.push({ x, y, variant: 'ocean' })
+        }
+      }
+    }
+
+    if (this.currentThemeId === THEME_IDS.MATRIX) {
+      // Code river: path tiles at x===9
+      for (let y = 0; y < this.mapHeight; y++) {
+        const tile = this.tileGrid[y]?.[CODE_RIVER_COLUMN_X]
+        if (tile && tile.tileType === 'path') {
+          positions.push({ x: CODE_RIVER_COLUMN_X, y, variant: 'code_river' })
+        }
+      }
+    }
+
+    return positions
+  }
+
+  /** Get the dynamic tile layer for adding animated tile sprites. */
+  getDynamicTileLayer(): Container | null {
+    return this.dynamicTileLayer
+  }
+
+  /** Get the current theme atlas (for creating tile sub-textures). */
+  getAtlas(): ThemeAtlas | null {
+    return this.atlas
   }
 
   destroy() {

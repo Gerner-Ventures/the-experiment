@@ -1,5 +1,5 @@
-export const TILE_W = 64
-export const TILE_H = 32
+export const TILE_W = 128
+export const TILE_H = 64
 
 export function tileToScreen(tileX: number, tileY: number): { x: number; y: number } {
   return {

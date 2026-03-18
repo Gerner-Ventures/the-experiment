@@ -392,12 +392,17 @@ describe('Social store – comprehensive', () => {
     it('is true when meeting is active', () => {
       const store = useSocialStore()
       store.onMeetingStart(makeMsg('meeting_start', { proposal: 'Test' }))
+      // Staged but not yet active
+      expect(store.isMeetingActive).toBe(false)
+      // Turn store would call activateMeeting
+      store.activateMeeting()
       expect(store.isMeetingActive).toBe(true)
     })
 
     it('is false after dismissMeeting', () => {
       const store = useSocialStore()
       store.onMeetingStart(makeMsg('meeting_start', { proposal: 'Test' }))
+      store.activateMeeting()
       store.dismissMeeting()
       expect(store.isMeetingActive).toBe(false)
     })
@@ -405,6 +410,7 @@ describe('Social store – comprehensive', () => {
     it('stays true after onMeetingResult (until dismissed)', () => {
       const store = useSocialStore()
       store.onMeetingStart(makeMsg('meeting_start', { proposal: 'Test' }))
+      store.activateMeeting()
       store.onMeetingResult(makeMsg('meeting_result', {
         summary: 'Passed.',
         votes: { a1: 'support' },

@@ -5,14 +5,17 @@ import { useLocale } from '@/locales'
 import { HD_ACTION_TO_ANIMATION as ACTION_TO_ANIMATION } from '@/config/sprites/hd/animations'
 import { SKIP_ACTION_PHASE, SPEECH_ONLY_ACTIONS } from '@/config/action-categories'
 import type { AgentStatus } from '@/types/agent'
-import type { AgentSpeechSource } from '@/types/websocket'
-import type { ConversationRef } from '@/stores/social'
+import type { AgentSpeechSource, RoundPhase } from '@/types/websocket'
+import { useSocialStore, type ConversationRef } from '@/stores/social'
+import { useExperimentStore } from '@/stores/experiment'
 
 export interface Turn {
   id: number
   agentId: string
   agentName: string
   round: number
+  /** The backend phase this action belongs to (morning, midday, afternoon, etc.) */
+  phase?: string
   actionType: string
   targetAgentId?: string
   targetLocation?: string
@@ -58,6 +61,86 @@ const AUDIO_MAX_TIMEOUT_MS = 15000
 /** Brief pause between turns so the user can register the transition */
 const TURN_GAP_MS = 400
 
+// ─── Turn Lifecycle Tracker ───
+
+interface TurnLifecycle {
+  turnId: number
+  agentName: string
+  actionType: string
+  startMs: number
+  thoughtStartMs: number | null
+  thoughtEndMs: number | null
+  thoughtDismissReason: string | null
+  moveStartMs: number | null
+  moveEndMs: number | null
+  moveSkipReason: string | null
+  actionStartMs: number | null
+  actionEndMs: number | null
+  actionSkipReason: string | null
+  audioStatus: string
+  interrupted: boolean
+}
+
+function createLifecycle(turn: Turn): TurnLifecycle {
+  return {
+    turnId: turn.id,
+    agentName: turn.agentName,
+    actionType: turn.actionType,
+    startMs: performance.now(),
+    thoughtStartMs: null,
+    thoughtEndMs: null,
+    thoughtDismissReason: null,
+    moveStartMs: null,
+    moveEndMs: null,
+    moveSkipReason: null,
+    actionStartMs: null,
+    actionEndMs: null,
+    actionSkipReason: null,
+    audioStatus: 'none',
+    interrupted: false,
+  }
+}
+
+function formatMs(ms: number | null): string {
+  if (ms === null) return 'skipped'
+  return `${(ms / 1000).toFixed(1)}s`
+}
+
+function logLifecycle(lc: TurnLifecycle) {
+  const totalMs = performance.now() - lc.startMs
+  const thoughtMs = lc.thoughtStartMs != null && lc.thoughtEndMs != null
+    ? lc.thoughtEndMs - lc.thoughtStartMs : null
+  const moveMs = lc.moveStartMs != null && lc.moveEndMs != null
+    ? lc.moveEndMs - lc.moveStartMs : null
+  const actionMs = lc.actionStartMs != null && lc.actionEndMs != null
+    ? lc.actionEndMs - lc.actionStartMs : null
+
+  const parts = [
+    `thought: ${formatMs(thoughtMs)}${lc.thoughtDismissReason ? ` (${lc.thoughtDismissReason})` : ''}`,
+    `move: ${lc.moveSkipReason ? lc.moveSkipReason : formatMs(moveMs)}`,
+    `action: ${lc.actionSkipReason ? lc.actionSkipReason : formatMs(actionMs)}`,
+    `audio: ${lc.audioStatus}`,
+  ]
+
+  const prefix = lc.interrupted ? '⚠' : '✓'
+  console.debug(
+    `[Turn #${lc.turnId}] ${prefix} ${lc.agentName} → ${lc.actionType} (${formatMs(totalMs)} total)\n  ${parts.join(' | ')}`,
+  )
+}
+
+function queueSummary(queue: Turn[]): string {
+  if (queue.length === 0) return 'empty'
+  const counts: Record<string, number> = {}
+  for (const t of queue) {
+    const key = t.actionType
+    counts[key] = (counts[key] ?? 0) + 1
+  }
+  const parts = Object.entries(counts).map(([k, v]) => `${k}: ${v}`)
+  return `${queue.length} remaining [${parts.join(', ')}]`
+}
+
+// ─── Store ───
+
 export const useTurnStore = defineStore('turn', () => {
   const locale = useLocale()
   const queue = ref<Turn[]>([])
@@ -79,6 +162,9 @@ export const useTurnStore = defineStore('turn', () => {
   let handlers: TurnHandlers | null = null
   let drainedHandlers: (() => void)[] = []
 
+  // Lifecycle tracking for the active turn
+  let lifecycle: TurnLifecycle | null = null
+
   function setHandlers(h: TurnHandlers) {
     handlers = h
   }
@@ -91,7 +177,9 @@ export const useTurnStore = defineStore('turn', () => {
   function enqueue(turn: Omit<Turn, 'id'>) {
     const t: Turn = { ...turn, id: ++turnCounter }
     queue.value.push(t)
-    console.debug(`[Turn] Enqueued: ${turn.agentName} → ${turn.actionType} (queue: ${queue.value.length})`)
+    console.debug(
+      `[Turn] Enqueued: ${turn.agentName} → ${turn.actionType}${turn.targetLocation ? ` @ ${turn.targetLocation}` : ''} | Queue: ${queueSummary(queue.value)}`,
+    )
 
     // If nothing is active, start processing
     if (!activeTurn.value && !blocked.value) {
@@ -131,6 +219,8 @@ export const useTurnStore = defineStore('turn', () => {
     if (queue.value.length === 0) {
       activeTurn.value = null
       phase.value = 'idle'
+      // Apply any backend phase that had no tagged turns (e.g., night)
+      useExperimentStore().flushLatestPhase()
       console.debug('[Turn] Queue drained')
       const cbs = drainedHandlers
       drainedHandlers = []
@@ -138,9 +228,37 @@ export const useTurnStore = defineStore('turn', () => {
       return
     }
 
+    // Finalize previous lifecycle if one exists (shouldn't normally happen)
+    if (lifecycle) {
+      lifecycle.interrupted = true
+      logLifecycle(lifecycle)
+    }
+
     const turn = queue.value.shift()!
     activeTurn.value = turn
-    console.debug(`[Turn] Processing: ${turn.agentName} → ${turn.actionType} (remaining: ${queue.value.length})`)
+    lifecycle = createLifecycle(turn)
+
+    // Sync visual phase to match this turn's phase (e.g., morning → midday transition)
+    if (turn.phase) {
+      const experimentStore = useExperimentStore()
+      if (experimentStore.currentPhase !== turn.phase) {
+        experimentStore.applyPhase(turn.phase as RoundPhase)
+      }
+    }
+
+    // Activate meeting scene when we reach the first meeting turn.
+    // SPEECH_ONLY_ACTIONS includes both meeting_speech and meeting_vote,
+    // so activation triggers regardless of which arrives first in the queue.
+    if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
+      const socialStore = useSocialStore()
+      if (socialStore.meeting && !socialStore.isMeetingActive) {
+        socialStore.activateMeeting()
+      }
+    }
+
+    console.debug(
+      `[Turn #${turn.id}] Processing: ${turn.agentName} → ${turn.actionType} | Queue: ${queueSummary(queue.value)}`,
+    )
 
     // Update HUD
     uiStore.setSteppingStatus(
@@ -166,6 +284,8 @@ export const useTurnStore = defineStore('turn', () => {
       thoughtTimer = null
     }
 
+    if (lifecycle) lifecycle.thoughtStartMs = performance.now()
+
     phase.value = 'thinking'
     handlers?.updateAgent(turn.agentId, 'thinking')
     if (!turn.fromSpeakEvent) {
@@ -179,32 +299,44 @@ export const useTurnStore = defineStore('turn', () => {
       if (conversation) {
         turn.thoughtConversationId = conversation.id
         turn.thoughtAudioIndex = conversation.index
+        if (lifecycle) lifecycle.audioStatus = 'conversation-created'
+      } else {
+        if (lifecycle) lifecycle.audioStatus = 'no-conversation-ref'
+      }
+    } else {
+      if (lifecycle) {
+        lifecycle.audioStatus = turn.thoughtConversationId != null
+          ? `from-speak-event(id:${turn.thoughtConversationId})`
+          : 'from-speak-event(no-match)'
       }
     }
-    console.debug(`[Turn] Thinking: ${turn.agentName}`)
+
+    console.debug(
+      `[Turn #${turn.id}] Thought phase: ${turn.agentName} | fromSpeakEvent: ${turn.fromSpeakEvent} | convId: ${turn.thoughtConversationId ?? 'none'} | audioIdx: ${turn.thoughtAudioIndex ?? 'none'}`,
+    )
     thoughtTimer = setTimeout(() => {
+      if (lifecycle) lifecycle.thoughtDismissReason = 'audio-timeout'
       completeThoughtPhase(turn.id)
     }, AUDIO_MAX_TIMEOUT_MS)
   }
 
   function completeThoughtPhase(turnId?: number) {
     const turn = activeTurn.value
-    if (!turn) {
-      console.debug('[Turn] Ignoring thought completion with no active turn')
-      return
-    }
-    if (phase.value !== 'thinking') {
-      console.debug(`[Turn] Ignoring thought completion outside thinking phase: ${phase.value}`)
-      return
-    }
-    if (turnId != null && turn.id !== turnId) {
-      console.debug(`[Turn] Ignoring stale thought completion for turn ${turnId}; active is ${turn.id}`)
-      return
-    }
+    if (!turn) return
+    if (phase.value !== 'thinking') return
+    if (turnId != null && turn.id !== turnId) return
 
     if (thoughtTimer) {
       clearTimeout(thoughtTimer)
       thoughtTimer = null
+    }
+
+    if (lifecycle) {
+      lifecycle.thoughtEndMs = performance.now()
+      if (!lifecycle.thoughtDismissReason) {
+        lifecycle.thoughtDismissReason = 'unknown'
+        console.warn(`[Turn #${turn.id}] Thought completed with no dismiss reason — check callers of completeThoughtPhase`)
+      }
     }
 
     startMovementPhase()
@@ -214,11 +346,17 @@ export const useTurnStore = defineStore('turn', () => {
     const turn = activeTurn.value
     if (!turn) return
 
+    if (lifecycle) lifecycle.moveStartMs = performance.now()
+
     handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType))
 
     // Speech-only actions (meeting_speech, meeting_vote) skip movement and acting
     if (SPEECH_ONLY_ACTIONS.has(turn.actionType)) {
-      console.debug(`[Turn] Speech-only: ${turn.agentName} → ${turn.actionType}`)
+      if (lifecycle) {
+        lifecycle.moveEndMs = performance.now()
+        lifecycle.moveSkipReason = 'speech-only'
+        lifecycle.actionSkipReason = 'speech-only'
+      }
       completeTurnPhase()
       return
     }
@@ -229,20 +367,24 @@ export const useTurnStore = defineStore('turn', () => {
     if (needsMove && handlers) {
       const turnId = turn.id
       phase.value = 'moving'
-      console.debug(`[Turn] Moving ${turn.agentName}: ${currentLocation} → ${turn.targetLocation}`)
+      console.debug(`[Turn #${turn.id}] Moving: ${currentLocation} → ${turn.targetLocation}`)
       handlers.move(turn.agentId, turn.targetLocation!, () => {
         handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
-        if (activeTurn.value?.id !== turnId) {
-          console.debug(`[Turn] Ignoring stale movement completion for turn ${turnId}`)
-          return
-        }
+        if (activeTurn.value?.id !== turnId) return
+        if (lifecycle) lifecycle.moveEndMs = performance.now()
         startActionPhase()
       })
       return
     }
 
+    if (lifecycle) {
+      lifecycle.moveEndMs = performance.now()
+      lifecycle.moveSkipReason = !turn.targetLocation
+        ? 'no-target'
+        : `already-at-${turn.targetLocation}`
+    }
+
     if (turn.targetLocation) {
-      console.debug(`[Turn] ${turn.agentName} already at ${turn.targetLocation}`)
       handlers?.updateAgent(turn.agentId, actionToStatus(turn.actionType), turn.targetLocation)
     }
     startActionPhase()
@@ -252,8 +394,14 @@ export const useTurnStore = defineStore('turn', () => {
     const turn = activeTurn.value
     if (!turn) return
 
+    if (lifecycle) lifecycle.actionStartMs = performance.now()
+
     const animation = ACTION_TO_ANIMATION[turn.actionType]
     if (!animation || SKIP_ACTION_PHASE.has(turn.actionType)) {
+      if (lifecycle) {
+        lifecycle.actionEndMs = performance.now()
+        lifecycle.actionSkipReason = !animation ? `no-anim(${turn.actionType})` : `skip-phase(${turn.actionType})`
+      }
       completeTurnPhase()
       return
     }
@@ -268,20 +416,15 @@ export const useTurnStore = defineStore('turn', () => {
 
     const proceed = () => {
       if (animDone && floorDone) {
-        if (activeTurn.value?.id !== turnId) {
-          console.debug(`[Turn] Ignoring stale action completion for turn ${turnId}`)
-          return
-        }
+        if (activeTurn.value?.id !== turnId) return
+        if (lifecycle) lifecycle.actionEndMs = performance.now()
         completeTurnPhase()
       }
     }
 
     if (handlers) {
       handlers.playAction(turn.agentId, animation, () => {
-        if (activeTurn.value?.id !== turnId) {
-          console.debug(`[Turn] Ignoring stale action callback for turn ${turnId}`)
-          return
-        }
+        if (activeTurn.value?.id !== turnId) return
         animDone = true
         proceed()
       })
@@ -305,7 +448,6 @@ export const useTurnStore = defineStore('turn', () => {
     }
 
     phase.value = 'hud-only'
-    console.debug(`[Turn] HUD-only: ${turn.agentName} → ${turn.actionType}`)
     hudTimer = setTimeout(() => finishTurn(), HUD_ONLY_DURATION_MS)
   }
 
@@ -314,6 +456,7 @@ export const useTurnStore = defineStore('turn', () => {
    * Advances the matching thought phase once audio playback completes.
    */
   function notifyAudioComplete(turnId?: number) {
+    if (lifecycle && !lifecycle.thoughtDismissReason) lifecycle.thoughtDismissReason = 'audio-complete'
     completeThoughtPhase(turnId)
   }
 
@@ -321,7 +464,7 @@ export const useTurnStore = defineStore('turn', () => {
    * Called by SimulationView when ConversationBubble emits 'dismiss' (text-only fade).
    */
   function onBubbleDismissed(turnId?: number) {
-    console.debug('[Turn] Thought dismissed, continuing action')
+    if (lifecycle && !lifecycle.thoughtDismissReason) lifecycle.thoughtDismissReason = 'bubble-dismissed'
     completeThoughtPhase(turnId)
   }
 
@@ -329,11 +472,32 @@ export const useTurnStore = defineStore('turn', () => {
     if (activeTurn.value) {
       handlers?.updateAgent(activeTurn.value.agentId, 'idle')
     }
+    // Log the completed lifecycle
+    if (lifecycle) {
+      logLifecycle(lifecycle)
+      lifecycle = null
+    }
     scheduleNext()
   }
 
+  /**
+   * Block/unblock the turn queue. Blocking takes effect at the next turn
+   * boundary — it will NOT interrupt an active turn mid-thought or mid-action.
+   * This prevents narration overlays from killing an in-progress bubble.
+   */
   function setBlocked(value: boolean) {
+    const wasBlocked = blocked.value
     blocked.value = value
+    if (value && activeTurn.value) {
+      console.debug(
+        `[Turn] Block requested mid-turn #${activeTurn.value.id} (${activeTurn.value.agentName} → ${activeTurn.value.actionType}) — will take effect after turn completes`,
+      )
+      // Don't interrupt — the block will be checked in scheduleNext/processNext
+      return
+    }
+    if (wasBlocked && !value) {
+      console.debug(`[Turn] Unblocked | Queue: ${queueSummary(queue.value)}`)
+    }
     if (!value && !activeTurn.value && queue.value.length > 0) {
       processNext()
     }
@@ -359,6 +523,11 @@ export const useTurnStore = defineStore('turn', () => {
   }
 
   function $reset() {
+    if (lifecycle) {
+      lifecycle.interrupted = true
+      logLifecycle(lifecycle)
+      lifecycle = null
+    }
     clearTimers()
     queue.value = []
     activeTurn.value = null

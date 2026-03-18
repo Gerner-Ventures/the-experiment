@@ -10,20 +10,20 @@ describe('isometric math', () => {
 
     it('maps (1,0) to the right and down', () => {
       const { x, y } = tileToScreen(1, 0)
-      expect(x).toBe(32)  // TILE_W / 2
-      expect(y).toBe(16)  // TILE_H / 2
+      expect(x).toBe(64)  // TILE_W / 2
+      expect(y).toBe(32)  // TILE_H / 2
     })
 
     it('maps (0,1) to the left and down', () => {
       const { x, y } = tileToScreen(0, 1)
-      expect(x).toBe(-32) // -(TILE_W / 2)
-      expect(y).toBe(16)  // TILE_H / 2
+      expect(x).toBe(-64) // -(TILE_W / 2)
+      expect(y).toBe(32)  // TILE_H / 2
     })
 
     it('maps (1,1) to directly below (0,0)', () => {
       const { x, y } = tileToScreen(1, 1)
       expect(x).toBe(0)   // offsets cancel
-      expect(y).toBe(32)  // TILE_H
+      expect(y).toBe(64)  // TILE_H
     })
 
     it('is symmetric: (a,b) and (b,a) have mirrored x, same y', () => {

@@ -89,6 +89,25 @@ Stream 3 (Infra)  ──starts first──>  scaffolding ready
 - Responsive layout
 - Error states + WebSocket reconnection UI
 
+### S1.10 — ECS TypedArray Migration
+- Migrate all 13 ECS components from `[] as number[]` to TypedArrays (`Types.f32`, `Types.ui8`, `Types.ui32`)
+- Benchmark at 50/150/500 entities
+- Spec: `docs/specs/ecs-typed-array-migration.md`
+- **Depends on:** S1.3 (ECS foundation merged)
+
+### S1.11 — ECS State Serialization
+- Serialize/deserialize all ECS component data + session-owned Maps
+- Support reconnect-without-refresh and round snapshots for replay
+- Spec: `docs/specs/ecs-state-serialization.md`
+- **Depends on:** S1.10 (TypedArray migration)
+
+### S1.12 — Agent ECS State Bridge
+- Wire Mood/Social/Inventory stub components to backend agent state via new WS messages
+- New message types: `agent_mood_update`, `agent_status_update`, `agent_inventory_delta`
+- Spec: `docs/specs/agent-ecs-state-bridge.md`
+- **Depends on:** S2.4 (Agent System), S2.8 (WebSocket Layer)
+- **Blocked on:** Backend Stream 2 active
+
 ---
 
 ## Stream 2: Backend

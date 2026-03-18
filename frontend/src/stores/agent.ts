@@ -91,14 +91,15 @@ export const useAgentStore = defineStore('agent', () => {
       agentId: data.agent_id,
       agentName,
       round: msg.round,
+      phase: msg.phase,
       actionType,
       targetLocation,
       thought,
       thoughtSource: data.speech_source ?? 'inner_thought',
       thoughtConversationId: existingThoughtConversation?.id,
       thoughtAudioIndex: existingThoughtConversation?.index,
-      // Inner-thought speech rows already arrive through agent_speak.
-      fromSpeakEvent: data.speech_source === 'inner_thought',
+      // Only skip addConversation if the agent_speak event already created the entry
+      fromSpeakEvent: !!existingThoughtConversation,
       isConsequence: data.is_consequence ?? false,
       causedBy: data.caused_by,
     })

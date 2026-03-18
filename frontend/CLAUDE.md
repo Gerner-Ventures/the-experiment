@@ -23,6 +23,16 @@ src/
 │   ├── dossier/         # (planned) Agent dossier panel
 │   ├── social/          # (planned) Conversations, town meeting
 │   └── log/             # (planned) Experiment event log
+├── ecs/
+│   ├── components/          # Component definitions grouped by domain
+│   │   ├── agent.ts         # Position, movement, animation, identity
+│   │   ├── world.ts         # Tiles, water, buildings, hazards
+│   │   ├── social.ts        # Mood, relationships (future)
+│   │   ├── inventory.ts     # Items, tasks (future)
+│   │   ├── relations.ts     # ECS relations
+│   │   └── index.ts         # Barrel export — import from @/ecs/components
+│   ├── systems/             # Pure system functions (flat, one per system)
+│   └── world.ts             # World creation + component registration
 ├── composables/         # Vue composables (usePixiWorld, useWebSocket, etc.)
 ├── config/              # Constants and configuration
 │   ├── agent-options.ts # Personality traits, goal presets, LLM models, limits
@@ -77,6 +87,12 @@ Read `docs/ARCHITECTURE.md` for full decisions. Key rules:
 - Access via `const locale = useLocale()` in `<script setup>`.
 - Parameterized strings use `{placeholder}` syntax, replaced at call site.
 - Config data (traits, presets, arcs) references locale keys — labels are never hardcoded.
+
+### ECS
+- Components grouped by domain in `ecs/components/`. Import via barrel: `import { Position } from '@/ecs/components'`
+- Systems are flat in `ecs/systems/`. One file per system, pure functions, no Vue/PixiJS imports.
+- Tick loop uses fixed timestep (60Hz). See `useGameWorld.ts`.
+- Performance monitored via `usePerformanceMonitor`. Check `window.__devWorld.perf` in dev.
 
 ### Animation
 - CSS/Tailwind for simple transitions and hovers.
