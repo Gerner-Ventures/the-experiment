@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {
-    "canon@canon": true
+    "canon@canon": true,
+    "canon@canon-claude-plugin": true
   }
 }
